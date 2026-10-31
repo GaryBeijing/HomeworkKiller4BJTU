@@ -1,9 +1,10 @@
 <!--
   作者: Gary
   编写日期: 2026-10-31 20:45
+  最后更新: 2026-10-31 21:45
   文件名: index.html
-  主要用途: “高铁纵横”标签页结构：登录、考试列表、开始确认与答题结果。
-  文件版本: 1.0.0
+  主要用途: “高铁纵横”标签页结构：登录、考试列表、开始确认与答题结果弹窗。
+  文件版本: 1.0.1
 -->
 <section class="tag-page tag-hsr" id="hsr-page">
   <div class="hero">
@@ -64,14 +65,19 @@
     </section>
   </div>
 
-  <section class="card result-card hidden" id="hsr-result-card">
-    <div class="card-head">
-      <h2>答题结果</h2>
-      <button class="btn ghost small" id="hsr-result-close" type="button">收起</button>
+  <div class="modal-backdrop hidden" id="hsr-result-modal" role="dialog"
+       aria-modal="true" aria-labelledby="hsr-result-title">
+    <div class="modal result-modal">
+      <div class="card-head">
+        <h2 id="hsr-result-title">答题结果</h2>
+        <button class="btn ghost small" id="hsr-result-close" type="button">关闭</button>
+      </div>
+      <div class="result-modal-body">
+        <div id="hsr-result-summary" class="result-summary"></div>
+        <div id="hsr-result-details" class="result-details"></div>
+      </div>
     </div>
-    <div id="hsr-result-summary" class="result-summary"></div>
-    <div id="hsr-result-details" class="result-details"></div>
-  </section>
+  </div>
 
   <div class="modal-backdrop hidden" id="hsr-confirm-modal" role="dialog"
        aria-modal="true" aria-labelledby="hsr-confirm-title">

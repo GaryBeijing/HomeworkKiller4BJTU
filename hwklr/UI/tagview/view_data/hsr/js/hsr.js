@@ -1,9 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-10-31 20:45
+  最后更新: 2026-10-31 21:45
   文件名: hsr.js
-  主要用途: “高铁纵横”页面逻辑：登录、列表渲染、二次确认、答题与结果展示。
-  文件版本: 1.0.0
+  主要用途: “高铁纵横”页面逻辑：登录、列表渲染、二次确认、答题与结果弹窗。
+  文件版本: 1.0.1
 */
 
 (function () {
@@ -45,7 +46,7 @@
     els.confirmText = document.getElementById('hsr-confirm-text');
     els.confirmOk = document.getElementById('hsr-confirm-ok');
     els.confirmCancel = document.getElementById('hsr-confirm-cancel');
-    els.resultCard = document.getElementById('hsr-result-card');
+    els.resultModal = document.getElementById('hsr-result-modal');
     els.resultSummary = document.getElementById('hsr-result-summary');
     els.resultDetails = document.getElementById('hsr-result-details');
     els.resultClose = document.getElementById('hsr-result-close');
@@ -460,12 +461,12 @@
   }
 
   /**
-   * 渲染答题结果卡片。
+   * 在弹出子窗口中渲染答题结果。
    * @param {Object} result 后端返回的结果。
    * @returns {void}
    */
   function renderResult(result) {
-    if (!els.resultCard || !els.resultSummary || !els.resultDetails) {
+    if (!els.resultModal || !els.resultSummary || !els.resultDetails) {
       return;
     }
     els.resultSummary.innerHTML = '';
@@ -520,17 +521,19 @@
       els.resultDetails.appendChild(note);
     }
 
-    els.resultCard.classList.remove('hidden');
-    els.resultCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    els.resultModal.classList.remove('hidden');
+    if (els.resultClose) {
+      els.resultClose.focus();
+    }
   }
 
   /**
-   * 收起答题结果卡片。
+   * 关闭答题结果弹窗。
    * @returns {void}
    */
   function clearResult() {
-    if (els.resultCard) {
-      els.resultCard.classList.add('hidden');
+    if (els.resultModal) {
+      els.resultModal.classList.add('hidden');
     }
     if (els.resultSummary) {
       els.resultSummary.innerHTML = '';
@@ -587,6 +590,13 @@
     if (els.resultClose) {
       els.resultClose.addEventListener('click', clearResult);
     }
+    if (els.resultModal) {
+      els.resultModal.addEventListener('click', (event) => {
+        if (event.target === els.resultModal) {
+          clearResult();
+        }
+      });
+    }
   }
 
   /**
@@ -601,14 +611,23 @@
     if (els.confirmModal) {
       els.confirmModal.classList.add('hidden');
     }
+    if (els.resultModal) {
+      els.resultModal.classList.add('hidden');
+    }
     // 每次重新注入 HTML 后移除旧的全局键盘监听，避免重复绑定。
     if (state.keydownHandler) {
       document.removeEventListener('keydown', state.keydownHandler);
     }
     state.keydownHandler = (event) => {
-      if (event.key === 'Escape') {
-        closeConfirm();
+      if (event.key !== 'Escape') {
+        return;
       }
+      // 结果弹窗优先关闭；没有结果弹窗时再关闭开始确认框。
+      if (els.resultModal && !els.resultModal.classList.contains('hidden')) {
+        clearResult();
+        return;
+      }
+      closeConfirm();
     };
     document.addEventListener('keydown', state.keydownHandler);
     state.initialized = true;

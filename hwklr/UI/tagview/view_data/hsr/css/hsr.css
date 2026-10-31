@@ -1,18 +1,63 @@
 /*
   作者: Gary
   编写日期: 2026-10-31 20:45
+  最后更新: 2026-10-31 21:45
   文件名: hsr.css
-  主要用途: “高铁纵横”标签页专属样式：考试列表操作、答题结果统计与风险提示。
-  文件版本: 1.0.0
+  主要用途: “高铁纵横”标签页样式：等高卡片、考试列表、答题结果弹窗与风险提示。
+  文件版本: 1.0.1
 */
+
+/* 宽屏时让登录卡片与考试列表卡片等高，消除账号卡片下方的空白缺口。 */
+.tag-hsr .grid {
+  align-items: stretch;
+}
 
 .tag-hsr .login-card,
 .tag-hsr .list-card {
   min-width: 0;
 }
 
-.tag-hsr .result-card {
-  margin-top: 18px;
+.tag-hsr .login-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.tag-hsr .login-card form {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+/* 登录状态放在卡片底部，使高窗口下的卡片内容分布更自然。 */
+.tag-hsr .login-card #hsr-login-status {
+  margin-top: auto;
+  padding-top: 10px;
+}
+
+/* 答题结果改为弹出子窗口，不再占用页面纵向空间。 */
+.tag-hsr .result-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(780px, 100%);
+  max-height: min(86vh, 820px);
+  padding: 0;
+  overflow: hidden;
+}
+
+.tag-hsr .result-modal .card-head {
+  margin: 0;
+  padding: 20px 24px 14px;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.tag-hsr .result-modal h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.tag-hsr .result-modal-body {
+  padding: 18px 24px 22px;
+  overflow: auto;
 }
 
 .tag-hsr .result-summary {
@@ -103,5 +148,19 @@
 @media (max-width: 900px) {
   .tag-hsr .result-summary {
     grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .tag-hsr .result-modal {
+    max-height: 88vh;
+  }
+
+  .tag-hsr .result-modal .card-head {
+    padding: 16px 18px 12px;
+  }
+
+  .tag-hsr .result-modal-body {
+    padding: 14px 18px 18px;
   }
 }

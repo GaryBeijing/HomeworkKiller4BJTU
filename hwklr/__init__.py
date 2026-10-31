@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
+# 最后更新: 2026-10-31 21:45
 # 文件名: __init__.py
 # 主要用途: hwklr 主包元数据与全局应用信息。
-# 文件版本: 1.0.0
+# 文件版本: 1.0.1
 """HomeworkKiller4BJTU 主包。
 
 本包只声明项目级元数据，具体功能拆分为：
@@ -13,7 +14,7 @@
 """
 from __future__ import annotations
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 __author__ = "Gary"
 __all__ = [
     "__version__",
