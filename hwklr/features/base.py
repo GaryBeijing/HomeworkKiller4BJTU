@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
+# 最后更新: 2026-11-01 00:01
 # 文件名: base.py
-# 主要用途: 定义所有功能都必须继承的 Feature 抽象基类与统一调用协议。
-# 文件版本: 1.0.0
+# 主要用途: 定义所有功能都必须继承的 Feature 抽象基类、统一调用协议与设置组只读属性。
+# 文件版本: 2.0.0
 """功能抽象基类。
 
 约定：
@@ -15,9 +16,12 @@
 from __future__ import annotations
 
 import abc
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-__version__ = "1.0.0"
+if TYPE_CHECKING:  # 避免 base 与 settings 相互导入。
+    from .settings import FeatureSettingsGroup
+
+__version__ = "2.0.0"
 __all__ = ["Feature", "success", "failure"]
 
 # 统一返回结构：ok 表示成功与否，data 放业务数据，error 放可读错误信息。
@@ -82,6 +86,16 @@ class Feature(abc.ABC):
             已启动为 ``True``，否则为 ``False``。
         """
         return self._started
+
+    @property
+    @abc.abstractmethod
+    def settings_group(self) -> "FeatureSettingsGroup":
+        """返回该功能注册到设置页的只读设置组。
+
+        Returns:
+            功能对应的 :class:`FeatureSettingsGroup`。
+        """
+        raise NotImplementedError
 
     def start(self) -> None:
         """启动功能。默认仅记录状态，子类可按需覆盖。"""

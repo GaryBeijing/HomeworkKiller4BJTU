@@ -1,22 +1,52 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
+# 最后更新: 2026-11-01 00:01
 # 文件名: about.py
-# 主要用途: 实现“关于”标签页的后端动作，提供软件名称、版本、作者与声明。
-# 文件版本: 1.0.0
+# 主要用途: 实现“关于”标签页功能，并提供空设置组以满足 TagView 的统一属性约束。
+# 文件版本: 2.0.0
 """关于功能。"""
 from __future__ import annotations
 
 from typing import Any
 
 from hwklr.features.base import ApiResult, Feature, failure, success
+from hwklr.features.settings import FeatureSettingsGroup
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"
+__author__ = "Gary"
 __all__ = ["AboutFeature"]
 
 
 class AboutFeature(Feature):
     """“关于”标签页功能。"""
+
+    def __init__(self, universal_param: dict[str, Any]) -> None:
+        """初始化关于功能。
+
+        Args:
+            universal_param: 窗口层注入的通用参数。
+        """
+        super().__init__(universal_param)
+        self._settings_group: FeatureSettingsGroup = FeatureSettingsGroup(
+            group_id="about",
+            title="关于",
+            description="",
+            field_specs=(),
+            values_getter=lambda: {},
+            exporter=lambda values: {},
+            complete_checker=lambda: True,
+            missing_getter=lambda: [],
+        )
+
+    @property
+    def settings_group(self) -> FeatureSettingsGroup:
+        """返回空的设置组。
+
+        Returns:
+            无字段的设置组。
+        """
+        return self._settings_group
 
     def handle(self, action: str, params: dict[str, Any]) -> ApiResult:
         """分发关于页动作。

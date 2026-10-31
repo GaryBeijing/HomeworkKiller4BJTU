@@ -1,9 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-10-31 20:45
+  最后更新: 2026-11-01 00:01
   文件名: base.js
-  主要用途: 前端公共逻辑：标签栏渲染、标签切换、资源加载、桥接调用、提示与加载状态。
-  文件版本: 1.0.0
+  主要用途: 前端公共逻辑：标签栏、设置锁定/跳转、资源加载、桥接调用、提示与加载状态。
+  文件版本: 2.0.0
 */
 
 (function () {
@@ -19,6 +20,8 @@
     jsPromises: new Map(),
     bridgePromise: null,
     activationToken: 0,
+    activating: '',
+    settingsTarget: '',
   };
 
   /**
@@ -235,6 +238,106 @@
   }
 
   /**
+   * 重新拉取标签元数据（含必要设置状态）。
+   * @returns {Promise<Array>} 最新标签列表。
+   */
+  async function refreshTags() {
+    const tags = await fetchJson('/api/tags');
+    state.tags = Array.isArray(tags) ? tags : [];
+    renderTabs();
+    return state.tags;
+  }
+
+  /**
+   * 打开设置标签，并可指定需要高亮的设置板块。
+   * @param {string} [groupId] 设置板块 ID。
+   * @returns {void}
+   */
+  function openSettings(groupId) {
+    state.settingsTarget = groupId || '';
+    if (state.active === '设置') {
+      const page = state.pages.get('设置');
+      if (page && typeof page.highlightGroup === 'function') {
+        page.highlightGroup(groupId || '');
+      }
+      return;
+    }
+    activate('设置').catch((error) => toast(error.message, 'error'));
+  }
+
+  /**
+   * 取出并清空待高亮的设置板块。
+   * @returns {string} 板块 ID。
+   */
+  function takeSettingsTarget() {
+    const target = state.settingsTarget || '';
+    state.settingsTarget = '';
+    return target;
+  }
+
+  /**
+   * 在锁定页面上覆盖灰白色遮罩。
+   * @param {Object} tag 标签元数据。
+   * @returns {void}
+   */
+  function applyLockOverlay(tag) {
+    const host = element('content-host');
+    if (!host) {
+      return;
+    }
+    const page = host.querySelector('.tag-page') || host;
+    if (page.querySelector('.settings-lock-overlay')) {
+      return;
+    }
+    const overlay = createNode('div', 'settings-lock-overlay');
+    const card = createNode('div', 'settings-lock-card');
+    card.appendChild(createNode('div', 'settings-lock-icon', '!'));
+    card.appendChild(createNode('h3', '', '你未完成必要的设置'));
+    const missing = Array.isArray(tag.missing_settings) && tag.missing_settings.length
+      ? `需要在设置中完成：${tag.missing_settings.join('、')}`
+      : '请前往设置完成该功能的必要配置。';
+    card.appendChild(createNode('p', '', missing));
+    const go = createNode('button', 'btn primary', '去设置');
+    go.type = 'button';
+    go.addEventListener('click', () => openSettings(tag.settings_target || tag.settings_group));
+    card.appendChild(go);
+    overlay.appendChild(card);
+    page.appendChild(overlay);
+  }
+
+  /**
+   * 弹出“需要完成设置”的子窗口；关闭后显示锁定遮罩。
+   * @param {Object} tag 标签元数据。
+   * @returns {void}
+   */
+  function showSettingsRequired(tag) {
+    const backdrop = createNode('div', 'modal-backdrop settings-required-backdrop');
+    const modal = createNode('div', 'modal settings-required-modal');
+    const close = createNode('button', 'modal-close', '×');
+    close.type = 'button';
+    close.setAttribute('aria-label', '关闭');
+    close.addEventListener('click', () => {
+      backdrop.remove();
+      applyLockOverlay(tag);
+    });
+    modal.appendChild(close);
+    modal.appendChild(createNode('h3', '', '请先完成必要设置'));
+    const missing = Array.isArray(tag.missing_settings) && tag.missing_settings.length
+      ? `使用「${tag.title}」前，请先在设置中完成：${tag.missing_settings.join('、')}。`
+      : `使用「${tag.title}」前，请先在设置中完成必要配置。`;
+    modal.appendChild(createNode('p', '', missing));
+    const go = createNode('button', 'btn primary', '去设置');
+    go.type = 'button';
+    go.addEventListener('click', () => {
+      backdrop.remove();
+      openSettings(tag.settings_target || tag.settings_group);
+    });
+    modal.appendChild(go);
+    backdrop.appendChild(modal);
+    document.body.appendChild(backdrop);
+  }
+
+  /**
    * 激活指定标签页。
    * @param {string} name 标签名称。
    * @param {{force?: boolean}} [options] 选项。
@@ -242,6 +345,11 @@
    */
   async function activate(name, options) {
     const opts = options || {};
+    try {
+      await refreshTags();
+    } catch (error) {
+      console.error(error);
+    }
     const tag = state.tags.find((item) => item.name === name);
     if (!tag) {
       throw new Error(`未知标签: ${name}`);
@@ -249,6 +357,11 @@
     if (!opts.force && state.active === name) {
       return;
     }
+    // 防止 JS 初始化与 Python loaded 事件同时激活同一标签，导致重复登录/重复渲染。
+    if (!opts.force && state.activating === name) {
+      return;
+    }
+    state.activating = name;
 
     const token = ++state.activationToken;
     const previous = state.tags.find((item) => item.name === state.active);
@@ -296,6 +409,13 @@
       if (typeof page.init === 'function') {
         await page.init(host);
       }
+
+      // 步骤 5：必要设置未完成时，弹出提醒并跳过页面业务初始化。
+      if (tag.settings_ok === false && name !== '设置' && name !== '关于') {
+        showSettingsRequired(tag);
+        return;
+      }
+
       if (typeof page.onActivate === 'function') {
         await page.onActivate();
       }
@@ -306,6 +426,9 @@
       renderFatal(name, error);
       toast(`打开「${tag.title || tag.name}」失败: ${error.message}`, 'error');
     } finally {
+      if (state.activating === name) {
+        state.activating = '';
+      }
       if (token === state.activationToken) {
         setLoading(false);
       }
@@ -383,6 +506,9 @@
     toast: toast,
     setLoading: setLoading,
     registerPage: registerPage,
+    refreshTags: refreshTags,
+    openSettings: openSettings,
+    takeSettingsTarget: takeSettingsTarget,
     get meta() {
       return state.meta;
     },

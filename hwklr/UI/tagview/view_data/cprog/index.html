@@ -1,0 +1,155 @@
+<!--
+  作者: Gary
+  编写日期: 2026-11-01 00:01
+  文件名: index.html
+  主要用途: “C程序设计”标签页结构：课程/题目选择、模式切换、启发弹窗与题解结果弹窗。
+  文件版本: 2.0.0
+-->
+<section class="tag-page tag-cprog" id="cprog-page">
+  <div class="hero">
+    <div>
+      <h1>C程序设计</h1>
+      <p>登录 CITEL，选择课程与题目。启发模式逐步给出思路，最后一步再提交代码；题解模式会直接生成并提交完整代码，请谨慎使用。</p>
+    </div>
+    <div class="hero-badge" id="c-account-badge">未连接</div>
+  </div>
+
+  <div class="c-layout">
+    <section class="card c-course-card">
+      <div class="card-head">
+        <h2>课程</h2>
+        <button id="c-refresh-courses" class="btn ghost small" type="button">刷新课程</button>
+      </div>
+      <div id="c-course-list" class="course-list">
+        <p class="muted">正在连接 CITEL…</p>
+      </div>
+      <p class="hint" id="c-account-status">用户名与 AI 配置在设置中统一管理。</p>
+    </section>
+
+    <section class="card c-problem-card">
+      <div class="card-head c-problem-head">
+        <h2>题目</h2>
+        <div class="mode-bar">
+          <div class="mode-switch" role="group" aria-label="学习模式">
+            <button id="c-mode-guide" class="mode-option active" type="button">启发模式</button>
+            <button id="c-mode-solution" class="mode-option locked" type="button" disabled>
+              题解模式 <span class="mode-lock" id="c-mode-lock">🔒</span>
+            </button>
+            <button id="c-mode-info" class="mode-info" type="button"
+                    aria-label="查看模式说明" title="查看两种模式的区别">i</button>
+          </div>
+          <div id="c-mode-tooltip" class="mode-tooltip hidden">
+            <strong>启发模式</strong>：AI 只提供题干解读、解题思路与伪代码；最后一步由你自己编写并提交代码。<br>
+            <strong>题解模式</strong>：AI 会在你确认已理解思路后，直接生成带注释的完整题解并自动提交。
+            请仅在<strong>十分需要真实实例</strong>的情况下酌情使用；否则请使用启发模式自行解决。
+            题解模式需要在设置中启用。
+          </div>
+        </div>
+      </div>
+      <p class="hint" id="c-mode-hint">启发模式：先看思路，再自己写代码；只有“大功告成”步骤才显示提交框。</p>
+      <div id="c-part-tabs" class="part-tabs"></div>
+      <div class="table-wrap c-problem-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th class="check-col">
+                <input type="checkbox" id="c-select-all-input" aria-label="全选本部分未完成题目">
+              </th>
+              <th>#</th>
+              <th>题目</th>
+              <th>状态</th>
+            </tr>
+          </thead>
+          <tbody id="c-problem-body">
+            <tr>
+              <td colspan="4" class="table-empty">请先选择课程</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="row c-actions">
+        <button id="c-select-unsolved" class="btn ghost small" type="button">全选本部分未完成</button>
+        <span class="spacer"></span>
+        <span class="hint" id="c-selection-hint">已选 0 题</span>
+        <button id="c-start" class="btn primary" type="button" disabled>开始学习</button>
+      </div>
+    </section>
+  </div>
+
+  <section class="card c-progress hidden" id="c-progress-card">
+    <div class="card-head">
+      <h2>题解模式进度</h2>
+      <span id="c-progress-phase" class="pill info">准备中</span>
+    </div>
+    <p id="c-progress-message" class="hint"></p>
+    <div class="progress-track"><div id="c-progress-bar" class="progress-bar"></div></div>
+    <div id="c-progress-log" class="progress-log"></div>
+  </section>
+
+  <div class="modal-backdrop hidden" id="c-analysis-modal" role="dialog"
+       aria-modal="true" aria-labelledby="c-analysis-title">
+    <div class="modal c-analysis-modal">
+      <div class="card-head analysis-head">
+        <h2 id="c-analysis-title">题目讲解</h2>
+        <div class="row">
+          <button id="c-font-minus" class="btn ghost small" type="button">A-</button>
+          <button id="c-font-plus" class="btn ghost small" type="button">A+</button>
+          <button id="c-analysis-close" class="modal-close" type="button" aria-label="关闭">×</button>
+        </div>
+      </div>
+      <div class="analysis-stepper" id="c-analysis-stepper">
+        <button class="step active" data-step="0" type="button">① 题目理解</button>
+        <button class="step" data-step="1" type="button">② 解题思路</button>
+        <button class="step" data-step="2" type="button">③ 注意事项</button>
+        <button class="step" data-step="3" type="button">④ 大功告成</button>
+      </div>
+      <div class="analysis-body" id="c-analysis-body"></div>
+      <div class="analysis-footer">
+        <button id="c-analysis-prev" class="btn ghost" type="button">上一步</button>
+        <span class="spacer"></span>
+        <button id="c-analysis-next" class="btn primary" type="button">下一步</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="c-solution-confirm" role="dialog"
+       aria-modal="true" aria-labelledby="c-solution-confirm-title">
+    <div class="modal">
+      <h3 id="c-solution-confirm-title">进入题解模式</h3>
+      <p><strong>是否已经理解这些题目的思路，并且我确实需要帮助？</strong></p>
+      <p class="warning-text">题解模式会直接生成并提交完整代码。请仅在十分需要真实实例的情况下酌情使用；
+        否则请使用启发模式自行解决问题。</p>
+      <div class="row end">
+        <button id="c-solution-no" class="btn ghost" type="button">否，返回启发模式</button>
+        <button id="c-solution-yes" class="btn danger" type="button">是，进入题解模式</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="c-solution-result" role="dialog"
+       aria-modal="true" aria-labelledby="c-solution-result-title">
+    <div class="modal c-solution-result-modal">
+      <div class="card-head">
+        <h2 id="c-solution-result-title">题解结果</h2>
+        <div class="row">
+          <button id="c-solution-font-minus" class="btn ghost small" type="button">A-</button>
+          <button id="c-solution-font-plus" class="btn ghost small" type="button">A+</button>
+          <button id="c-solution-result-close" class="modal-close" type="button"
+                  aria-label="关闭">×</button>
+        </div>
+      </div>
+      <div class="solution-result-layout">
+        <aside id="c-solution-list" class="solution-list"></aside>
+        <div class="solution-content">
+          <p class="warning-text" id="c-solution-warning">
+            题解模式仅建议在十分需要真实实例时使用；平时请使用启发模式自行完成。
+          </p>
+          <h3 id="c-solution-code-title"></h3>
+          <p id="c-solution-explanation" class="solution-explanation"></p>
+          <pre id="c-solution-code" class="code-block"></pre>
+          <p id="c-solution-notes" class="hint"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

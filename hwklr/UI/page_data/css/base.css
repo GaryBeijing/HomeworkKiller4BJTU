@@ -1,9 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-10-31 20:45
+  最后更新: 2026-11-01 00:01
   文件名: base.css
-  主要用途: 全局布局、标签栏、通用卡片/表格/按钮/弹窗/提示等公共样式。
-  文件版本: 1.0.0
+  主要用途: 全局布局、标签栏、通用卡片/表格/按钮/弹窗/提示与设置锁定遮罩样式。
+  文件版本: 2.0.0
 */
 
 :root {
@@ -121,6 +122,7 @@ textarea {
 }
 
 .tag-page {
+  position: relative;
   max-width: 1240px;
   margin: 0 auto;
   animation: page-in 0.18s ease-out;
@@ -481,6 +483,85 @@ summary {
     opacity: 1;
     transform: translateY(0) scale(1);
   }
+}
+
+.modal {
+  position: relative;
+}
+
+.modal-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.modal-close:hover {
+  background: var(--panel-soft);
+  color: var(--ink);
+}
+
+.settings-required-modal {
+  width: min(460px, 100%);
+}
+
+.settings-required-modal p {
+  margin: 0 0 18px;
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+/* 未完成必要设置时覆盖整个标签页的灰白色遮罩。 */
+.settings-lock-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  border-radius: var(--radius-lg);
+  background: rgba(244, 245, 250, 0.9);
+  backdrop-filter: blur(2px);
+}
+
+.settings-lock-card {
+  max-width: 430px;
+  text-align: center;
+}
+
+.settings-lock-icon {
+  width: 46px;
+  height: 46px;
+  margin: 0 auto 12px;
+  border-radius: 50%;
+  background: #e3e4ee;
+  color: #4b4f63;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 46px;
+}
+
+.settings-lock-card h3 {
+  margin: 0 0 8px;
+  color: #3f4357;
+  font-size: 19px;
+}
+
+.settings-lock-card p {
+  margin: 0 0 18px;
+  color: #5b6076;
+  font-size: 14px;
+  line-height: 1.7;
 }
 
 .modal h3 {

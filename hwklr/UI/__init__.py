@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
+# 最后更新: 2026-11-01 00:01
 # 文件名: __init__.py
-# 主要用途: 封装 pywebview 核心窗口 WindowView 与 JS 桥接对象 BridgeApi。
-# 文件版本: 1.0.0
+# 主要用途: 封装 pywebview 核心窗口 WindowView、设置组注册与 JS 桥接对象 BridgeApi。
+# 文件版本: 2.0.0
 """UI 窗口层。
 
 入口只需::
@@ -38,7 +39,7 @@ from .server import UiHttpServer
 from .tagview import TagView
 from .tagview.view_data import ABOUT_NAME, SETTINGS_NAME, VIEW_PARAMS
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"
 __author__ = "Gary"
 __all__ = ["BridgeApi", "WindowView"]
 
@@ -143,6 +144,17 @@ class WindowView:
 
         # 步骤 2：强制“设置倒数第二、关于最后”的标签顺序。
         self._order = self._resolve_order()
+
+        # 步骤 3：把各标签的只读设置组注册到设置标签。
+        settings_tag: TagView | None = self._tags.get(SETTINGS_NAME)
+        if settings_tag is not None:
+            for name in self._order:
+                if name in (SETTINGS_NAME, ABOUT_NAME):
+                    continue
+                group = self._tags[name].settings_group
+                if group.field_specs:
+                    settings_tag.register_settings_field(group)
+
         self._meta["features"] = [
             {"name": name, "description": self._tags[name].description}
             for name in self._order
@@ -220,12 +232,28 @@ class WindowView:
         return self._tags.get(self._active_name)
 
     def tags_payload(self) -> list[dict[str, Any]]:
-        """返回供前端渲染的标签列表。
+        """返回供前端渲染的标签列表（含必要设置状态）。
 
         Returns:
             按最终顺序排列的标签描述。
         """
-        return [self._tags[name].describe() for name in self._order]
+        payload: list[dict[str, Any]] = []
+        for name in self._order:
+            tag: TagView = self._tags[name]
+            group = tag.settings_group
+            missing: list[str] = group.missing_labels() if group else []
+            item: dict[str, Any] = tag.describe()
+            item["settings_ok"] = bool(group.is_complete()) if group else True
+            item["settings_group"] = group.group_id if group else ""
+            item["missing_settings"] = missing
+            # 如果用户名缺失，优先跳到“通用”板块；否则跳到功能自己的板块。
+            item["settings_target"] = (
+                "general"
+                if any("用户名" in label for label in missing)
+                else (group.group_id if group else "")
+            )
+            payload.append(item)
+        return payload
 
     def meta_payload(self) -> dict[str, Any]:
         """返回供前端读取的应用元信息。

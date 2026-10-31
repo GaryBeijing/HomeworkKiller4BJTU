@@ -1,10 +1,174 @@
 /*
   作者: Gary
   编写日期: 2026-10-31 20:45
+  最后更新: 2026-11-01 00:01
   文件名: settings.css
-  主要用途: “设置”标签页专属样式：运行信息列表与知识库表格。
-  文件版本: 1.0.0
+  主要用途: “设置”标签页样式：动态设置分组、高亮提醒、开关与运行信息。
+  文件版本: 2.0.0
 */
+
+.tag-settings .settings-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.7fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.tag-settings .settings-groups {
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.tag-settings .settings-group {
+  padding: 16px;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-md);
+  background: var(--panel-soft);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.tag-settings .settings-group.group-highlight {
+  border-color: #dfa600;
+  background: #fffaf0;
+  box-shadow: 0 0 0 3px rgba(223, 166, 0, 0.18);
+}
+
+.tag-settings .settings-group.group-highlight .settings-group-title {
+  color: #b47b00;
+}
+
+.tag-settings .settings-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.tag-settings .settings-group-title {
+  margin: 0;
+  font-size: 16px;
+  color: var(--ink);
+  transition: color 0.2s ease;
+}
+
+.tag-settings .group-status {
+  flex: 0 0 auto;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.tag-settings .group-status.ok {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.tag-settings .group-status.missing {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.tag-settings .settings-group-desc {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.tag-settings .settings-fields {
+  display: grid;
+  gap: 12px;
+}
+
+.tag-settings .settings-field {
+  display: grid;
+  gap: 5px;
+}
+
+.tag-settings .settings-field-label {
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.tag-settings .settings-field-help {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.tag-settings .secret-wrap {
+  display: flex;
+  gap: 8px;
+}
+
+.tag-settings .secret-wrap input {
+  flex: 1 1 auto;
+}
+
+.tag-settings .switch-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.tag-settings .switch-text {
+  display: grid;
+  gap: 3px;
+}
+
+.tag-settings .switch {
+  position: relative;
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 46px;
+  height: 26px;
+}
+
+.tag-settings .switch input {
+  width: 0;
+  height: 0;
+  opacity: 0;
+}
+
+.tag-settings .switch .slider {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: #c9ccdc;
+  cursor: pointer;
+  transition: background 0.18s ease;
+}
+
+.tag-settings .switch .slider::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(20, 22, 50, 0.28);
+  transition: transform 0.18s ease;
+}
+
+.tag-settings .switch input:checked + .slider {
+  background: var(--accent);
+}
+
+.tag-settings .switch input:checked + .slider::before {
+  transform: translateX(20px);
+}
+
+.tag-settings .switch input:focus-visible + .slider {
+  box-shadow: 0 0 0 3px rgba(91, 75, 255, 0.22);
+}
 
 .tag-settings .info-list {
   display: grid;
@@ -54,6 +218,12 @@
   font-weight: 600;
 }
 
+@media (max-width: 900px) {
+  .tag-settings .settings-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 @media (max-width: 620px) {
   .tag-settings .info-item {
     align-items: flex-start;
@@ -62,5 +232,9 @@
 
   .tag-settings .info-value {
     text-align: left;
+  }
+
+  .tag-settings .settings-group {
+    padding: 14px;
   }
 }

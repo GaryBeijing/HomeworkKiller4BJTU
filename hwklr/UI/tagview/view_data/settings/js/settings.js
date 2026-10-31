@@ -1,9 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-10-31 20:45
+  最后更新: 2026-11-01 00:01
   文件名: settings.js
-  主要用途: “设置”页面逻辑：读取/保存账号密码，加载知识库与运行信息。
-  文件版本: 1.0.0
+  主要用途: “设置”页面逻辑：动态渲染设置分组、保存配置、板块高亮与知识库信息。
+  文件版本: 2.0.0
 */
 
 (function () {
@@ -14,25 +15,28 @@
   /** 页面元素缓存。 */
   const els = {};
 
+  /** 页面状态。 */
+  const state = {
+    groups: [],
+    busy: false,
+    highlightTimer: null,
+  };
+
   /**
    * 缓存页面元素引用。
    * @returns {void}
    */
   function cacheElements() {
-    els.form = document.getElementById('settings-form');
-    els.username = document.getElementById('settings-username');
-    els.password = document.getElementById('settings-password');
+    els.groups = document.getElementById('settings-groups');
     els.save = document.getElementById('settings-save');
-    els.togglePassword = document.getElementById('settings-toggle-password');
     els.status = document.getElementById('settings-status');
     els.version = document.getElementById('settings-version');
     els.port = document.getElementById('settings-port');
     els.bankBody = document.getElementById('settings-bank-body');
-    els.refreshBanks = document.getElementById('settings-refresh-banks');
   }
 
   /**
-   * 更新状态提示样式与文本。
+   * 更新设置页状态提示。
    * @param {string} text 提示文本。
    * @param {'muted'|'error'|'success'} [kind] 样式类型。
    * @returns {void}
@@ -47,17 +51,165 @@
   }
 
   /**
-   * 读取并填充设置。
-   * @returns {Promise<void>} 完成时 resolve。
+   * 创建普通文本节点。
+   * @param {string} tagName 标签名。
+   * @param {string} className 类名。
+   * @param {string} text 文本。
+   * @returns {HTMLElement} 节点。
    */
-  async function loadSettings() {
-    const data = await App.callOk('get_settings');
-    if (els.username) {
-      els.username.value = data.username || '';
+  function node(tagName, className, text) {
+    const item = document.createElement(tagName);
+    if (className) {
+      item.className = className;
     }
-    if (els.password) {
-      els.password.value = data.password || '';
+    if (text !== undefined) {
+      item.textContent = text;
     }
+    return item;
+  }
+
+  /**
+   * 构建一个设置字段。
+   * @param {Object} group 设置分组。
+   * @param {Object} field 字段定义。
+   * @returns {HTMLElement} 字段容器。
+   */
+  function buildField(group, field) {
+    const wrapper = node('div', 'settings-field');
+    const label = node('span', 'settings-field-label', field.label || field.key);
+
+    if (field.kind === 'switch') {
+      const row = node('div', 'switch-field');
+      const text = node('div', 'switch-text');
+      text.appendChild(label);
+      if (field.help) {
+        text.appendChild(node('p', 'settings-field-help', field.help));
+      }
+      row.appendChild(text);
+      const switchLabel = node('label', 'switch');
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.checked = Boolean(field.value);
+      input.dataset.group = group.group_id;
+      input.dataset.key = field.key;
+      input.dataset.kind = 'switch';
+      switchLabel.appendChild(input);
+      switchLabel.appendChild(node('span', 'slider'));
+      row.appendChild(switchLabel);
+      wrapper.appendChild(row);
+      return wrapper;
+    }
+
+    wrapper.appendChild(label);
+    let input;
+    if (field.kind === 'select') {
+      input = document.createElement('select');
+      (field.options || []).forEach((option) => {
+        const item = document.createElement('option');
+        item.value = String(option.value);
+        item.textContent = String(option.label);
+        if (String(option.value) === String(field.value)) {
+          item.selected = true;
+        }
+        input.appendChild(item);
+      });
+    } else if (field.kind === 'number') {
+      input = document.createElement('input');
+      input.type = 'number';
+      input.value = field.value === null || field.value === undefined ? '' : String(field.value);
+      if (field.min !== null && field.min !== undefined) {
+        input.min = String(field.min);
+      }
+      if (field.max !== null && field.max !== undefined) {
+        input.max = String(field.max);
+      }
+      if (field.step !== null && field.step !== undefined) {
+        input.step = String(field.step);
+      }
+    } else {
+      input = document.createElement('input');
+      input.type = field.secret ? 'password' : 'text';
+      input.value = field.value === null || field.value === undefined ? '' : String(field.value);
+      if (field.placeholder) {
+        input.placeholder = field.placeholder;
+      }
+    }
+    input.dataset.group = group.group_id;
+    input.dataset.key = field.key;
+    input.dataset.kind = field.kind || 'text';
+
+    if (field.secret && field.kind !== 'select') {
+      const secretWrap = node('div', 'secret-wrap');
+      secretWrap.appendChild(input);
+      const toggle = node('button', 'btn ghost small', '显示');
+      toggle.type = 'button';
+      toggle.addEventListener('click', () => {
+        const visible = input.type === 'text';
+        input.type = visible ? 'password' : 'text';
+        toggle.textContent = visible ? '显示' : '隐藏';
+      });
+      secretWrap.appendChild(toggle);
+      wrapper.appendChild(secretWrap);
+    } else {
+      wrapper.appendChild(input);
+    }
+
+    if (field.help) {
+      wrapper.appendChild(node('p', 'settings-field-help', field.help));
+    }
+    return wrapper;
+  }
+
+  /**
+   * 构建一个设置分组卡片。
+   * @param {Object} group 分组数据。
+   * @returns {HTMLElement} 分组卡片。
+   */
+  function buildGroup(group) {
+    const card = node('section', 'settings-group');
+    card.dataset.group = group.group_id;
+    const head = node('div', 'settings-group-head');
+    head.appendChild(node('h3', 'settings-group-title', group.title || group.group_id));
+    const status = node(
+      'span',
+      'group-status ' + (group.complete ? 'ok' : 'missing'),
+      group.complete ? '已完整' : '缺少设置'
+    );
+    head.appendChild(status);
+    card.appendChild(head);
+    if (group.description) {
+      card.appendChild(node('p', 'settings-group-desc', group.description));
+    }
+    const fields = node('div', 'settings-fields');
+    (group.fields || []).forEach((field) => fields.appendChild(buildField(group, field)));
+    card.appendChild(fields);
+    return card;
+  }
+
+  /**
+   * 渲染所有设置分组。
+   * @param {Array} groups 分组数据。
+   * @returns {void}
+   */
+  function renderGroups(groups) {
+    if (!els.groups) {
+      return;
+    }
+    state.groups = Array.isArray(groups) ? groups : [];
+    els.groups.innerHTML = '';
+    if (state.groups.length === 0) {
+      els.groups.appendChild(node('p', 'muted', '暂无可配置项。'));
+      return;
+    }
+    state.groups.forEach((group) => els.groups.appendChild(buildGroup(group)));
+  }
+
+  /**
+   * 渲染运行信息。
+   * @param {Object} data 设置数据。
+   * @returns {void}
+   */
+  function renderRuntime(data) {
     if (els.version) {
       els.version.textContent = String(data.version || '—');
     }
@@ -67,43 +219,103 @@
   }
 
   /**
-   * 保存账号密码设置。
-   * @param {SubmitEvent} event 表单提交事件。
+   * 读取并渲染设置。
    * @returns {Promise<void>} 完成时 resolve。
    */
-  async function handleSave(event) {
-    event.preventDefault();
-    if (!els.username || !els.password) {
+  async function loadSettings() {
+    const data = await App.callOk('get_settings');
+    renderRuntime(data);
+    renderGroups(data.groups || []);
+  }
+
+  /**
+   * 收集所有分组当前输入值。
+   * @returns {Object} 分组值映射。
+   */
+  function collectGroups() {
+    const groups = {};
+    if (!els.groups) {
+      return groups;
+    }
+    els.groups.querySelectorAll('.settings-group').forEach((card) => {
+      const groupId = card.dataset.group;
+      const values = {};
+      card.querySelectorAll('[data-key]').forEach((input) => {
+        const key = input.dataset.key;
+        const kind = input.dataset.kind;
+        if (kind === 'switch') {
+          values[key] = Boolean(input.checked);
+        } else if (kind === 'number') {
+          values[key] = Number(input.value);
+        } else {
+          values[key] = input.value;
+        }
+      });
+      groups[groupId] = values;
+    });
+    return groups;
+  }
+
+  /**
+   * 保存所有设置。
+   * @returns {Promise<void>} 完成时 resolve。
+   */
+  async function saveSettings() {
+    if (state.busy) {
       return;
     }
-    const username = els.username.value.trim();
-    const password = els.password.value;
-    if (!username || !password) {
-      setStatus('账号和密码不能为空。', 'error');
-      return;
-    }
-    const button = els.save;
-    if (button) {
-      button.disabled = true;
+    state.busy = true;
+    if (els.save) {
+      els.save.disabled = true;
     }
     App.setLoading(true, '正在保存设置…');
     try {
-      await App.callOk('save_settings', { username, password });
-      setStatus('设置已保存，下次登录将使用新凭据。', 'success');
+      const data = await App.callOk('save_settings', { groups: collectGroups() });
+      renderRuntime(data);
+      renderGroups(data.groups || []);
+      setStatus('设置已保存。', 'success');
       App.toast('设置已保存', 'success');
+      await App.refreshTags();
     } catch (error) {
       setStatus(`保存失败：${error.message}`, 'error');
       App.toast(`保存失败: ${error.message}`, 'error');
     } finally {
       App.setLoading(false);
-      if (button) {
-        button.disabled = false;
+      state.busy = false;
+      if (els.save) {
+        els.save.disabled = false;
       }
     }
   }
 
   /**
+   * 高亮指定的设置板块并滚动到可见区域。
+   * @param {string} groupId 板块 ID。
+   * @returns {void}
+   */
+  function highlightGroup(groupId) {
+    if (!groupId || !els.groups) {
+      return;
+    }
+    const cards = Array.from(els.groups.querySelectorAll('.settings-group'));
+    const target = cards.find((card) => card.dataset.group === groupId);
+    if (!target) {
+      return;
+    }
+    cards.forEach((card) => card.classList.remove('group-highlight'));
+    target.classList.add('group-highlight');
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (state.highlightTimer) {
+      window.clearTimeout(state.highlightTimer);
+    }
+    state.highlightTimer = window.setTimeout(() => {
+      target.classList.remove('group-highlight');
+    }, 7000);
+  }
+
+  /**
    * 渲染知识库表格。
+   * @param {Array} banks 知识库列表。
    * @returns {void}
    */
   function renderBanks(banks) {
@@ -123,66 +335,20 @@
     }
     banks.forEach((bank) => {
       const row = document.createElement('tr');
-      const featureCell = document.createElement('td');
-      featureCell.textContent = String(bank.feature || '—');
-      const versionCell = document.createElement('td');
-      versionCell.textContent = 'v' + String(bank.version || '—');
-      const countCell = document.createElement('td');
-      countCell.textContent = String(bank.count === undefined ? '—' : bank.count);
-      row.appendChild(featureCell);
-      row.appendChild(versionCell);
-      row.appendChild(countCell);
+      row.appendChild(node('td', '', String(bank.feature || '—')));
+      row.appendChild(node('td', '', 'v' + String(bank.version || '—')));
+      row.appendChild(node('td', '', String(bank.count === undefined ? '—' : bank.count)));
       els.bankBody.appendChild(row);
     });
   }
 
   /**
-   * 读取并渲染知识库信息。
-   * @param {boolean} [showLoading] 是否显示全局加载遮罩。
+   * 读取知识库信息。
    * @returns {Promise<void>} 完成时 resolve。
    */
-  async function loadBanks(showLoading) {
-    if (showLoading) {
-      App.setLoading(true, '正在读取知识库…');
-    }
-    try {
-      const data = await App.callOk('get_bank_info');
-      renderBanks(data.banks || []);
-    } finally {
-      if (showLoading) {
-        App.setLoading(false);
-      }
-    }
-  }
-
-  /**
-   * 绑定页面事件。
-   * @returns {void}
-   */
-  function bindEvents() {
-    if (els.form) {
-      els.form.addEventListener('submit', handleSave);
-    }
-    if (els.togglePassword && els.password) {
-      els.togglePassword.addEventListener('click', () => {
-        const visible = els.password.type === 'text';
-        els.password.type = visible ? 'password' : 'text';
-        els.togglePassword.textContent = visible ? '显示密码' : '隐藏密码';
-      });
-    }
-    if (els.refreshBanks) {
-      els.refreshBanks.addEventListener('click', async () => {
-        els.refreshBanks.disabled = true;
-        try {
-          await loadBanks(true);
-          App.toast('知识库信息已刷新', 'success');
-        } catch (error) {
-          App.toast(`读取知识库失败: ${error.message}`, 'error');
-        } finally {
-          els.refreshBanks.disabled = false;
-        }
-      });
-    }
+  async function loadBanks() {
+    const data = await App.callOk('get_bank_info');
+    renderBanks(data.banks || []);
   }
 
   /**
@@ -192,22 +358,32 @@
    */
   function init(container) {
     cacheElements();
-    bindEvents();
+    if (els.save) {
+      els.save.addEventListener('click', saveSettings);
+    }
   }
 
   /**
-   * 每次切换到本标签时重新读取设置与知识库。
+   * 每次切换到本标签时刷新设置与知识库，并处理来自锁定页面的高亮请求。
    * @returns {Promise<void>} 完成时 resolve。
    */
   async function onActivate() {
     try {
       await loadSettings();
-      await loadBanks(false);
+      await loadBanks();
+      const target = App.takeSettingsTarget ? App.takeSettingsTarget() : '';
+      if (target) {
+        window.setTimeout(() => highlightGroup(target), 60);
+      }
     } catch (error) {
       setStatus(`读取设置失败：${error.message}`, 'error');
       App.toast(`读取设置失败: ${error.message}`, 'error');
     }
   }
 
-  App.registerPage(PAGE_NAME, { init: init, onActivate: onActivate });
+  App.registerPage(PAGE_NAME, {
+    init: init,
+    onActivate: onActivate,
+    highlightGroup: highlightGroup,
+  });
 })();

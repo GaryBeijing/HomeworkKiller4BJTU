@@ -1,10 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-10-31 20:45
-  最后更新: 2026-10-31 21:45
+  最后更新: 2026-11-01 00:01
   文件名: hsr.js
-  主要用途: “高铁纵横”页面逻辑：登录、列表渲染、二次确认、答题与结果弹窗。
-  文件版本: 1.0.1
+  主要用途: “高铁纵横”页面逻辑：自动登录、考试列表、二次确认、答题与结果弹窗。
+  文件版本: 2.0.0
 */
 
 (function () {
@@ -33,13 +33,10 @@
    * @returns {void}
    */
   function cacheElements() {
-    els.username = document.getElementById('hsr-username');
-    els.password = document.getElementById('hsr-password');
-    els.loginForm = document.getElementById('hsr-login-form');
-    els.loginSubmit = document.getElementById('hsr-login-submit');
-    els.logout = document.getElementById('hsr-logout');
+    els.accountStatus = document.getElementById('hsr-account-status');
+    els.relogin = document.getElementById('hsr-relogin');
     els.refresh = document.getElementById('hsr-refresh');
-    els.loginStatus = document.getElementById('hsr-login-status');
+    els.gotoSettings = document.getElementById('hsr-goto-settings');
     els.examBody = document.getElementById('hsr-exam-body');
     els.listHint = document.getElementById('hsr-list-hint');
     els.confirmModal = document.getElementById('hsr-confirm-modal');
@@ -53,18 +50,17 @@
   }
 
   /**
-   * 更新登录状态提示。
-   * @param {string} text 提示文本。
-   * @param {'muted'|'error'|'success'} [kind] 样式类型。
+   * 更新账号状态标签。
+   * @param {string} text 状态文本。
+   * @param {'info'|'ok'|'warn'|'bad'} [kind] 样式类型。
    * @returns {void}
    */
-  function setStatus(text, kind) {
-    if (!els.loginStatus) {
+  function setAccountStatus(text, kind) {
+    if (!els.accountStatus) {
       return;
     }
-    const suffix = kind === 'error' ? ' error-text' : kind === 'success' ? ' success-text' : '';
-    els.loginStatus.className = 'hint login-status' + suffix;
-    els.loginStatus.textContent = text;
+    els.accountStatus.className = 'pill ' + (kind || 'info');
+    els.accountStatus.textContent = text;
   }
 
   /**
@@ -75,22 +71,11 @@
    */
   function setBusy(busy, message) {
     state.busy = busy;
-    const controls = [
-      els.loginSubmit,
-      els.logout,
-      els.refresh,
-      els.confirmOk,
-      els.confirmCancel,
-    ].filter(Boolean);
-    controls.forEach((control) => {
-      control.disabled = busy;
-    });
-    if (els.username) {
-      els.username.disabled = busy;
-    }
-    if (els.password) {
-      els.password.disabled = busy;
-    }
+    [els.relogin, els.refresh, els.gotoSettings, els.confirmOk, els.confirmCancel]
+      .filter(Boolean)
+      .forEach((control) => {
+        control.disabled = busy;
+      });
     if (busy) {
       App.setLoading(true, message || '处理中…');
     } else {
@@ -107,126 +92,70 @@
     state.loggedIn = Boolean(data.logged_in);
     state.username = data.username || '';
     state.hasCredentials = Boolean(data.has_credentials);
-    if (els.username && !els.username.value) {
-      els.username.value = state.username;
-    }
     const bankCount = Number(data.bank_count || 0);
     const chapters = Array.isArray(data.bank_chapters) ? data.bank_chapters.length : 0;
+    if (state.loggedIn) {
+      setAccountStatus(`已登录：${state.username || '当前账号'}`, 'ok');
+    } else if (state.hasCredentials) {
+      setAccountStatus('正在自动登录…', 'info');
+    } else {
+      setAccountStatus('未配置账号，请前往设置', 'warn');
+    }
     if (els.listHint) {
       els.listHint.textContent =
-        `题库：${bankCount} 题，覆盖 ${chapters} 章。开始考试会消耗一次作答机会，请确认后再操作。`;
-    }
-    if (state.loggedIn) {
-      setStatus(`已登录：${state.username || '当前账号'}`, 'success');
-    } else if (state.hasCredentials) {
-      setStatus('检测到本机已保存账号，正在尝试自动登录…', 'muted');
-    } else {
-      setStatus('登录成功后，账号密码只保存在本机 config.json。', 'muted');
+        `题库：${bankCount} 题，覆盖 ${chapters} 章。账号密码请在设置中填写；` +
+        '开始考试会消耗一次作答机会，请确认后再操作。';
     }
   }
 
   /**
-   * 使用已保存凭据登录。
-   * @returns {Promise<void>} 完成时 resolve。
+   * 使用设置中的账号密码登录。
+   * @returns {Promise<boolean>} 是否登录成功。
    */
   async function loginSaved() {
-    setBusy(true, '正在使用已保存账号登录（含验证码识别）…');
+    setBusy(true, '正在使用设置中的账号登录（含验证码识别）…');
     try {
       const data = await App.callOk('login_saved');
       state.loggedIn = true;
       state.username = data.username || state.username;
       state.hasCredentials = true;
-      setStatus(`已登录：${state.username}`, 'success');
+      setAccountStatus(`已登录：${state.username || '当前账号'}`, 'ok');
       try {
         await loadExams(false);
       } catch (listError) {
         App.toast(`登录成功，但读取考试列表失败: ${listError.message}`, 'warn');
       }
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  /**
-   * 处理自动登录流程。
-   * @returns {Promise<boolean>} 是否通过已保存凭据成功登录。
-   */
-  async function autoLoginFlow() {
-    if (state.loggedIn || !state.hasCredentials || state.autoTried) {
-      return false;
-    }
-    state.autoTried = true;
-    try {
-      await loginSaved();
       return true;
     } catch (error) {
-      setStatus(`自动登录失败：${error.message}`, 'error');
-      return false;
-    }
-  }
-
-  /**
-   * 处理手动登录。
-   * @param {SubmitEvent} event 表单提交事件。
-   * @returns {Promise<void>} 完成时 resolve。
-   */
-  async function handleLogin(event) {
-    event.preventDefault();
-    if (state.busy) {
-      return;
-    }
-    const username = (els.username.value || '').trim();
-    const password = els.password.value || '';
-    if (!username || !password) {
-      setStatus('请输入学号/账号和密码。', 'error');
-      return;
-    }
-    setBusy(true, '正在识别验证码并登录…');
-    try {
-      const data = await App.callOk('login', { username, password });
-      state.loggedIn = true;
-      state.username = data.username || username;
-      state.hasCredentials = true;
-      state.autoTried = true;
-      els.password.value = '';
-      setStatus(`登录成功：${state.username}`, 'success');
-      App.toast('登录成功', 'success');
-      try {
-        await loadExams(false);
-      } catch (listError) {
-        App.toast(`登录成功，但读取考试列表失败: ${listError.message}`, 'warn');
-      }
-    } catch (error) {
-      setStatus(`登录失败：${error.message}`, 'error');
+      setAccountStatus(`登录失败：${error.message}`, 'bad');
       App.toast(`登录失败: ${error.message}`, 'error');
+      return false;
     } finally {
       setBusy(false);
     }
   }
 
   /**
-   * 退出登录。
+   * 处理“重新登录”。
    * @returns {Promise<void>} 完成时 resolve。
    */
-  async function handleLogout() {
-    if (state.busy) {
+  async function handleRelogin() {
+    if (state.busy || !state.hasCredentials) {
+      if (!state.hasCredentials) {
+        App.openSettings('hsr');
+      }
       return;
     }
-    setBusy(true, '正在退出登录…');
-    try {
-      await App.callOk('logout');
-      state.loggedIn = false;
-      state.exams = [];
-      state.autoTried = true;
-      setStatus('已退出登录。', 'muted');
-      renderEmpty('请先登录');
-      clearResult();
-      App.toast('已退出登录', 'info');
-    } catch (error) {
-      setStatus(`退出登录失败：${error.message}`, 'error');
-    } finally {
-      setBusy(false);
-    }
+    state.autoTried = true;
+    await loginSaved();
+  }
+
+  /**
+   * 处理“账号设置”。
+   * @returns {void}
+   */
+  function handleGotoSettings() {
+    App.openSettings('hsr');
   }
 
   /**
@@ -236,7 +165,7 @@
    */
   async function loadExams(showLoading) {
     if (!state.loggedIn) {
-      renderEmpty('请先登录');
+      renderEmpty('请先在设置中填写账号密码，再点击“重新登录”。');
       return;
     }
     if (showLoading) {
@@ -411,7 +340,6 @@
       }
     } catch (error) {
       App.toast(`答题失败: ${error.message}`, 'error');
-      // 答题可能已消耗次数，失败后尽量刷新列表。
       try {
         await loadExams(false);
       } catch (refreshError) {
@@ -481,9 +409,7 @@
     els.resultSummary.appendChild(
       createStat('考试', String(result.exam_name || '—'), '', true)
     );
-    els.resultSummary.appendChild(
-      createStat('得分', score, 'ok')
-    );
+    els.resultSummary.appendChild(createStat('得分', score, 'ok'));
     els.resultSummary.appendChild(
       createStat('题库命中', `${hit} / ${total}`, hit === total ? 'ok' : 'bad')
     );
@@ -548,16 +474,16 @@
    * @returns {void}
    */
   function bindEvents() {
-    if (els.loginForm) {
-      els.loginForm.addEventListener('submit', handleLogin);
+    if (els.relogin) {
+      els.relogin.addEventListener('click', handleRelogin);
     }
-    if (els.logout) {
-      els.logout.addEventListener('click', handleLogout);
+    if (els.gotoSettings) {
+      els.gotoSettings.addEventListener('click', handleGotoSettings);
     }
     if (els.refresh) {
       els.refresh.addEventListener('click', async () => {
         if (!state.loggedIn) {
-          App.toast('请先登录', 'warn');
+          App.toast('请先在设置中填写账号密码', 'warn');
           return;
         }
         if (state.busy) {
@@ -622,7 +548,6 @@
       if (event.key !== 'Escape') {
         return;
       }
-      // 结果弹窗优先关闭；没有结果弹窗时再关闭开始确认框。
       if (els.resultModal && !els.resultModal.classList.contains('hidden')) {
         clearResult();
         return;
@@ -644,19 +569,22 @@
     try {
       await refreshState();
     } catch (error) {
-      setStatus(`读取状态失败：${error.message}`, 'error');
+      setAccountStatus(`读取状态失败：${error.message}`, 'bad');
       App.toast(`读取状态失败: ${error.message}`, 'error');
       return;
     }
-    const autoLoggedIn = await autoLoginFlow();
-    if (state.loggedIn && !autoLoggedIn) {
+    if (!state.loggedIn && state.hasCredentials && !state.autoTried) {
+      state.autoTried = true;
+      await loginSaved();
+    }
+    if (state.loggedIn) {
       try {
         await loadExams(false);
       } catch (error) {
         App.toast(`读取考试列表失败: ${error.message}`, 'error');
       }
-    } else if (!state.loggedIn) {
-      renderEmpty('请先登录');
+    } else {
+      renderEmpty('请先在设置中填写账号密码，再点击“重新登录”。');
     }
   }
 

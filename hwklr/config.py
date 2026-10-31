@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
+# 最后更新: 2026-11-01 00:01
 # 文件名: config.py
-# 主要用途: 统一读写项目根目录 config.json（与 main.py 同级）的全部设置。
-# 文件版本: 1.0.0
+# 主要用途: 统一读写项目根目录 config.json；V2 起按设置分组存放账号、高铁密码与 C 程序设计 AI 配置。
+# 文件版本: 2.0.0
 """项目配置读写。
 
 配置文件固定位于**项目根目录**（``main.py`` 同级）的 ``config.json``。
@@ -34,7 +35,18 @@ _CONFIG_LOCK: Final[threading.Lock] = threading.Lock()
 # 所有设置的默认值；新增设置项时在此追加，旧配置文件会自动补齐缺失字段。
 DEFAULT_CONFIG: Final[dict[str, Any]] = {
     "username": "",
-    "password": "",
+    "hsr": {
+        "password": "",
+    },
+    "c_programming": {
+        "provider": "deepseek",
+        "model": "deepseek-flash",
+        "base_url": "https://api.deepseek.com",
+        "api_key": "",
+        "temperature": 0.3,
+        "enable_solution_mode": False,
+        "last_course_id": None,
+    },
     "ui": {
         "width": 1100,
         "height": 720,
@@ -105,7 +117,39 @@ def load_config() -> dict[str, Any]:
     if not isinstance(loaded, dict):
         _LOGGER.warning("配置文件内容不是对象，将使用默认配置。")
         return copy.deepcopy(DEFAULT_CONFIG)
-    return _deep_merge(DEFAULT_CONFIG, loaded)
+    return _migrate_config(_deep_merge(DEFAULT_CONFIG, loaded))
+
+
+def _migrate_config(config: dict[str, Any]) -> dict[str, Any]:
+    """把旧版配置迁移到 V2 的分组结构。
+
+    V1 的密码直接放在顶层 ``password``；V2 改为 ``hsr.password``。
+    迁移只在内存中进行，下一次保存时写回新结构。
+
+    Args:
+        config: 已与默认值合并的配置。
+
+    Returns:
+        迁移后的配置字典。
+    """
+    # 步骤 1：把顶层 password 迁移到高铁纵横分组。
+    hsr: dict[str, Any] = config.get("hsr") if isinstance(config.get("hsr"), dict) else {}
+    legacy_password: Any = config.pop("password", "")
+    if not hsr.get("password") and legacy_password:
+        hsr["password"] = str(legacy_password)
+    hsr.setdefault("password", "")
+    config["hsr"] = hsr
+
+    # 步骤 2：补齐 C 程序设计分组的缺失字段。
+    cprog: dict[str, Any] = (
+        config.get("c_programming")
+        if isinstance(config.get("c_programming"), dict)
+        else {}
+    )
+    for key, value in DEFAULT_CONFIG["c_programming"].items():
+        cprog.setdefault(key, copy.deepcopy(value))
+    config["c_programming"] = cprog
+    return config
 
 
 def save_config(config: dict[str, Any]) -> None:

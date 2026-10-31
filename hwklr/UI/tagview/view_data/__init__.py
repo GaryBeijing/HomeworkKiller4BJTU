@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
+# 最后更新: 2026-11-01 00:01
 # 文件名: __init__.py
 # 主要用途: 集中登记每个标签页的启动参数（标题、资源路径、功能类）。
-# 文件版本: 1.0.0
+# 文件版本: 2.0.0
 """标签页启动参数。
 
 ``VIEW_PARAMS`` 是标签页的唯一注册表：新增功能时，在此追加一条
@@ -14,9 +15,15 @@ from __future__ import annotations
 
 from typing import Final, NamedTuple
 
-from hwklr.features import AboutFeature, Feature, HSRFeature, SettingsFeature
+from hwklr.features import (
+    AboutFeature,
+    CProgrammingFeature,
+    Feature,
+    HSRFeature,
+    SettingsFeature,
+)
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"
 __author__ = "Gary"
 __all__ = [
     "ABOUT_NAME",
@@ -63,6 +70,15 @@ VIEW_PARAMS: Final[dict[str, ViewParam]] = {
         js=("hsr/js/hsr.js",),
         feature_cls=HSRFeature,
         description="登录高铁答题系统，按题库自动匹配答案并提交考试。",
+    ),
+    "C程序设计": ViewParam(
+        function_name="C程序设计",
+        title="C程序设计",
+        html="cprog/index.html",
+        css=("cprog/css/cprog.css",),
+        js=("cprog/js/cprog.js",),
+        feature_cls=CProgrammingFeature,
+        description="CITEL 课程题目辅助：启发模式逐步讲解，题解模式生成并提交参考实现。",
     ),
     SETTINGS_NAME: ViewParam(
         function_name=SETTINGS_NAME,

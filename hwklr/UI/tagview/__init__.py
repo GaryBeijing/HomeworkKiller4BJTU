@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
+# 最后更新: 2026-11-01 00:01
 # 文件名: __init__.py
-# 主要用途: 定义标签页抽象 TagView，统一管理功能实例、HTML/CSS/JS 资源与桥接调用。
-# 文件版本: 1.0.0
+# 主要用途: 定义标签页抽象 TagView，统一管理功能实例、设置组、HTML/CSS/JS 资源与桥接调用。
+# 文件版本: 2.0.0
 """标签页抽象。
 
 每个标签页 = 一套前端资源（HTML/CSS/JS）+ 一个 :class:`Feature` 实例。
@@ -11,22 +12,44 @@
 """
 from __future__ import annotations
 
+import abc
 import json
 from pathlib import Path
-from typing import Any, Final
+from typing import TYPE_CHECKING, Any, Final
 
 from hwklr.features import Feature
 
-from .view_data import VIEW_PARAMS, ViewParam
+from .view_data import SETTINGS_NAME, VIEW_PARAMS, ViewParam
 
-__version__ = "1.0.0"
+if TYPE_CHECKING:
+    from hwklr.features.settings import FeatureSettingsGroup
+
+__version__ = "2.0.0"
 __author__ = "Gary"
-__all__ = ["TagView", "ViewParam", "VIEW_DATA_DIR"]
+__all__ = ["SettingsTagView", "TagView", "TagViewBase", "ViewParam", "VIEW_DATA_DIR"]
 
 VIEW_DATA_DIR: Final[Path] = Path(__file__).resolve().parent / "view_data"
 
 
-class TagView:
+class TagViewBase(abc.ABC):
+    """标签页抽象接口。
+
+    所有标签页必须提供只读的 :attr:`settings_group`，窗口层会在启动时
+    把这些设置组注册到设置页。
+    """
+
+    @property
+    @abc.abstractmethod
+    def settings_group(self) -> "FeatureSettingsGroup":
+        """返回该标签的设置组。
+
+        Returns:
+            功能设置组。
+        """
+        raise NotImplementedError
+
+
+class TagView(TagViewBase):
     """单个标签页。
 
     负责：
@@ -86,6 +109,8 @@ class TagView:
                 "未知功能: %s；可用功能: %s" % (name, ", ".join(VIEW_PARAMS))
             )
         feature: Feature = param.feature_cls(universal_param or {})
+        if cls is TagView and name == SETTINGS_NAME:
+            return SettingsTagView(param, feature)
         return cls(param, feature)
 
     @property
@@ -123,6 +148,18 @@ class TagView:
             功能实例。
         """
         return self._feature
+
+    @property
+    def settings_group(self) -> "FeatureSettingsGroup":
+        """返回该标签必须提供的只读设置组。
+
+        这是 TagView 的抽象只读属性：所有功能都必须实现
+        ``Feature.settings_group``，窗口启动时会把非设置标签的设置组注册到设置页。
+
+        Returns:
+            功能设置组。
+        """
+        return self._feature.settings_group
 
     @property
     def html_path(self) -> Path:
@@ -180,3 +217,25 @@ class TagView:
             标签名称。
         """
         return "TagView(%s)" % json.dumps(self.name, ensure_ascii=False)
+
+
+class SettingsTagView(TagView):
+    """设置标签页。
+
+    在通用 TagView 基础上额外提供 :meth:`register_settings_field`，
+    供 WindowView 注册其他功能的设置板块。
+    """
+
+    def register_settings_field(self, group: "FeatureSettingsGroup") -> None:
+        """把功能设置组注册到设置页。
+
+        Args:
+            group: 功能设置组。
+
+        Raises:
+            TypeError: 设置功能未实现注册接口时抛出。
+        """
+        register = getattr(self._feature, "register_group", None)
+        if not callable(register):
+            raise TypeError("设置标签的功能未实现 register_group")
+        register(group)

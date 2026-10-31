@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
+# 最后更新: 2026-11-01 00:01
 # 文件名: __init__.py
-# 主要用途: 实现“高铁纵横”功能：登录、考试列表、自动答题与提交。
-# 文件版本: 1.0.0
+# 主要用途: 实现“高铁纵横”功能：登录、考试列表、自动答题与提交，并注册密码设置板块。
+# 文件版本: 2.0.0
 """高铁纵横功能实现。
 
 重制自 ``B1.0/``：保留原有登录、验证码、考试列表、自动匹配答案、
@@ -21,11 +22,12 @@ from typing import Any, Final
 from hwklr import runtime_data
 from hwklr.config import load_config, update_config
 from hwklr.features.base import ApiResult, Feature, failure, success
+from hwklr.features.settings import FeatureSettingsGroup, SettingsFieldSpec
 
 from .bank import Bank
 from .client import HsrApiError, HsrClient
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"
 __author__ = "Gary"
 __all__ = ["HSRFeature"]
 
@@ -55,6 +57,80 @@ class HSRFeature(Feature):
         self._records: list[dict[str, Any]] = []
         self._last_exam: dict[str, Any] | None = None
         self._lock: threading.RLock = threading.RLock()
+        self._settings_group: FeatureSettingsGroup = self._build_settings_group()
+
+    @property
+    def settings_group(self) -> FeatureSettingsGroup:
+        """返回高铁纵横的设置板块（密码）。
+
+        Returns:
+            含密码字段的设置组。
+        """
+        return self._settings_group
+
+    def _build_settings_group(self) -> FeatureSettingsGroup:
+        """构建高铁纵横设置板块。
+
+        Returns:
+            密码设置组。
+        """
+
+        def values_getter() -> dict[str, Any]:
+            """读取高铁密码。"""
+            config: dict[str, Any] = load_config()
+            hsr: dict[str, Any] = (
+                config.get("hsr") if isinstance(config.get("hsr"), dict) else {}
+            )
+            password: str = str(hsr.get("password") or config.get("password") or "")
+            return {"password": password}
+
+        def exporter(values: dict[str, Any]) -> dict[str, Any]:
+            """导出高铁密码。"""
+            return {"hsr": {"password": str(values.get("password") or "")}}
+
+        def complete_checker() -> bool:
+            """检查用户名与密码是否都已填写。"""
+            config: dict[str, Any] = load_config()
+            hsr: dict[str, Any] = (
+                config.get("hsr") if isinstance(config.get("hsr"), dict) else {}
+            )
+            username: str = str(config.get("username") or "").strip()
+            password: str = str(hsr.get("password") or config.get("password") or "")
+            return bool(username and password)
+
+        def missing_getter() -> list[str]:
+            """列出缺失项。"""
+            config: dict[str, Any] = load_config()
+            hsr: dict[str, Any] = (
+                config.get("hsr") if isinstance(config.get("hsr"), dict) else {}
+            )
+            missing: list[str] = []
+            if not str(config.get("username") or "").strip():
+                missing.append("通用：用户名")
+            if not str(hsr.get("password") or config.get("password") or ""):
+                missing.append("高铁纵横：密码")
+            return missing
+
+        return FeatureSettingsGroup(
+            group_id="hsr",
+            title="高铁纵横",
+            description="登录高铁答题系统所需的密码；用户名在“通用”中共享。",
+            field_specs=(
+                SettingsFieldSpec(
+                    key="password",
+                    label="密码",
+                    kind="password",
+                    secret=True,
+                    strip=False,
+                    placeholder="请输入高铁答题系统密码",
+                    help="只保存在本机 config.json。",
+                ),
+            ),
+            values_getter=values_getter,
+            exporter=exporter,
+            complete_checker=complete_checker,
+            missing_getter=missing_getter,
+        )
 
     def handle(self, action: str, params: dict[str, Any]) -> ApiResult:
         """分发 UI 动作。
@@ -91,6 +167,22 @@ class HSRFeature(Feature):
                 return failure("操作失败: %s" % exc)
 
     # ------------------------------------------------------------------ 状态
+    @staticmethod
+    def _read_credentials() -> tuple[str, str]:
+        """从配置读取高铁账号与密码。
+
+        Returns:
+            ``(username, password)``。
+        """
+        config: dict[str, Any] = load_config()
+        hsr: dict[str, Any] = (
+            config.get("hsr") if isinstance(config.get("hsr"), dict) else {}
+        )
+        return (
+            str(config.get("username") or "").strip(),
+            str(hsr.get("password") or config.get("password") or ""),
+        )
+
     def _action_get_state(self, params: dict[str, Any]) -> ApiResult:
         """返回当前登录状态与题库概况。
 
@@ -100,9 +192,7 @@ class HSRFeature(Feature):
         Returns:
             包含 ``logged_in``、``username``、``has_credentials`` 等字段的结果。
         """
-        config: dict[str, Any] = load_config()
-        username: str = str(config.get("username") or "")
-        password: str = str(config.get("password") or "")
+        username, password = self._read_credentials()
         chapters: list[str] = []
         for item in self._bank.items:
             chapter: str = str(item.get("chapter") or "")
@@ -148,9 +238,9 @@ class HSRFeature(Feature):
             登录结果。
         """
         username: str = str(params.get("username") or "").strip()
-        password: str = str(params.get("password") or "").strip()
+        password: str = str(params.get("password") or "")
         if not username or not password:
-            return failure("请输入学号/账号和密码")
+            return failure("请在设置中填写学号/账号和密码")
 
         config: dict[str, Any] = load_config()
         timeout: float = float(
@@ -161,8 +251,8 @@ class HSRFeature(Feature):
         token: str = client.login(username, password)
         self._client = client
         self._records = []
-        # 步骤 2：登录成功后持久化凭据，保持与原版一致的“记住账号密码”行为。
-        update_config({"username": username, "password": password})
+        # 步骤 2：登录成功后持久化凭据；V2 密码保存到 hsr 分组。
+        update_config({"username": username, "hsr": {"password": password}})
         return success({"username": username, "logged_in": bool(token)})
 
     def _action_login_saved(self, params: dict[str, Any]) -> ApiResult:
@@ -174,11 +264,9 @@ class HSRFeature(Feature):
         Returns:
             登录结果。
         """
-        config: dict[str, Any] = load_config()
-        username: str = str(config.get("username") or "").strip()
-        password: str = str(config.get("password") or "").strip()
+        username, password = self._read_credentials()
         if not username or not password:
-            return failure("尚未保存账号密码，请先登录一次")
+            return failure("尚未在设置中保存账号密码")
         return self._action_login({"username": username, "password": password})
 
     def _action_logout(self, params: dict[str, Any]) -> ApiResult:
