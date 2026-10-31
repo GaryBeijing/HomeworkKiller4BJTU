@@ -1,0 +1,107 @@
+/*
+  作者: Gary
+  编写日期: 2026-10-31 20:45
+  文件名: hsr.css
+  主要用途: “高铁纵横”标签页专属样式：考试列表操作、答题结果统计与风险提示。
+  文件版本: 1.0.0
+*/
+
+.tag-hsr .login-card,
+.tag-hsr .list-card {
+  min-width: 0;
+}
+
+.tag-hsr .result-card {
+  margin-top: 18px;
+}
+
+.tag-hsr .result-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.tag-hsr .stat {
+  padding: 14px 16px;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-md);
+  background: var(--panel-soft);
+}
+
+.tag-hsr .stat-label {
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.tag-hsr .stat-value {
+  color: var(--ink);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.tag-hsr .stat-value.small {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.tag-hsr .stat-value.ok {
+  color: var(--ok);
+}
+
+.tag-hsr .stat-value.bad {
+  color: var(--bad);
+}
+
+.tag-hsr .result-details {
+  display: grid;
+  gap: 10px;
+}
+
+.tag-hsr .result-details details p {
+  margin: 8px 0 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.tag-hsr .risk-note {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--warn-bg);
+  color: var(--warn);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.tag-hsr .login-status {
+  min-height: 20px;
+}
+
+.tag-hsr .login-status.error-text,
+.tag-hsr .login-status.success-text {
+  font-weight: 600;
+}
+
+.tag-hsr .exam-action {
+  min-width: 88px;
+}
+
+.tag-hsr .chapter-cell {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag-hsr .modal p strong {
+  color: var(--bad);
+}
+
+@media (max-width: 900px) {
+  .tag-hsr .result-summary {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  }
+}

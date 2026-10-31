@@ -1,0 +1,66 @@
+/*
+  作者: Gary
+  编写日期: 2026-10-31 20:45
+  文件名: settings.css
+  主要用途: “设置”标签页专属样式：运行信息列表与知识库表格。
+  文件版本: 1.0.0
+*/
+
+.tag-settings .info-list {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.tag-settings .info-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  background: var(--panel-soft);
+}
+
+.tag-settings .info-label {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.tag-settings .info-value {
+  color: var(--ink);
+  font-size: 13px;
+  word-break: break-all;
+  text-align: right;
+}
+
+.tag-settings .section-title {
+  margin: 6px 0 10px;
+  font-size: 15px;
+  color: var(--ink-soft);
+}
+
+.tag-settings .table-wrap.compact {
+  max-height: 280px;
+}
+
+.tag-settings .data-table {
+  min-width: 420px;
+}
+
+.tag-settings .settings-status.error-text,
+.tag-settings .settings-status.success-text {
+  font-weight: 600;
+}
+
+@media (max-width: 620px) {
+  .tag-settings .info-item {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .tag-settings .info-value {
+    text-align: left;
+  }
+}

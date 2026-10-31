@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<!--
+  作者: Gary
+  编写日期: 2026-10-31 20:45
+  文件名: index.html
+  主要用途: 应用主页面骨架：标签栏、内容区、加载遮罩与消息提示容器。
+  文件版本: 1.0.0
+-->
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HomeworkKiller4BJTU</title>
+  <link rel="stylesheet" href="/page_data/css/base.css">
+</head>
+<body>
+  <div class="app">
+    <header class="tabbar" id="tabbar" role="tablist" aria-label="功能标签"></header>
+    <main class="content" id="content">
+      <div id="content-host" class="content-host"></div>
+      <div id="loading" class="loading hidden" aria-live="polite">
+        <span class="spinner" aria-hidden="true"></span>
+        <span id="loading-text">处理中…</span>
+      </div>
+    </main>
+    <div id="toast-host" class="toast-host" aria-live="polite"></div>
+  </div>
+  <script src="/page_data/js/base.js"></script>
+</body>
+</html>

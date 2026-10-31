@@ -1,0 +1,79 @@
+<!--
+  作者: Gary
+  编写日期: 2026-10-31 20:45
+  文件名: index.html
+  主要用途: “设置”标签页结构：账号密码、知识库信息与本地服务端口。
+  文件版本: 1.0.0
+-->
+<section class="tag-page tag-settings" id="settings-page">
+  <div class="hero">
+    <div>
+      <h1>设置</h1>
+      <p>账号密码保存在本机项目根目录的 config.json 中，不会上传到任何第三方服务。</p>
+    </div>
+    <div class="hero-badge">本机配置</div>
+  </div>
+
+  <div class="grid">
+    <section class="card">
+      <h2>账号设置</h2>
+      <form id="settings-form" autocomplete="off">
+        <label class="field">
+          <span>学号 / 账号</span>
+          <input id="settings-username" type="text" autocomplete="username"
+                 placeholder="请输入学号或账号">
+        </label>
+        <label class="field">
+          <span>密码</span>
+          <input id="settings-password" type="password" autocomplete="new-password"
+                 placeholder="请输入密码">
+        </label>
+        <div class="row">
+          <button id="settings-save" class="btn primary" type="submit">保存设置</button>
+          <button id="settings-toggle-password" class="btn ghost" type="button">显示密码</button>
+        </div>
+        <p class="hint" id="settings-status">修改账号密码后，下次登录或自动登录会使用新凭据。</p>
+      </form>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>运行信息</h2>
+        <button id="settings-refresh-banks" class="btn ghost small" type="button">刷新知识库</button>
+      </div>
+      <div class="info-list">
+        <div class="info-item">
+          <span class="info-label">软件版本</span>
+          <span class="info-value mono" id="settings-version">—</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">本地监听端口</span>
+          <span class="info-value mono" id="settings-port">—</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">配置文件</span>
+          <span class="info-value mono">config.json</span>
+        </div>
+      </div>
+
+      <h3 class="section-title">知识库</h3>
+      <div class="table-wrap compact">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>功能</th>
+              <th>版本</th>
+              <th>题量</th>
+            </tr>
+          </thead>
+          <tbody id="settings-bank-body">
+            <tr>
+              <td colspan="3" class="table-empty">正在读取知识库…</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="hint">知识库文件位于 hwklr/runtime_data/，命名格式为“功能_bank_v版本.json”。</p>
+    </section>
+  </div>
+</section>

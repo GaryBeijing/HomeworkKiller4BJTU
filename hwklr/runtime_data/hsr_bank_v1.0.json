@@ -1,0 +1,3985 @@
+[
+  {
+    "question": "中国铁路历经了几次大提速：",
+    "answer": "D",
+    "type": "single",
+    "chapter": "第一章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "D",
+        "text": "六"
+      }
+    ]
+  },
+  {
+    "question": "中国第一条磁悬浮列车示范运营线在哪个城市开始开放运行：",
+    "answer": "B",
+    "type": "single",
+    "chapter": "第一章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "上海"
+      }
+    ]
+  },
+  {
+    "question": "中国高铁里程到2024年底突破：（2025新题）",
+    "answer": "B",
+    "type": "single",
+    "chapter": "第一章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "4.8万公里"
+      }
+    ]
+  },
+  {
+    "question": "目前世界上一次性建成里程最长、设计标准最高的高铁是：",
+    "answer": "B",
+    "type": "single",
+    "chapter": "第一章考试",
+    "section": "判断/辨析",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "京沪高铁"
+      }
+    ]
+  },
+  {
+    "question": "目前世界上一次性建成通车里程最长的高速铁路是：",
+    "answer": "C",
+    "type": "single",
+    "chapter": "第一章考试",
+    "section": "判断/辨析",
+    "answer_options": [
+      {
+        "letter": "C",
+        "text": "兰新高铁"
+      }
+    ]
+  },
+  {
+    "question": "以下对日本新干线的说法错误的是：",
+    "answer": "C",
+    "type": "single",
+    "chapter": "第一章考试",
+    "section": "判断/辨析",
+    "answer_options": [
+      {
+        "letter": "C",
+        "text": "高密度、长编组、站间距大"
+      }
+    ]
+  },
+  {
+    "question": "以下对法国高速铁路的说法正确的是：",
+    "answer": "B,C,D",
+    "type": "multi",
+    "chapter": "第一章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "少量270km邮政列车和200km快货列车，只运行高速列车"
+      },
+      {
+        "letter": "C",
+        "text": "准点率超过90%"
+      },
+      {
+        "letter": "D",
+        "text": "最高运营速度为东南线与东欧线的320km/h"
+      }
+    ]
+  },
+  {
+    "question": "采取客货混用的列车运行模式的国家有：",
+    "answer": "C,D",
+    "type": "multi",
+    "chapter": "第一章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "C",
+        "text": "德国"
+      },
+      {
+        "letter": "D",
+        "text": "西班牙"
+      }
+    ]
+  },
+  {
+    "question": "根据UIC规定，下列关于高速铁路设计速度的说法中正确的是：",
+    "answer": "B,C",
+    "type": "multi",
+    "chapter": "第一章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "新建高速铁路设计速度应在250km/h及以上"
+      },
+      {
+        "letter": "C",
+        "text": "既有线改造线路设计速度应在200km/h及以上"
+      }
+    ]
+  },
+  {
+    "question": "以下对德国高速铁路的说法正确的是：",
+    "answer": "B,C,D",
+    "type": "multi",
+    "chapter": "第一章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "采用新建线建设和既有线改造方式"
+      },
+      {
+        "letter": "C",
+        "text": "客货分时混用，高中混跑"
+      },
+      {
+        "letter": "D",
+        "text": "白天高峰时段开行高速列车，夜间与低峰时段运行货运列车"
+      }
+    ]
+  },
+  {
+    "question": "铁道部《中长期铁路网规划》中，将我国区际专线的速度目标值确定为200km/h及以上",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第一章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "法国首建铁路列车上高速线运行",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第一章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "法国高速铁路的建设模式为既有建新线和改造既有线",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第一章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "2008年调整的中长期铁路网规划提出构筑“八纵八横”高速铁路主通道",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第一章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "2021年国家综合立体交通网规划提出实现“全国123出行交通圈”",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第一章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "中国高速铁路的建设模式为建新线",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第一章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "日本高速铁路列车下既有线运行",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第一章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "京张高铁是中国第一条采用自主研发的北斗卫星导航系统、设计速度350km/h的智能化高速铁路",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第一章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "西班牙高速铁路的建设模式为改造既有线",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第一章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "中国高速铁路列车成网运行",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第一章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "对于采用12.5m钢轨的有缝线路，每公里线路有多少个接头：",
+    "answer": "B",
+    "type": "single",
+    "chapter": "第二章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "160"
+      }
+    ]
+  },
+  {
+    "question": "我国普通铁路无砟轨道结构的早期研发开始于：",
+    "answer": "C",
+    "type": "single",
+    "chapter": "第二章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "C",
+        "text": "1960"
+      }
+    ]
+  },
+  {
+    "question": "我国什么时候开始进入高速道岔时期：",
+    "answer": "C",
+    "type": "single",
+    "chapter": "第二章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "C",
+        "text": "2005年"
+      }
+    ]
+  },
+  {
+    "question": "我国什么时候开始进入提速道岔时期：",
+    "answer": "D",
+    "type": "single",
+    "chapter": "第二章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "D",
+        "text": "20世纪90年代"
+      }
+    ]
+  },
+  {
+    "question": "2005年在以下哪条线建立了无砟轨道综合试验段：",
+    "answer": "B",
+    "type": "single",
+    "chapter": "第二章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "遂渝线"
+      }
+    ]
+  },
+  {
+    "question": "我国高速道岔的直向过岔速度最高能达到：",
+    "answer": "D",
+    "type": "single",
+    "chapter": "第二章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "D",
+        "text": "350km/h"
+      }
+    ]
+  },
+  {
+    "question": "我国高速道岔的侧向过岔速度最高能达到：",
+    "answer": "C",
+    "type": "single",
+    "chapter": "第二章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "C",
+        "text": "220km/h"
+      }
+    ]
+  },
+  {
+    "question": "对于采用25m钢轨的有缝线路，每公里线路有多少个接头：",
+    "answer": "B",
+    "type": "single",
+    "chapter": "第二章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "80"
+      }
+    ]
+  },
+  {
+    "question": "我国第一条“一次性铺设无缝线路”的高速铁路是：",
+    "answer": "B",
+    "type": "single",
+    "chapter": "第二章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "秦沈客运专线"
+      }
+    ]
+  },
+  {
+    "question": "以下哪些属于无砟轨道的智能建造：",
+    "answer": "A,B,D",
+    "type": "multi",
+    "chapter": "第二章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "轨道板智能布设"
+      },
+      {
+        "letter": "B",
+        "text": "轨道板智能精调"
+      },
+      {
+        "letter": "D",
+        "text": "自密实混凝土智能灌注"
+      }
+    ]
+  },
+  {
+    "question": "高速铁路轨道工程的未来发展包含：",
+    "answer": "A,B,C,D",
+    "type": "multi",
+    "chapter": "第二章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "智能化"
+      },
+      {
+        "letter": "B",
+        "text": "韧性化、长寿命"
+      },
+      {
+        "letter": "C",
+        "text": "更高速度"
+      },
+      {
+        "letter": "D",
+        "text": "绿色化"
+      }
+    ]
+  },
+  {
+    "question": "以下哪些是CRTSIII无砟轨道的重要组成部件：",
+    "answer": "A,B,C",
+    "type": "multi",
+    "chapter": "第二章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "轨道板"
+      },
+      {
+        "letter": "B",
+        "text": "自密实混凝土"
+      },
+      {
+        "letter": "C",
+        "text": "隔离层"
+      }
+    ]
+  },
+  {
+    "question": "有砟道床劣化的延缓措施包含：",
+    "answer": "A,C,D",
+    "type": "multi",
+    "chapter": "第二章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "弹性轨枕"
+      },
+      {
+        "letter": "C",
+        "text": "土工格栅"
+      },
+      {
+        "letter": "D",
+        "text": "聚氨酯固化"
+      }
+    ]
+  },
+  {
+    "question": "高速铁路有砟轨道面临的挑战有：",
+    "answer": "A,B,C",
+    "type": "multi",
+    "chapter": "第二章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "道床劣化"
+      },
+      {
+        "letter": "B",
+        "text": "道砟飞溅"
+      },
+      {
+        "letter": "C",
+        "text": "养护维修"
+      }
+    ]
+  },
+  {
+    "question": "下述哪些地段的高速铁路主要采用了有砟轨道：",
+    "answer": "A,B,C,D",
+    "type": "multi",
+    "chapter": "第二章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "严寒冻胀"
+      },
+      {
+        "letter": "B",
+        "text": "深厚软土"
+      },
+      {
+        "letter": "C",
+        "text": "地质断裂带"
+      },
+      {
+        "letter": "D",
+        "text": "大江大河"
+      }
+    ]
+  },
+  {
+    "question": "有砟轨道的主要组成部分包含：",
+    "answer": "A,B,D",
+    "type": "multi",
+    "chapter": "第二章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "道砟"
+      },
+      {
+        "letter": "B",
+        "text": "扣件"
+      },
+      {
+        "letter": "D",
+        "text": "钢轨"
+      }
+    ]
+  },
+  {
+    "question": "我国是高速通过性能优良、湿度适应能力最强的高速无缝道岔制造国",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第二章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "CRTSIII无砟轨道是我国完全自主创新的结构型式",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第二章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "普通无缝线路消除了区间内的缓冲区",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第二章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "我国铁路发展早期建造的京张铁路采用了无砟轨道",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第二章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "法国研发出第二代高速动车组与第一代间隔了：",
+    "answer": "B",
+    "type": "single",
+    "chapter": "第三章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "8年"
+      }
+    ]
+  },
+  {
+    "question": "日本研发出第二代高速动车组与第一代间隔了：",
+    "answer": "C",
+    "type": "single",
+    "chapter": "第三章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "C",
+        "text": "21年"
+      }
+    ]
+  },
+  {
+    "question": "世界上各个国家使用轨距最普遍的尺寸是：",
+    "answer": "B",
+    "type": "single",
+    "chapter": "第三章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "1435mm"
+      }
+    ]
+  },
+  {
+    "question": "九大关键技术占了动车组总成本的：",
+    "answer": "B",
+    "type": "single",
+    "chapter": "第三章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "53%"
+      }
+    ]
+  },
+  {
+    "question": "高速动车组牵引与控制系统占动车组成本的：",
+    "answer": "D",
+    "type": "single",
+    "chapter": "第三章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "D",
+        "text": "20%"
+      }
+    ]
+  },
+  {
+    "question": "德国研发出第二代高速动车组与第一代间隔了：",
+    "answer": "A",
+    "type": "single",
+    "chapter": "第三章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "7年"
+      }
+    ]
+  },
+  {
+    "question": "列车网络控制系统的关键技术有：",
+    "answer": "C,D",
+    "type": "multi",
+    "chapter": "第三章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "C",
+        "text": "系统冗余控制技术"
+      },
+      {
+        "letter": "D",
+        "text": "网络通讯技术"
+      }
+    ]
+  },
+  {
+    "question": "CR450与CR400动车组关键技术指标不同的有：",
+    "answer": "A,D",
+    "type": "multi",
+    "chapter": "第三章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "轴重"
+      },
+      {
+        "letter": "D",
+        "text": "噪声"
+      }
+    ]
+  },
+  {
+    "question": "高速动车组车体关键技术有：",
+    "answer": "A,C",
+    "type": "multi",
+    "chapter": "第三章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "车体流线化"
+      },
+      {
+        "letter": "C",
+        "text": "车体加工成型"
+      }
+    ]
+  },
+  {
+    "question": "提高高速动车组极限速度的措施有：",
+    "answer": "B,C",
+    "type": "multi",
+    "chapter": "第三章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "增大粘着系数"
+      },
+      {
+        "letter": "C",
+        "text": "减小气动升力"
+      }
+    ]
+  },
+  {
+    "question": "高速动车组转向架完成的重要功能有：",
+    "answer": "A,B,C",
+    "type": "multi",
+    "chapter": "第三章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "减少轮轨作用力"
+      },
+      {
+        "letter": "B",
+        "text": "减少车体振动"
+      },
+      {
+        "letter": "C",
+        "text": "实现在弯道顺利转向"
+      }
+    ]
+  },
+  {
+    "question": "影响动车组粘着系数的因素有：",
+    "answer": "A,B,C,D",
+    "type": "multi",
+    "chapter": "第三章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "车轮受力状态"
+      },
+      {
+        "letter": "B",
+        "text": "车轮踏面和钢轨表面的状态"
+      },
+      {
+        "letter": "C",
+        "text": "动车组运行速度"
+      },
+      {
+        "letter": "D",
+        "text": "线路的曲线半径"
+      }
+    ]
+  },
+  {
+    "question": "高速动车组牵引系统主要包括：",
+    "answer": "B,C,D",
+    "type": "multi",
+    "chapter": "第三章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "牵引变压器"
+      },
+      {
+        "letter": "C",
+        "text": "牵引变流器"
+      },
+      {
+        "letter": "D",
+        "text": "牵引电机"
+      }
+    ]
+  },
+  {
+    "question": "影响列车高速运行的因素有：",
+    "answer": "A,C,D",
+    "type": "multi",
+    "chapter": "第三章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "牵引与制动能力"
+      },
+      {
+        "letter": "C",
+        "text": "运动部件的疲劳"
+      },
+      {
+        "letter": "D",
+        "text": "列车系统的稳定性"
+      }
+    ]
+  },
+  {
+    "question": "最早开行动车组的国家是法国",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第三章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "高速动车组的发展趋势是动力分散型",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第三章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "车轮踏面需要采用内径大、外径小的锥形",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第三章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "动车组按照动力布置分为两大类",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第三章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "动车组与铁路客车最大的区别是固定编组",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第三章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "中国高速动车组有四大系列",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第三章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "我国牵引网标称电压电压等级为：",
+    "answer": "B",
+    "type": "single",
+    "chapter": "第四章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "25kV"
+      }
+    ]
+  },
+  {
+    "question": "目前我国高速铁路和重载铁路采用的供电方式为：",
+    "answer": "D",
+    "type": "single",
+    "chapter": "第四章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "D",
+        "text": "自耦变压器供电方式（AT）"
+      }
+    ]
+  },
+  {
+    "question": "目前我国普速铁路应用最广泛的供电方式为：",
+    "answer": "C",
+    "type": "single",
+    "chapter": "第四章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "C",
+        "text": "带负馈线（回流线）的直接供电方式"
+      }
+    ]
+  },
+  {
+    "question": "以下属于弓网受流质量检测项目的有：",
+    "answer": "A,B,C,D",
+    "type": "multi",
+    "chapter": "第四章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "接触线高度"
+      },
+      {
+        "letter": "B",
+        "text": "拉出值"
+      },
+      {
+        "letter": "C",
+        "text": "弓网接触力"
+      },
+      {
+        "letter": "D",
+        "text": "弓网燃弧"
+      }
+    ]
+  },
+  {
+    "question": "牵引网电力机车的供电方式有：",
+    "answer": "A,B,C,D",
+    "type": "multi",
+    "chapter": "第四章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "直接供电方式"
+      },
+      {
+        "letter": "B",
+        "text": "吸流变压器供电方式（BT）"
+      },
+      {
+        "letter": "C",
+        "text": "带负馈线（回流线）的直接供电方式"
+      },
+      {
+        "letter": "D",
+        "text": "自耦变压器供电方式（AT）"
+      }
+    ]
+  },
+  {
+    "question": "以下属于接触网特点的有：",
+    "answer": "B,C,D",
+    "type": "multi",
+    "chapter": "第四章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "运行环境恶劣"
+      },
+      {
+        "letter": "C",
+        "text": "经常处于动态运行状态"
+      },
+      {
+        "letter": "D",
+        "text": "结构复杂，技术要求高"
+      }
+    ]
+  },
+  {
+    "question": "以下属于智能牵引供电系统的有：",
+    "answer": "A,B,D",
+    "type": "multi",
+    "chapter": "第四章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "智能牵引供电设施"
+      },
+      {
+        "letter": "B",
+        "text": "智能运行检修管理系统"
+      },
+      {
+        "letter": "D",
+        "text": "智能供电调度系统"
+      }
+    ]
+  },
+  {
+    "question": "电力牵引供电制式主要有：",
+    "answer": "A,B,C",
+    "type": "multi",
+    "chapter": "第四章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "直流制"
+      },
+      {
+        "letter": "B",
+        "text": "低频单相交流制"
+      },
+      {
+        "letter": "C",
+        "text": "25kV工频单相交流制"
+      }
+    ]
+  },
+  {
+    "question": "以下属于接触网悬挂方式的有：",
+    "answer": "A,B,C",
+    "type": "multi",
+    "chapter": "第四章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "复链型悬挂"
+      },
+      {
+        "letter": "B",
+        "text": "简单链型悬挂"
+      },
+      {
+        "letter": "C",
+        "text": "弹性链型悬挂"
+      }
+    ]
+  },
+  {
+    "question": "直流电力牵引供电制式电压等级有：",
+    "answer": "B,C,D",
+    "type": "multi",
+    "chapter": "第四章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "750V"
+      },
+      {
+        "letter": "C",
+        "text": "1500V"
+      },
+      {
+        "letter": "D",
+        "text": "3000V"
+      }
+    ]
+  },
+  {
+    "question": "牵引供电系统主要包括牵引变电所、牵引网和三相电网",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第四章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "硬点是指接触线存在的不平顺点，用运行时空弓滑板受到的垂直方向上加速度最小值",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第四章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "供电制式是指供电系统向电动车辆或电力机车供电所采用的电压、电流的种类",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第四章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "对铁路供电系统按功能划分由牵引供电系统、电力供配电系统两部分组成",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第四章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "双边供电有利于改善机车电压，增强供电能力，不存在均衡电流问题",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第四章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "绿色牵引供电可以充分利用资源禀赋，提高自洁能力",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第四章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "对接触网要求抗拉强度高、导电性能好、耐磨、抗腐蚀",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第四章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "高速正线接触网主要采用半补偿弹性链型悬挂",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第四章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "我国干线电气化铁路即采用25kV工频单相交流制",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第四章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "牵引变压器需要具有较强的过负荷能力和抗短路冲击能力",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第四章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "下列对OSI参考模型从高到低表述正确的是：",
+    "answer": "A",
+    "type": "single",
+    "chapter": "第五章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "应用层、表示层、会话层、传输层、网络层、数据链路层、物理层"
+      }
+    ]
+  },
+  {
+    "question": "世界上很多国家都相继组建了自己国家的公用数据网，现有的公用数据网大多采用：",
+    "answer": "A",
+    "type": "single",
+    "chapter": "第五章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "分组交换方式"
+      }
+    ]
+  },
+  {
+    "question": "TCP的协议数据单元被称为：",
+    "answer": "C",
+    "type": "single",
+    "chapter": "第五章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "C",
+        "text": "分段"
+      }
+    ]
+  },
+  {
+    "question": "如果用一个用户通过电话网将自己的主机接入因特网，以访问因特网上的Web站点，那么用户不需要在这台主机上安装和配置：",
+    "answer": "B",
+    "type": "single",
+    "chapter": "第五章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "网卡"
+      }
+    ]
+  },
+  {
+    "question": "TCP协议通过以下哪种来区分不同的连接：",
+    "answer": "B",
+    "type": "single",
+    "chapter": "第五章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "端口号和IP地址"
+      }
+    ]
+  },
+  {
+    "question": "以下设备作用于OSI参考模型数据链路层的设备是：",
+    "answer": "A",
+    "type": "single",
+    "chapter": "第五章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "广域网交换机"
+      }
+    ]
+  },
+  {
+    "question": "一个VLAN可以看作是一个：",
+    "answer": "B",
+    "type": "single",
+    "chapter": "第五章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "广播域"
+      }
+    ]
+  },
+  {
+    "question": "下列不属于交换机配置模式的是：",
+    "answer": "C",
+    "type": "single",
+    "chapter": "第五章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "C",
+        "text": "线路配置模式"
+      }
+    ]
+  },
+  {
+    "question": "列车运行图是铁路运输组织的综合性工作计划，在一个周期内的同一时刻，能够进行双向数据传送的通信方式是：",
+    "answer": "C",
+    "type": "single",
+    "chapter": "第五章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "C",
+        "text": "全双工"
+      }
+    ]
+  },
+  {
+    "question": "以下关于电路交换和分组交换的描述正确的是：",
+    "answer": "A,C",
+    "type": "multi",
+    "chapter": "第五章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "电路交换延迟小，传输实时性强"
+      },
+      {
+        "letter": "C",
+        "text": "分组交换延迟大，传输实时性差"
+      }
+    ]
+  },
+  {
+    "question": "网络的延迟（delay）定义了网络把数据（ ）一个网络节点传到另一个网络节点所需要的时间，网络延迟包括：",
+    "answer": "A,B,C,D",
+    "type": "multi",
+    "chapter": "第五章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "传输延迟（propagationdelay）"
+      },
+      {
+        "letter": "B",
+        "text": "交换延迟（switchingdelay）"
+      },
+      {
+        "letter": "C",
+        "text": "介质访问延迟（accessdelay）"
+      },
+      {
+        "letter": "D",
+        "text": "排队延迟（queuingdelay）"
+      }
+    ]
+  },
+  {
+    "question": "与传统的LAN相比，VLAN具有以下哪些优势：",
+    "answer": "A,B,C,D",
+    "type": "multi",
+    "chapter": "第五章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "减少移动和改变的代价"
+      },
+      {
+        "letter": "B",
+        "text": "建立虚拟工作组"
+      },
+      {
+        "letter": "C",
+        "text": "用户不受物理设备的限制，VLAN用户可以处于网络中的任何地方"
+      },
+      {
+        "letter": "D",
+        "text": "限制广播包，提高带宽的利用率"
+      }
+    ]
+  },
+  {
+    "question": "根据路由表的不同，路由表中的路由通常可分为以下哪几类：",
+    "answer": "A,C,D",
+    "type": "multi",
+    "chapter": "第五章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "直连路由"
+      },
+      {
+        "letter": "C",
+        "text": "静态路由"
+      },
+      {
+        "letter": "D",
+        "text": "动态路由"
+      }
+    ]
+  },
+  {
+    "question": "FTP使用的端口号为：",
+    "answer": "A,B",
+    "type": "multi",
+    "chapter": "第五章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "20"
+      },
+      {
+        "letter": "B",
+        "text": "21"
+      }
+    ]
+  },
+  {
+    "question": "以下关于星型网络拓扑结构的描述正确的是：",
+    "answer": "A,B",
+    "type": "multi",
+    "chapter": "第五章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "星型拓扑易于维护"
+      },
+      {
+        "letter": "B",
+        "text": "在星型拓扑中，某条线路的故障不影响其它线路下的计算机通信"
+      }
+    ]
+  },
+  {
+    "question": "以下哪种路由协议只关心到达目的网段的距离和方向：",
+    "answer": "B,D",
+    "type": "multi",
+    "chapter": "第五章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "RIPv1"
+      },
+      {
+        "letter": "D",
+        "text": "RIPv2"
+      }
+    ]
+  },
+  {
+    "question": "在下列列出的STP端口状态中，哪些属于不稳定的中间状态：",
+    "answer": "B,C",
+    "type": "multi",
+    "chapter": "第五章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "Listening"
+      },
+      {
+        "letter": "C",
+        "text": "Learning"
+      }
+    ]
+  },
+  {
+    "question": "IP电话使用的数据交换技术是电路交换",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第五章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "应用程序PING发出的是TCP请求报文",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第五章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "ARP协议的作用是将端口号映射到IP地址",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第五章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "PPP协议是网络层协议",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第五章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "三次握手方法用于传输层连接的建立",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第五章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "多路复用中的方法中，从性质上来说，频分多路复用较适用于模拟信号传输，而时分多路复用较适用于数字信号传输",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第五章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "一般来说，用户上网要通过因特网服务提供商，其英文缩写为ISP",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第五章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "在以太网中，是根据MAC地址来区分不同的设备的",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第五章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "不属于高速铁路通信系统设计原则的是：",
+    "answer": "D",
+    "type": "single",
+    "chapter": "第六章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "D",
+        "text": "系统装备要轻薄小巧"
+      }
+    ]
+  },
+  {
+    "question": "5G-R是第几代铁路移动通信系统：",
+    "answer": "B",
+    "type": "single",
+    "chapter": "第六章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "第三代"
+      }
+    ]
+  },
+  {
+    "question": "5G-R系统无线频谱带宽和双工方式为：",
+    "answer": "B",
+    "type": "single",
+    "chapter": "第六章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "2*10MHz FDD"
+      }
+    ]
+  },
+  {
+    "question": "用于承载列车控制系统车地信息传输业务的高铁通信系统是：",
+    "answer": "A",
+    "type": "single",
+    "chapter": "第六章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "GSM-R系统"
+      }
+    ]
+  },
+  {
+    "question": "下列不属于高速铁路通信系统承载的业务是：",
+    "answer": "C",
+    "type": "single",
+    "chapter": "第六章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "C",
+        "text": "旅客视频通话"
+      }
+    ]
+  },
+  {
+    "question": "下列通信系统不属于高速铁路通信系统的是：",
+    "answer": "B",
+    "type": "single",
+    "chapter": "第六章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "CTCS-3系统"
+      }
+    ]
+  },
+  {
+    "question": "GSM-R属于第几代移动通信技术：",
+    "answer": "A",
+    "type": "single",
+    "chapter": "第六章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "2G"
+      }
+    ]
+  },
+  {
+    "question": "下列哪项业务不属于GSM-R系统承载的铁路特殊通信业务：",
+    "answer": "A",
+    "type": "single",
+    "chapter": "第六章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "语音单呼"
+      }
+    ]
+  },
+  {
+    "question": "铁路移动通信系统由电信运营商帮助铁路部门进行运行维护",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第六章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "铁路通信系统是专门为铁路运输生产服务的通信系统",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第六章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "GSM-R系统承载了列控信息传输业务和旅客语音通话业务",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第六章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "目前我国高速铁路主要部署的铁路移动通信系统是GSM-R系统",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第六章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "时钟时间同步系统不属于高速铁路通信系统",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第六章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "高速铁路通信系统的设计原则是安全可靠，先进实用",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第六章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "5G-R系统主要承载行车指挥控制类业务和铁路运营维护类业务",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第六章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "5G-R系统是我国未来主要部署的铁路专用移动通信系统",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第六章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "在高铁列控系统中，行车许可生成是哪部分设备的主要功能：",
+    "answer": "C",
+    "type": "single",
+    "chapter": "第七章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "C",
+        "text": "列控地面设备"
+      }
+    ]
+  },
+  {
+    "question": "不影响行车许可确定的因素有：",
+    "answer": "C",
+    "type": "single",
+    "chapter": "第七章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "C",
+        "text": "列车运行计划信息"
+      }
+    ]
+  },
+  {
+    "question": "在高铁列控系统中，动态速度防护是哪部分设备的主要功能：",
+    "answer": "A",
+    "type": "single",
+    "chapter": "第七章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "列控车载设备"
+      }
+    ]
+  },
+  {
+    "question": "中国高速铁路列控系统CTCS走的是从“引进消化吸收再创新”到“自主创新”的技术路线",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第七章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "速度-距离模式曲线是指允许速度与距前方目标点距离之间的关系曲线",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第七章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "车载设备比较列车的实时速度和目标速度，监控列车运行",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第七章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "我国高速铁路采用ZPW-2000系列轨道电路构成多显示自动闭塞",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第七章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "线路按固定闭塞运行时，行车许可终点为前方运行列车的安全尾部",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第七章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "车载设备根据行车许可、线路描述信息及列车制动模型等参数计算动态速度包络",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第七章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "地面应答器平时处于休眠状态，只有当列车经过时才能将其激活",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第七章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "我国高速铁路广泛采用的列控系统是CTCS-0级、CTCS-1级和CTCS-2级列控系统",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第七章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "基于速度积分的测量列车走行距离是指列车沿轨道的一维线速度积分",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第七章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "我国高铁列控系统采用移动闭塞制式，以轨道电路进行轨道区段占用检查",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第七章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "以下不属于列车运行图管理的是：",
+    "answer": "C",
+    "type": "single",
+    "chapter": "第八章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "C",
+        "text": "列车进路控制"
+      }
+    ]
+  },
+  {
+    "question": "以下不属于列车进路排列方式的是：",
+    "answer": "B",
+    "type": "single",
+    "chapter": "第八章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "基本运行图维护"
+      }
+    ]
+  },
+  {
+    "question": "以下不属于调度集中控制信息层次的是：",
+    "answer": "D",
+    "type": "single",
+    "chapter": "第八章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "D",
+        "text": "回执"
+      }
+    ]
+  },
+  {
+    "question": "车次追踪所采用的信号设备状态信息不包括：",
+    "answer": "A",
+    "type": "single",
+    "chapter": "第八章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "维修计划"
+      }
+    ]
+  },
+  {
+    "question": "列车调度指挥自动化系统按运用区域可分为：",
+    "answer": "A,C,B",
+    "type": "multi",
+    "chapter": "第八章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "区段型行车指挥自动系统"
+      },
+      {
+        "letter": "C",
+        "text": "枢纽型行车指挥自动系统"
+      },
+      {
+        "letter": "B",
+        "text": "路网型行车指挥自动系统"
+      }
+    ]
+  },
+  {
+    "question": "分散自律调度集中的系统技术特点包括：",
+    "answer": "A,B,D",
+    "type": "multi",
+    "chapter": "第八章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "智能化"
+      },
+      {
+        "letter": "B",
+        "text": "分散自律"
+      },
+      {
+        "letter": "D",
+        "text": "标准统一"
+      }
+    ]
+  },
+  {
+    "question": "在下达列车运行调整计划时，需要进行检查包括：",
+    "answer": "A,B,C,D",
+    "type": "multi",
+    "chapter": "第八章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "合法性"
+      },
+      {
+        "letter": "B",
+        "text": "时效性"
+      },
+      {
+        "letter": "C",
+        "text": "完整性"
+      },
+      {
+        "letter": "D",
+        "text": "无冲突性"
+      }
+    ]
+  },
+  {
+    "question": "高铁行车调度指挥自动化的效益包括：",
+    "answer": "A,B,C,D",
+    "type": "multi",
+    "chapter": "第八章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "提高行车安全和正点率"
+      },
+      {
+        "letter": "B",
+        "text": "充分发挥车站和线路的通过能力"
+      },
+      {
+        "letter": "C",
+        "text": "提高调度指挥与运行管理水平"
+      },
+      {
+        "letter": "D",
+        "text": "提高计划和统计工作质量"
+      }
+    ]
+  },
+  {
+    "question": "铁路运输生产的原则包括：",
+    "answer": "A,B,D",
+    "type": "multi",
+    "chapter": "第八章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "集中领导"
+      },
+      {
+        "letter": "B",
+        "text": "统一指挥"
+      },
+      {
+        "letter": "D",
+        "text": "逐级负责"
+      }
+    ]
+  },
+  {
+    "question": "分散自律调度集中的技术内核包括：",
+    "answer": "A,B,C,D",
+    "type": "multi",
+    "chapter": "第八章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "综合各类现代先进技术"
+      },
+      {
+        "letter": "B",
+        "text": "采用分散自律设计原则"
+      },
+      {
+        "letter": "C",
+        "text": "以运行调整计划为中心"
+      },
+      {
+        "letter": "D",
+        "text": "兼顾列车作业调车作业"
+      }
+    ]
+  },
+  {
+    "question": "车次号是系统能自动触发进路、自动报点的基础",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第八章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "列车运行调整原则包括功能上尽量体现自动的特点",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第八章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "调度集中控制的高级形式是“计算机控制的列车进路自动控制”",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第八章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "分散自律控制模式下的操作方式包括中心操作、车站操作、车站调车三种",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第八章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "分散自律控制模式下的列车进路控制，自动控制方式优先于人工按钮控制方式",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第八章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "分散自律调度集中系统只适应有人站，不适应无人站",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第八章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "非常站控模式转换为分散自律模式，可无条件转换",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第八章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "TDCS是指“列车调度指挥系统”",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第八章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "分散自律调度集中系统不仅要完成列车作业集中控制，还要解决沿线车站调车作业的集中控制",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第八章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "调度指挥系统按系统功能可分为调度监督、调度集中、分散自律3类",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第八章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "下列关于列车开行方案的叙述中，不正确的是：",
+    "answer": "B",
+    "type": "single",
+    "chapter": "第九章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "列车的停站时间与客流量无关"
+      }
+    ]
+  },
+  {
+    "question": "下列关于动车组作业计划的叙述中，不正确的是：",
+    "answer": "B",
+    "type": "single",
+    "chapter": "第九章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "动车组检修规定是动车组作业计划需要考虑的重要因素"
+      }
+    ]
+  },
+  {
+    "question": "下列不利于提高列车速度的因素是：",
+    "answer": "D",
+    "type": "single",
+    "chapter": "第九章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "D",
+        "text": "增加停站数量"
+      }
+    ]
+  },
+  {
+    "question": "有关乘务员运用计划的叙述中不正确的是：",
+    "answer": "A",
+    "type": "single",
+    "chapter": "第九章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "目前高铁乘务员运用计划主要采用包乘制"
+      }
+    ]
+  },
+  {
+    "question": "下列不属于高铁客运站作业内容的是：",
+    "answer": "C",
+    "type": "single",
+    "chapter": "第九章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "C",
+        "text": "股道维修"
+      }
+    ]
+  },
+  {
+    "question": "关于高铁调度的叙述中，不正确的是：",
+    "answer": "C",
+    "type": "single",
+    "chapter": "第九章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "C",
+        "text": "供电调度主要负责牵引变电所和电力设备维护工作"
+      }
+    ]
+  },
+  {
+    "question": "下列关于运行图的说法，不正确的是：",
+    "answer": "D",
+    "type": "single",
+    "chapter": "第九章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "D",
+        "text": "列车运行图是列车开行方案编制的基础"
+      }
+    ]
+  },
+  {
+    "question": "下列属于高铁维天窗作业内容的是：",
+    "answer": "A,B,C",
+    "type": "multi",
+    "chapter": "第九章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "工务检修"
+      },
+      {
+        "letter": "B",
+        "text": "电务检修"
+      },
+      {
+        "letter": "C",
+        "text": "供电检修"
+      }
+    ]
+  },
+  {
+    "question": "下列属于列车开行方案要素的是：",
+    "answer": "A,B,C,D",
+    "type": "multi",
+    "chapter": "第九章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "列车起讫点"
+      },
+      {
+        "letter": "B",
+        "text": "停站方案"
+      },
+      {
+        "letter": "C",
+        "text": "开行频率"
+      },
+      {
+        "letter": "D",
+        "text": "编组内容"
+      }
+    ]
+  },
+  {
+    "question": "下列属于调度系统组成部分的有：",
+    "answer": "A,B,C,D",
+    "type": "multi",
+    "chapter": "第九章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "计划调度"
+      },
+      {
+        "letter": "B",
+        "text": "列车调度"
+      },
+      {
+        "letter": "C",
+        "text": "动车调度"
+      },
+      {
+        "letter": "D",
+        "text": "供电调度"
+      }
+    ]
+  },
+  {
+    "question": "中国高铁主要使用周期模式运行图",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第九章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "以尽可能小的代价恢复正常行车秩序是调度的重要工作内容",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第九章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "“一日一图”是为了适应客流的季节性变动",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第九章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "列车开行方案的主要作用是将客流合理化为车流",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第九章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "动车组交路计划规定了哪几组列车依次使用同一动车组",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第九章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "股道运用计划的主要内容是规定列车接入车站的哪一股道",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第九章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "中国高铁客流以长途流为主",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第九章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "列车运行图是铁路运输组织的综合计划",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第九章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "“按图行车”是高铁运输组织的基本要求",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第九章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "一列车只能有一个车次",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第九章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "以下哪个选项是中国的电磁兼容认证：",
+    "answer": "C",
+    "type": "single",
+    "chapter": "第十章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "C",
+        "text": "CCC"
+      }
+    ]
+  },
+  {
+    "question": "下列对电磁敏感性的描述正确的是：",
+    "answer": "C",
+    "type": "single",
+    "chapter": "第十章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "C",
+        "text": "在存在电磁骚扰的情况下，装置、设备或系统不能避免性能降低的能力"
+      }
+    ]
+  },
+  {
+    "question": "下列对抗扰性的描述正确的是：",
+    "answer": "A",
+    "type": "single",
+    "chapter": "第十章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "是装置、设备或系统在面对电磁骚扰时，不降低运行性能的能力"
+      }
+    ]
+  },
+  {
+    "question": "网联车应用了全球定位系统（北斗卫星定位系统）、通信、雷达、RFID等技术，主要基于：",
+    "answer": "B",
+    "type": "single",
+    "chapter": "第十章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "电磁波传播特性"
+      }
+    ]
+  },
+  {
+    "question": "电感耦合系统依据的是：",
+    "answer": "D",
+    "type": "single",
+    "chapter": "第十章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "D",
+        "text": "电磁感应定律"
+      }
+    ]
+  },
+  {
+    "question": "磁悬浮列车利用（ ）使列车悬浮于轨道，实现无接触运行：",
+    "answer": "A",
+    "type": "single",
+    "chapter": "第十章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "电磁吸力"
+      }
+    ]
+  },
+  {
+    "question": "RFID系统一般可以分为（ ）系统和（ ）系统：",
+    "answer": "B,C",
+    "type": "multi",
+    "chapter": "第十章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "电感耦合"
+      },
+      {
+        "letter": "C",
+        "text": "电磁反向散射耦合"
+      }
+    ]
+  },
+  {
+    "question": "下列哪些是对电磁泄漏及防护技术的研究：",
+    "answer": "A,B,C,D",
+    "type": "multi",
+    "chapter": "第十章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "网络信息设备电磁泄漏途径研究"
+      },
+      {
+        "letter": "B",
+        "text": "电磁信息泄漏模型"
+      },
+      {
+        "letter": "C",
+        "text": "电磁信息的截获与复现技术研究"
+      },
+      {
+        "letter": "D",
+        "text": "电磁泄漏的防护技术及防护材料研究"
+      }
+    ]
+  },
+  {
+    "question": "电磁兼容有哪些要素：",
+    "answer": "A,B,C",
+    "type": "multi",
+    "chapter": "第十章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "电磁骚扰源"
+      },
+      {
+        "letter": "B",
+        "text": "传输途径"
+      },
+      {
+        "letter": "C",
+        "text": "敏感设备"
+      }
+    ]
+  },
+  {
+    "question": "下列哪些是产生电磁干扰的条件：",
+    "answer": "A,B,D",
+    "type": "multi",
+    "chapter": "第十章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "产生电磁能量的物体或现象"
+      },
+      {
+        "letter": "B",
+        "text": "受害设备"
+      },
+      {
+        "letter": "D",
+        "text": "骚扰能量的传播耦合途径"
+      }
+    ]
+  },
+  {
+    "question": "电磁信息安全技术是针对信息设备的电磁辐射与信息泄漏问题：",
+    "answer": "C,D",
+    "type": "multi",
+    "chapter": "第十章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "C",
+        "text": "电磁辐射"
+      },
+      {
+        "letter": "D",
+        "text": "信息泄漏"
+      }
+    ]
+  },
+  {
+    "question": "RFID系统一般可以分为声波耦合系统和电磁反向散射耦合系统",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第十章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "电磁信息泄漏及防护标准制定的目标是使信息设备减少或杜绝电磁信息泄漏，使敌方难以截获、复现泄露的电磁信息",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第十章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "电磁环境是存在于给定场所的所有电磁现象的总和",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第十章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "电磁反向散射耦合依据的是电磁波的导波传播特性",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第十章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "电磁反向散射耦合方式一般适合低频段的远距离RFID系统",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第十章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "电磁兼容性是指使处于同一电磁环境下各种电气电子设备或系统能够正常工作而又互不干扰",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第十章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "下列哪条线路是中国的第一条高速铁路?",
+    "answer": "C",
+    "type": "single",
+    "chapter": "第十二章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "C",
+        "text": "秦沈客运专线"
+      }
+    ]
+  },
+  {
+    "question": "高铁运输方式对环境最显著的贡献是?",
+    "answer": "C",
+    "type": "single",
+    "chapter": "第十二章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "C",
+        "text": "减少碳排放"
+      }
+    ]
+  },
+  {
+    "question": "京雄高速列车具备什么功能?",
+    "answer": "A",
+    "type": "single",
+    "chapter": "第十二章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "自动驾驶"
+      }
+    ]
+  },
+  {
+    "question": "1993年中国旅客列车的平均运行时速是多少?",
+    "answer": "A",
+    "type": "single",
+    "chapter": "第十二章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "48.1公里"
+      }
+    ]
+  },
+  {
+    "question": "中国高铁在1993年的平均时速是多少?",
+    "answer": "A",
+    "type": "single",
+    "chapter": "第十二章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "48.1公里"
+      }
+    ]
+  },
+  {
+    "question": "中国高铁引进消化吸收再创新阶段的重要里程碑是哪一年?",
+    "answer": "B",
+    "type": "single",
+    "chapter": "第十二章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "2008年"
+      }
+    ]
+  },
+  {
+    "question": "以下哪一条铁路是中国首条真正意义上的高速铁路?",
+    "answer": "A",
+    "type": "single",
+    "chapter": "第十二章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "秦沈客运专线"
+      }
+    ]
+  },
+  {
+    "question": "高铁发展的基础条件中，以下哪一项是正确的?",
+    "answer": "A",
+    "type": "single",
+    "chapter": "第十二章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "中国铁路机车车辆工业有较为完备的体系"
+      }
+    ]
+  },
+  {
+    "question": "高速铁路技术的引进消化吸收阶段的代表性成果是?",
+    "answer": "B",
+    "type": "single",
+    "chapter": "第十二章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "和谐号动车组"
+      }
+    ]
+  },
+  {
+    "question": "在中国高铁自主创新历程中，哪一年的事件被认为是里程碑?",
+    "answer": "B",
+    "type": "single",
+    "chapter": "第十二章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "2008年"
+      }
+    ]
+  },
+  {
+    "question": "京津城际铁路是我国首条时速达到多少公里的高速铁路?",
+    "answer": "B",
+    "type": "single",
+    "chapter": "第十二章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "350公里"
+      }
+    ]
+  },
+  {
+    "question": "高速铁路的设计速度标准通常是多少?",
+    "answer": "A",
+    "type": "single",
+    "chapter": "第十二章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "200-250公里"
+      }
+    ]
+  },
+  {
+    "question": "中国的高铁铁路系统从时速不足100公里跃升至350公里用了多少年?",
+    "answer": "B",
+    "type": "single",
+    "chapter": "第十二章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "8年"
+      }
+    ]
+  },
+  {
+    "question": "中国自主创新阶段研制的代表性动车组是?",
+    "answer": "B",
+    "type": "single",
+    "chapter": "第十二章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "复兴号"
+      }
+    ]
+  },
+  {
+    "question": "京张高铁的特点是什么?",
+    "answer": "C",
+    "type": "single",
+    "chapter": "第十二章考试",
+    "section": "单选题",
+    "answer_options": [
+      {
+        "letter": "C",
+        "text": "具备自动驾驶功能"
+      }
+    ]
+  },
+  {
+    "question": "中国高铁发展的挑战包括哪些?",
+    "answer": "A,B",
+    "type": "multi",
+    "chapter": "第十二章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "地理环境复杂"
+      },
+      {
+        "letter": "B",
+        "text": "灾害种类繁多"
+      }
+    ]
+  },
+  {
+    "question": "以下哪些属于中国高速铁路发展的持续创新阶段的重点?",
+    "answer": "A,B,D",
+    "type": "multi",
+    "chapter": "第十二章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "磁浮交通系统"
+      },
+      {
+        "letter": "B",
+        "text": "高速货运列车组"
+      },
+      {
+        "letter": "D",
+        "text": "智能化高速列车"
+      }
+    ]
+  },
+  {
+    "question": "中国高铁体系化自主创新的典型标志是哪个计划?",
+    "answer": "A",
+    "type": "multi",
+    "chapter": "第十二章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "高速列车自主创新联合行动计划"
+      }
+    ]
+  },
+  {
+    "question": "以下哪些属于中国高铁发展的基础条件?",
+    "answer": "A,B,C,D",
+    "type": "multi",
+    "chapter": "第十二章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "中国铁路科技创新的机制保障"
+      },
+      {
+        "letter": "B",
+        "text": "中国铁路机车车辆工业完备的体系"
+      },
+      {
+        "letter": "C",
+        "text": "中国经济高速发展提供的基础"
+      },
+      {
+        "letter": "D",
+        "text": "全球化进程提供的快速发展机会"
+      }
+    ]
+  },
+  {
+    "question": "以下关于高铁创新驱动发展的描述哪些是正确的?",
+    "answer": "A,B",
+    "type": "multi",
+    "chapter": "第十二章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "创新驱动发展是国家战略"
+      },
+      {
+        "letter": "B",
+        "text": "高铁创新推动了中国制造业的提升"
+      }
+    ]
+  },
+  {
+    "question": "关于中国高铁的挑战，下列哪些是正确的?",
+    "answer": "A,B",
+    "type": "multi",
+    "chapter": "第十二章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "地理环境复杂"
+      },
+      {
+        "letter": "B",
+        "text": "灾害种类繁多"
+      }
+    ]
+  },
+  {
+    "question": "高速铁路的优势有哪些?",
+    "answer": "A,B,C",
+    "type": "multi",
+    "chapter": "第十二章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "运能大"
+      },
+      {
+        "letter": "B",
+        "text": "更安全"
+      },
+      {
+        "letter": "C",
+        "text": "更节能减排"
+      }
+    ]
+  },
+  {
+    "question": "高速铁路有哪些技术优势?",
+    "answer": "A,B,C",
+    "type": "multi",
+    "chapter": "第十二章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "安全性高"
+      },
+      {
+        "letter": "B",
+        "text": "节能减排"
+      },
+      {
+        "letter": "C",
+        "text": "运能大"
+      }
+    ]
+  },
+  {
+    "question": "新型举国体制在高铁科技创新中的成功经验包括哪些?",
+    "answer": "A,B,C,D",
+    "type": "multi",
+    "chapter": "第十二章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "创新模式"
+      },
+      {
+        "letter": "B",
+        "text": "科学规划"
+      },
+      {
+        "letter": "C",
+        "text": "顶层设计"
+      },
+      {
+        "letter": "D",
+        "text": "需求牵引"
+      }
+    ]
+  },
+  {
+    "question": "高铁的“引进消化吸收再创新”路径中，哪些措施是正确的?",
+    "answer": "A,B",
+    "type": "multi",
+    "chapter": "第十二章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "锁定国际先进技术"
+      },
+      {
+        "letter": "B",
+        "text": "利用市场优势打造国内供应链"
+      }
+    ]
+  },
+  {
+    "question": "下列关于CRH380动车组的描述正确的是?",
+    "answer": "A,B",
+    "type": "multi",
+    "chapter": "第十二章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "它是350公里每小时列车的代表"
+      },
+      {
+        "letter": "B",
+        "text": "具备自检测和自决策能力"
+      }
+    ]
+  },
+  {
+    "question": "高速铁路的构成包括哪些?",
+    "answer": "A,B,C",
+    "type": "multi",
+    "chapter": "第十二章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "高速列车"
+      },
+      {
+        "letter": "B",
+        "text": "路网规划"
+      },
+      {
+        "letter": "C",
+        "text": "列车控制系统"
+      }
+    ]
+  },
+  {
+    "question": "高速铁路创新发展的持续阶段重点包括哪些?",
+    "answer": "A,B,D",
+    "type": "multi",
+    "chapter": "第十二章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "磁浮交通系统"
+      },
+      {
+        "letter": "B",
+        "text": "高速货运列车组"
+      },
+      {
+        "letter": "D",
+        "text": "智能化高速列车"
+      }
+    ]
+  },
+  {
+    "question": "CRH380系列动车组的核心创新技术包括哪些?",
+    "answer": "A,B,C",
+    "type": "multi",
+    "chapter": "第十二章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "自检测系统"
+      },
+      {
+        "letter": "B",
+        "text": "自诊断系统"
+      },
+      {
+        "letter": "C",
+        "text": "自决策系统"
+      }
+    ]
+  },
+  {
+    "question": "中国高铁的基础条件有哪些?",
+    "answer": "A,B,C,D",
+    "type": "multi",
+    "chapter": "第十二章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "中国铁路科技创新的机制保障"
+      },
+      {
+        "letter": "B",
+        "text": "中国铁路机车车辆工业完备的体系"
+      },
+      {
+        "letter": "C",
+        "text": "中国经济高速发展提供的基础"
+      },
+      {
+        "letter": "D",
+        "text": "全球化进程提供的快速发展机会"
+      }
+    ]
+  },
+  {
+    "question": "下列关于高速铁路创新历程的说法中，哪些是正确的?",
+    "answer": "B,C",
+    "type": "multi",
+    "chapter": "第十二章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "2008年京津城际铁路开通标志着中国系统掌握了350公里每小时技术"
+      },
+      {
+        "letter": "C",
+        "text": "2009年武广高铁开通创造了运营第一速度"
+      }
+    ]
+  },
+  {
+    "question": "以下哪些属于高速铁路创新发展的持续阶段重点?",
+    "answer": "B,D",
+    "type": "multi",
+    "chapter": "第十二章考试",
+    "section": "不定项选择",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "磁浮交通系统"
+      },
+      {
+        "letter": "D",
+        "text": "轨道交通货运快速化"
+      }
+    ]
+  },
+  {
+    "question": "京雄高速列车是为了连接北京和雄安新区而设计的。",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第十二章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "高速铁路每小时的运能比航空运输要低。",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第十二章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "高速铁路的发展完全不需要考虑国家安全的基础保障作用。",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第十二章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "高速铁路是最具可持续性的运输方式之一。",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第十二章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "高铁的节能减排效果比传统铁路差。",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第十二章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "中国高铁的创新模式借鉴了日本和欧洲的高速铁路发展模式。",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第十二章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "350公里每小时的列车运行速度是高铁标准速度之一。",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第十二章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "高铁的发展完全不需要考虑国家安全的基础保障作用。",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第十二章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "铁路是国家经济及产业体系的重要组成部分，是国家安全的基础保障。",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第十二章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "中国首条高速铁路是2008年开通的京津城际铁路。",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第十二章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "高铁的“引进消化吸收再创新”模式是为了提高我国高速列车的自主创新能力。",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第十二章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "“时速500公里的试验列车”属于自主创新阶段的重大成果之一。",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第十二章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "复兴号动车组的设计时速为350公里，具备智能化功能。",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第十二章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "高速铁路比传统铁路占地更多，因此并不节能减排。",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第十二章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "高铁的快速发展促进了区域间经济的平衡发展。",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第十二章考试",
+    "section": "判断题",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "数字化技术的发展关注的是以下哪一方面?",
+    "answer": "B",
+    "type": "single",
+    "chapter": "第十一章考试",
+    "section": "single",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "业务或场景的改造、效率提升和成本降低"
+      }
+    ]
+  },
+  {
+    "question": "数字高速铁路智能化整体目标中，哪个方面强调了铁路高质量发展的核心必由之路?",
+    "answer": "B",
+    "type": "single",
+    "chapter": "第十一章考试",
+    "section": "single",
+    "answer_options": [
+      {
+        "letter": "B",
+        "text": "高铁数字化基础"
+      }
+    ]
+  },
+  {
+    "question": "进入21世纪，特别是最近十年，迅猛发展的技术是什么?",
+    "answer": "C",
+    "type": "single",
+    "chapter": "第十一章考试",
+    "section": "single",
+    "answer_options": [
+      {
+        "letter": "C",
+        "text": "人工智能和机器学习"
+      }
+    ]
+  },
+  {
+    "question": "在数字经济中，哪一种技术被视为支撑经济社会发展的关键新型基础设施?",
+    "answer": "C",
+    "type": "single",
+    "chapter": "第十一章考试",
+    "section": "single",
+    "answer_options": [
+      {
+        "letter": "C",
+        "text": "5G网络及大数据中心"
+      }
+    ]
+  },
+  {
+    "question": "在数字医疗的转型过程中，以下哪些技术或设施是重要支撑?",
+    "answer": "D",
+    "type": "single",
+    "chapter": "第十一章考试",
+    "section": "single",
+    "answer_options": [
+      {
+        "letter": "D",
+        "text": "云计算技术"
+      }
+    ]
+  },
+  {
+    "question": "以下哪个选项最准确地描述了数字铁路在全球铁路发展中的地位?",
+    "answer": "C",
+    "type": "single",
+    "chapter": "第十一章考试",
+    "section": "single",
+    "answer_options": [
+      {
+        "letter": "C",
+        "text": "数字铁路已成为全球范围内铁路发展的一个重要趋势"
+      }
+    ]
+  },
+  {
+    "question": "以下哪项技术不是随着数字化技术发展而逐渐兴起或得到显著应用的?",
+    "answer": "C",
+    "type": "single",
+    "chapter": "第十一章考试",
+    "section": "single",
+    "answer_options": [
+      {
+        "letter": "C",
+        "text": "蒸汽机"
+      }
+    ]
+  },
+  {
+    "question": "以下哪些是各个阶段的特征?",
+    "answer": "A,B,C,D",
+    "type": "multi",
+    "chapter": "第十一章考试",
+    "section": "multi",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "20世纪初开始的自动化提高生产效率"
+      },
+      {
+        "letter": "B",
+        "text": "20世纪60至70年代，信息资源的有效共享与利用"
+      },
+      {
+        "letter": "C",
+        "text": "20世纪80年代，数字化是信息化的重要组成部分"
+      },
+      {
+        "letter": "D",
+        "text": "进入21世纪，智能化成为追求的最终目标"
+      }
+    ]
+  },
+  {
+    "question": "根据我国铁路数字化工作当前面临的问题，以下哪些是解决这些问题的关键措施?",
+    "answer": "A,B,C,E",
+    "type": "multi",
+    "chapter": "第十一章考试",
+    "section": "multi",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "构建高效的数据采集处理手段"
+      },
+      {
+        "letter": "B",
+        "text": "保持数据质量、采集及时性和数据流通链条的畅通"
+      },
+      {
+        "letter": "C",
+        "text": "深化技术创新和数字安全体系"
+      },
+      {
+        "letter": "E",
+        "text": "建设新型的基础设施来支撑铁路数字化转型"
+      }
+    ]
+  },
+  {
+    "question": "以下哪些技术是“十四五”期间我国民用航空发展规划中提到的智慧民航建设的关键技术?",
+    "answer": "A,B,C,E",
+    "type": "multi",
+    "chapter": "第十一章考试",
+    "section": "multi",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "数字化技术"
+      },
+      {
+        "letter": "B",
+        "text": "大数据技术"
+      },
+      {
+        "letter": "C",
+        "text": "区块链技术"
+      },
+      {
+        "letter": "E",
+        "text": "5G网络技术"
+      }
+    ]
+  },
+  {
+    "question": "数字经济时代下，以下哪些是推动经济发展的关键因素?",
+    "answer": "A,C,D",
+    "type": "multi",
+    "chapter": "第十一章考试",
+    "section": "multi",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "新型数字基础设施建设，如5G网络、数据中心等"
+      },
+      {
+        "letter": "C",
+        "text": "数字技术与实体经济的深度融合，促进产业升级"
+      },
+      {
+        "letter": "D",
+        "text": "加强数字经济治理，保障数据安全和个人隐私"
+      }
+    ]
+  },
+  {
+    "question": "以下哪些技术是公路数字化建设中不可或缺的关键技术?",
+    "answer": "A,B,C,D",
+    "type": "multi",
+    "chapter": "第十一章考试",
+    "section": "multi",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "大数据技术"
+      },
+      {
+        "letter": "B",
+        "text": "云计算技术"
+      },
+      {
+        "letter": "C",
+        "text": "物联网技术"
+      },
+      {
+        "letter": "D",
+        "text": "人工智能技术"
+      }
+    ]
+  },
+  {
+    "question": "以下哪些属于“自动化”的特点?",
+    "answer": "A,B",
+    "type": "multi",
+    "chapter": "第十一章考试",
+    "section": "multi",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "系统或过程在较少人或无人参与下运行"
+      },
+      {
+        "letter": "B",
+        "text": "通过自动检测和信息处理实现控制"
+      }
+    ]
+  },
+  {
+    "question": "数字高速铁路智能化整体目标中，政策支持方面提到了哪些具体的目标?",
+    "answer": "A,C,D",
+    "type": "multi",
+    "chapter": "第十一章考试",
+    "section": "multi",
+    "answer_options": [
+      {
+        "letter": "A",
+        "text": "铁路数字化转型全面完成"
+      },
+      {
+        "letter": "C",
+        "text": "信息安全保障能力全面增强"
+      },
+      {
+        "letter": "D",
+        "text": "人和人才队伍建设有新突破"
+      }
+    ]
+  },
+  {
+    "question": "随着数字化技术的发展，大数据、云计算和人工智能等技术已经彻底改变了传统商业模式，并推动了新的商业模式的发展。",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第十一章考试",
+    "section": "judge",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "“信息化”是利用信息技术手段对信息资源进行开发、管理，以提高工作效率和管理水平。",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第十一章考试",
+    "section": "judge",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "数字高速铁路智能化整体目标中，实现营服务的智慧化是高铁与智慧交通运输系统协同的唯一要求。",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第十一章考试",
+    "section": "judge",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "“十四五”期间，我国民用航空发展规划中提到的智慧民航建设完全依赖于新技术，而不需要传统民航技术的支持。",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第十一章考试",
+    "section": "judge",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "随着数字技术的快速发展，数字经济已成为推动全球经济增长的重要引擎，它在改变传统的商业模式、产业结构和就业形态。",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第十一章考试",
+    "section": "judge",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "数字医疗的发展对于系统间的兼容性提出了更高要求。",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第十一章考试",
+    "section": "judge",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "自动化是基础，信息化是手段，数字化是方向，智能化是最终目标。",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第十一章考试",
+    "section": "judge",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "数字经济只涉及互联网和信息技术产业，与传统产业没有直接关联。",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第十一章考试",
+    "section": "judge",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "智慧水运的发展完全依赖于技术创新，与现有水运设施的改造和升级无关。",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第十一章考试",
+    "section": "judge",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  },
+  {
+    "question": "随着数字经济的蓬勃发展，数字经济已成为驱动经济增长的主要引擎，并带来了大量新的就业机会。",
+    "answer": "对",
+    "type": "judge",
+    "chapter": "第十一章考试",
+    "section": "judge",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "对"
+      }
+    ]
+  },
+  {
+    "question": "数字农业的发展完全依赖于先进技术的引入和应用，而不需要农民自身的努力和配合。",
+    "answer": "错",
+    "type": "judge",
+    "chapter": "第十一章考试",
+    "section": "judge",
+    "answer_options": [
+      {
+        "letter": "",
+        "text": "错"
+      }
+    ]
+  }
+]

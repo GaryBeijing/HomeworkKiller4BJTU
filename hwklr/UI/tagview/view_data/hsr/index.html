@@ -1,0 +1,87 @@
+<!--
+  作者: Gary
+  编写日期: 2026-10-31 20:45
+  文件名: index.html
+  主要用途: “高铁纵横”标签页结构：登录、考试列表、开始确认与答题结果。
+  文件版本: 1.0.0
+-->
+<section class="tag-page tag-hsr" id="hsr-page">
+  <div class="hero">
+    <div>
+      <h1>高铁纵横</h1>
+      <p>登录高铁答题系统，自动匹配内置题库，并按选项原文作答，尽量降低选项顺序变化带来的影响。</p>
+    </div>
+    <div class="hero-badge">题库自动匹配</div>
+  </div>
+
+  <div class="grid">
+    <section class="card login-card">
+      <h2>账号登录</h2>
+      <form id="hsr-login-form" autocomplete="on">
+        <label class="field">
+          <span>学号 / 账号</span>
+          <input id="hsr-username" name="username" type="text" autocomplete="username"
+                 placeholder="请输入学号或账号">
+        </label>
+        <label class="field">
+          <span>密码</span>
+          <input id="hsr-password" name="password" type="password"
+                 autocomplete="current-password" placeholder="请输入密码">
+        </label>
+        <div class="row">
+          <button id="hsr-login-submit" class="btn primary" type="submit">登录</button>
+          <button id="hsr-logout" class="btn ghost" type="button">退出登录</button>
+        </div>
+        <p class="hint" id="hsr-login-status">登录成功后，账号密码只保存在本机 config.json。</p>
+      </form>
+    </section>
+
+    <section class="card list-card">
+      <div class="card-head">
+        <h2>我的考试</h2>
+        <button id="hsr-refresh" class="btn ghost small" type="button">刷新列表</button>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>章节</th>
+              <th>已用 / 总</th>
+              <th>最高分</th>
+              <th>状态</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="hsr-exam-body">
+            <tr>
+              <td colspan="6" class="table-empty">登录后加载考试列表</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="hint" id="hsr-list-hint">开始考试会消耗一次作答机会，请确认后再操作。</p>
+    </section>
+  </div>
+
+  <section class="card result-card hidden" id="hsr-result-card">
+    <div class="card-head">
+      <h2>答题结果</h2>
+      <button class="btn ghost small" id="hsr-result-close" type="button">收起</button>
+    </div>
+    <div id="hsr-result-summary" class="result-summary"></div>
+    <div id="hsr-result-details" class="result-details"></div>
+  </section>
+
+  <div class="modal-backdrop hidden" id="hsr-confirm-modal" role="dialog"
+       aria-modal="true" aria-labelledby="hsr-confirm-title">
+    <div class="modal">
+      <h3 id="hsr-confirm-title">确认开始考试</h3>
+      <p id="hsr-confirm-text">即将开始考试，请确认。</p>
+      <div class="row end">
+        <button class="btn ghost" id="hsr-confirm-cancel" type="button">取消</button>
+        <button class="btn danger" id="hsr-confirm-ok" type="button">确认开始</button>
+      </div>
+    </div>
+  </div>
+</section>

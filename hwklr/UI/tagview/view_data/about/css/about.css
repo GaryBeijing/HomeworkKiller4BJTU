@@ -1,0 +1,83 @@
+/*
+  作者: Gary
+  编写日期: 2026-10-31 20:45
+  文件名: about.css
+  主要用途: “关于”标签页专属样式：应用信息、功能列表与使用声明。
+  文件版本: 1.0.0
+*/
+
+.tag-about .about-description {
+  margin: 0 0 16px;
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.tag-about .info-list {
+  display: grid;
+  gap: 10px;
+}
+
+.tag-about .info-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  background: var(--panel-soft);
+}
+
+.tag-about .info-label {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.tag-about .info-value {
+  color: var(--ink);
+  font-size: 13px;
+  word-break: break-word;
+  text-align: right;
+}
+
+.tag-about .feature-list {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.9;
+}
+
+.tag-about .feature-list strong {
+  color: var(--ink);
+}
+
+.tag-about .feature-list .feature-desc {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.tag-about .disclaimer-card {
+  margin-top: 18px;
+}
+
+.tag-about .disclaimer-card p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+@media (max-width: 620px) {
+  .tag-about .info-item {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .tag-about .info-value {
+    text-align: left;
+  }
+}

@@ -1,0 +1,13 @@
+# Created by venv; see https://docs.python.org/3/library/venv.html
+B1.0/
+Include/
+Lib/
+Scripts/
+SoftwareIntro/
+pyvenv.cfg
+
+# 运行期生成的缓存与本地凭据
+__pycache__/
+*.pyc
+config.json
+run.bat
