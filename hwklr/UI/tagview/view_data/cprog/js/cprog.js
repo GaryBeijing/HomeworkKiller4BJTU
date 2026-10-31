@@ -1,9 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-11-01 00:01
+  最后更新: 2026-11-01 01:15
   文件名: cprog.js
-  主要用途: “C程序设计”页面逻辑：课程/题目选择、启发模式分步弹窗、题解模式后台任务与结果弹窗。
-  文件版本: 2.0.0
+  主要用途: “C程序设计”页面逻辑：课程/题目选择、启发模式分步弹窗、题解模式后台任务与结果弹窗（仅展示一次）。
+  文件版本: 2.0.1
 */
 
 (function () {
@@ -38,6 +39,7 @@
     solutionFont: 14,
     keydownHandler: null,
     lastNotifiedJobId: '',
+    resultShownJobId: '',
   };
 
   /** 页面元素缓存。 */
@@ -847,6 +849,8 @@
       const data = await App.callOk('start_solution_job', { module_ids: moduleIds });
       state.jobId = data.job_id;
       state.currentJob = null;
+      state.resultShownJobId = '';
+      state.lastNotifiedJobId = '';
       updateModeUI();
       updateSelectionUI();
       setBusy(false);
@@ -893,8 +897,10 @@
         updateModeUI();
         updateSelectionUI();
         applySolutionStatuses(job.result || {});
-        if (App.active === PAGE_NAME) {
+        // 结果只展示一次；切换标签再回来不重复弹出。
+        if (App.active === PAGE_NAME && state.resultShownJobId !== state.jobId) {
           renderSolutionResult(job.result || {});
+          state.resultShownJobId = state.jobId;
         }
         return;
       }

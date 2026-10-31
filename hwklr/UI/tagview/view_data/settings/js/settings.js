@@ -1,10 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-10-31 20:45
-  最后更新: 2026-11-01 00:01
+  最后更新: 2026-11-01 01:15
   文件名: settings.js
-  主要用途: “设置”页面逻辑：动态渲染设置分组、保存配置、板块高亮与知识库信息。
-  文件版本: 2.0.0
+  主要用途: “设置”页面逻辑：动态分组、失焦/开关自动保存、板块高亮与知识库信息。
+  文件版本: 2.0.1
 */
 
 (function () {
@@ -20,6 +20,9 @@
     groups: [],
     busy: false,
     highlightTimer: null,
+    pendingAutoSave: new Set(),
+    autoSaveTimer: null,
+    autoSaving: false,
   };
 
   /**
@@ -69,6 +72,132 @@
   }
 
   /**
+   * 读取字段当前值（统一为字符串）。
+   * @param {HTMLElement} input 输入元素。
+   * @returns {string} 当前值。
+   */
+  function fieldValue(input) {
+    if (input.dataset.kind === 'switch') {
+      return String(Boolean(input.checked));
+    }
+    return String(input.value);
+  }
+
+  /**
+   * 判断字段是否相对上次保存发生了变化。
+   * @param {HTMLElement} input 输入元素。
+   * @returns {boolean} 有变化返回 true。
+   */
+  function fieldChanged(input) {
+    return fieldValue(input) !== (input.dataset.initial || '');
+  }
+
+  /**
+   * 安排一次自动保存。
+   * @param {string} groupId 设置分组 ID。
+   * @param {HTMLElement} input 触发字段。
+   * @returns {void}
+   */
+  function scheduleAutoSave(groupId, input) {
+    if (input && !fieldChanged(input)) {
+      return;
+    }
+    state.pendingAutoSave.add(groupId);
+    scheduleAutoSaveFlush();
+  }
+
+  /**
+   * 重置自动保存防抖计时器。
+   * @returns {void}
+   */
+  function scheduleAutoSaveFlush() {
+    if (state.autoSaveTimer) {
+      window.clearTimeout(state.autoSaveTimer);
+    }
+    state.autoSaveTimer = window.setTimeout(flushAutoSave, 260);
+  }
+
+  /**
+   * 更新指定分组的“已保存初始值”。
+   * @param {Array<string>} groupIds 分组 ID 列表。
+   * @returns {void}
+   */
+  function updateInitialValues(groupIds) {
+    const allowed = new Set(groupIds);
+    if (!els.groups) {
+      return;
+    }
+    els.groups.querySelectorAll('.settings-group').forEach((card) => {
+      if (!allowed.has(card.dataset.group)) {
+        return;
+      }
+      card.querySelectorAll('[data-key]').forEach((input) => {
+        input.dataset.initial = fieldValue(input);
+      });
+    });
+  }
+
+  /**
+   * 只更新分组状态徽标，避免自动保存时重建 DOM 丢失焦点。
+   * @param {Array} groups 服务端返回的分组数据。
+   * @returns {void}
+   */
+  function updateGroupStatuses(groups) {
+    if (!els.groups || !Array.isArray(groups)) {
+      return;
+    }
+    groups.forEach((group) => {
+      const card = Array.from(els.groups.querySelectorAll('.settings-group'))
+        .find((item) => item.dataset.group === group.group_id);
+      if (!card) {
+        return;
+      }
+      const badge = card.querySelector('.group-status');
+      if (badge) {
+        badge.className = 'group-status ' + (group.complete ? 'ok' : 'missing');
+        badge.textContent = group.complete ? '已完整' : '缺少设置';
+      }
+    });
+  }
+
+  /**
+   * 执行自动保存。
+   * @returns {Promise<void>} 完成时 resolve。
+   */
+  async function flushAutoSave() {
+    state.autoSaveTimer = null;
+    if (state.busy || state.autoSaving) {
+      if (state.pendingAutoSave.size > 0) {
+        scheduleAutoSaveFlush();
+      }
+      return;
+    }
+    if (state.pendingAutoSave.size === 0) {
+      return;
+    }
+    const groupIds = Array.from(state.pendingAutoSave);
+    state.pendingAutoSave.clear();
+    const groups = collectGroups(groupIds);
+    state.autoSaving = true;
+    try {
+      const data = await App.callOk('save_settings', { groups });
+      updateGroupStatuses(data.groups || []);
+      updateInitialValues(groupIds);
+      setStatus('设置已保存。', 'success');
+      App.toast('设置已保存', 'success');
+      await App.refreshTags();
+    } catch (error) {
+      setStatus(`自动保存失败：${error.message}`, 'error');
+      App.toast(`自动保存失败: ${error.message}`, 'error');
+    } finally {
+      state.autoSaving = false;
+      if (state.pendingAutoSave.size > 0) {
+        scheduleAutoSaveFlush();
+      }
+    }
+  }
+
+  /**
    * 构建一个设置字段。
    * @param {Object} group 设置分组。
    * @param {Object} field 字段定义。
@@ -93,6 +222,8 @@
       input.dataset.group = group.group_id;
       input.dataset.key = field.key;
       input.dataset.kind = 'switch';
+      input.dataset.initial = String(Boolean(field.value));
+      input.addEventListener('change', () => scheduleAutoSave(group.group_id, input));
       switchLabel.appendChild(input);
       switchLabel.appendChild(node('span', 'slider'));
       row.appendChild(switchLabel);
@@ -137,6 +268,12 @@
     input.dataset.group = group.group_id;
     input.dataset.key = field.key;
     input.dataset.kind = field.kind || 'text';
+    input.dataset.initial = String(input.value);
+
+    if (field.kind === 'select') {
+      input.addEventListener('change', () => scheduleAutoSave(group.group_id, input));
+    }
+    input.addEventListener('blur', () => scheduleAutoSave(group.group_id, input));
 
     if (field.secret && field.kind !== 'select') {
       const secretWrap = node('div', 'secret-wrap');
@@ -229,16 +366,21 @@
   }
 
   /**
-   * 收集所有分组当前输入值。
+   * 收集分组当前输入值。
+   * @param {Array<string>} [onlyGroupIds] 只收集这些分组；省略时收集全部。
    * @returns {Object} 分组值映射。
    */
-  function collectGroups() {
+  function collectGroups(onlyGroupIds) {
     const groups = {};
     if (!els.groups) {
       return groups;
     }
+    const allowed = Array.isArray(onlyGroupIds) ? new Set(onlyGroupIds) : null;
     els.groups.querySelectorAll('.settings-group').forEach((card) => {
       const groupId = card.dataset.group;
+      if (allowed && !allowed.has(groupId)) {
+        return;
+      }
       const values = {};
       card.querySelectorAll('[data-key]').forEach((input) => {
         const key = input.dataset.key;
@@ -264,6 +406,12 @@
     if (state.busy) {
       return;
     }
+    // 手动保存优先，取消尚未触发的自动保存。
+    if (state.autoSaveTimer) {
+      window.clearTimeout(state.autoSaveTimer);
+      state.autoSaveTimer = null;
+    }
+    state.pendingAutoSave.clear();
     state.busy = true;
     if (els.save) {
       els.save.disabled = true;

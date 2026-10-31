@@ -1,16 +1,58 @@
 /*
   作者: Gary
   编写日期: 2026-11-01 00:01
+  最后更新: 2026-11-01 01:15
   文件名: cprog.css
-  主要用途: “C程序设计”标签页样式：课程/题目选择、模式切换、启发弹窗与题解结果。
-  文件版本: 2.0.0
+  主要用途: “C程序设计”标签页样式：自适应高度布局、左侧进度、模式切换、启发弹窗与题解结果。
+  文件版本: 2.0.1
 */
+
+.content-host:has(> .tag-cprog) {
+  height: 100%;
+}
+
+.tag-cprog {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
 
 .tag-cprog .c-layout {
   display: grid;
   grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
   gap: 18px;
-  align-items: start;
+  align-items: stretch;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.tag-cprog .c-side {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  gap: 14px;
+}
+
+.tag-cprog .c-course-card {
+  flex: 0 0 auto;
+}
+
+.tag-cprog .c-problem-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.tag-cprog .c-problem-wrap {
+  flex: 1 1 auto;
+  min-height: 140px;
+  max-height: none;
+}
+
+@media (min-width: 1001px) {
+  .tag-cprog {
+    height: 100%;
+  }
 }
 
 .tag-cprog .course-list {
@@ -167,10 +209,6 @@
   font-weight: 600;
 }
 
-.tag-cprog .c-problem-wrap {
-  max-height: 48vh;
-}
-
 .tag-cprog .check-col {
   width: 42px;
   text-align: center;
@@ -195,14 +233,34 @@
   margin: 0;
 }
 
-/* ---------------------------------------------------------------- 进度 */
+/* ---------------------------------------------------------------- 进度（左栏） */
 .tag-cprog .c-progress {
-  margin-top: 18px;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  padding: 16px;
+  overflow: hidden;
+}
+
+.tag-cprog .c-progress .card-head {
+  flex: 0 0 auto;
+  margin-bottom: 8px;
+}
+
+.tag-cprog .c-progress h2 {
+  font-size: 15px;
+}
+
+.tag-cprog .c-progress .hint {
+  flex: 0 0 auto;
+  margin: 0 0 6px;
 }
 
 .tag-cprog .progress-track {
+  flex: 0 0 auto;
   height: 9px;
-  margin: 10px 0 14px;
+  margin: 8px 0 12px;
   border-radius: 999px;
   background: #e7e8f2;
   overflow: hidden;
@@ -217,15 +275,16 @@
 }
 
 .tag-cprog .progress-log {
-  max-height: 220px;
+  flex: 1 1 auto;
+  min-height: 60px;
   overflow: auto;
-  padding: 10px 12px;
+  padding: 8px 10px;
   border: 1px solid var(--panel-border);
   border-radius: var(--radius-sm);
   background: var(--panel-soft);
   font-family: "Cascadia Mono", Consolas, monospace;
-  font-size: 12px;
-  line-height: 1.7;
+  font-size: 11px;
+  line-height: 1.6;
 }
 
 .tag-cprog .log-line {
@@ -262,13 +321,30 @@
 }
 
 .tag-cprog .analysis-head h2 {
+  flex: 1 1 auto;
+  min-width: 0;
   margin: 0;
+  overflow: hidden;
   font-size: 18px;
-  padding-right: 36px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tag-cprog .analysis-head .row {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
   align-items: center;
+  gap: 6px;
+}
+
+/* 关闭按钮改为随行布局，避免与字体调节按钮重叠。 */
+.tag-cprog .analysis-head .modal-close,
+.tag-cprog .c-solution-result-modal > .card-head .modal-close {
+  position: static;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  margin-left: 2px;
 }
 
 .tag-cprog .analysis-stepper {
@@ -445,9 +521,20 @@
 }
 
 .tag-cprog .c-solution-result-modal > .card-head h2 {
+  flex: 1 1 auto;
+  min-width: 0;
   margin: 0;
-  padding-right: 36px;
+  overflow: hidden;
   font-size: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag-cprog .c-solution-result-modal > .card-head .row {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
 }
 
 .tag-cprog .solution-result-layout {
@@ -544,8 +631,27 @@
 }
 
 @media (max-width: 1000px) {
+  .content-host:has(> .tag-cprog) {
+    height: auto;
+  }
+
+  .tag-cprog {
+    height: auto;
+  }
+
   .tag-cprog .c-layout {
     grid-template-columns: minmax(0, 1fr);
+    flex: none;
+  }
+
+  .tag-cprog .c-problem-wrap {
+    flex: 0 1 auto;
+    max-height: 48vh;
+  }
+
+  .tag-cprog .c-progress {
+    flex: 0 0 auto;
+    max-height: 320px;
   }
 
   .tag-cprog .solution-result-layout {

@@ -1,9 +1,10 @@
 <!--
   作者: Gary
   编写日期: 2026-11-01 00:01
+  最后更新: 2026-11-01 01:15
   文件名: index.html
-  主要用途: “C程序设计”标签页结构：课程/题目选择、模式切换、启发弹窗与题解结果弹窗。
-  文件版本: 2.0.0
+  主要用途: “C程序设计”标签页结构：课程/题目选择、左侧进度、模式切换、启发弹窗与题解结果弹窗。
+  文件版本: 2.0.1
 -->
 <section class="tag-page tag-cprog" id="cprog-page">
   <div class="hero">
@@ -15,16 +16,28 @@
   </div>
 
   <div class="c-layout">
-    <section class="card c-course-card">
-      <div class="card-head">
-        <h2>课程</h2>
-        <button id="c-refresh-courses" class="btn ghost small" type="button">刷新课程</button>
-      </div>
-      <div id="c-course-list" class="course-list">
-        <p class="muted">正在连接 CITEL…</p>
-      </div>
-      <p class="hint" id="c-account-status">用户名与 AI 配置在设置中统一管理。</p>
-    </section>
+    <div class="c-side">
+      <section class="card c-course-card">
+        <div class="card-head">
+          <h2>课程</h2>
+          <button id="c-refresh-courses" class="btn ghost small" type="button">刷新课程</button>
+        </div>
+        <div id="c-course-list" class="course-list">
+          <p class="muted">正在连接 CITEL…</p>
+        </div>
+        <p class="hint" id="c-account-status">用户名与 AI 配置在设置中统一管理。</p>
+      </section>
+
+      <section class="card c-progress hidden" id="c-progress-card">
+        <div class="card-head">
+          <h2>题解模式进度</h2>
+          <span id="c-progress-phase" class="pill info">准备中</span>
+        </div>
+        <p id="c-progress-message" class="hint"></p>
+        <div class="progress-track"><div id="c-progress-bar" class="progress-bar"></div></div>
+        <div id="c-progress-log" class="progress-log"></div>
+      </section>
+    </div>
 
     <section class="card c-problem-card">
       <div class="card-head c-problem-head">
@@ -75,16 +88,6 @@
       </div>
     </section>
   </div>
-
-  <section class="card c-progress hidden" id="c-progress-card">
-    <div class="card-head">
-      <h2>题解模式进度</h2>
-      <span id="c-progress-phase" class="pill info">准备中</span>
-    </div>
-    <p id="c-progress-message" class="hint"></p>
-    <div class="progress-track"><div id="c-progress-bar" class="progress-bar"></div></div>
-    <div id="c-progress-log" class="progress-log"></div>
-  </section>
 
   <div class="modal-backdrop hidden" id="c-analysis-modal" role="dialog"
        aria-modal="true" aria-labelledby="c-analysis-title">
