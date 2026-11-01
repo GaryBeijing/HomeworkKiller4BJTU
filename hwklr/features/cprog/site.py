@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-01 00:01
-# 最后更新: 2026-11-01 12:15
+# 最后更新: 2026-11-01 20:26
 # 文件名: site.py
 # 主要用途: CITEL / Moodle 课程平台的同步 HTTP 客户端（登录、课程、提交与判题轮询；requests 延迟导入）。
-# 文件版本: 2.1.0
+# 文件版本: 2.3.1
 """CITEL 课程平台客户端。
 
 V2 由 CLI 的异步实现改为同步方法：调用发生在 pywebview 的桥接线程或
@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 from . import parsers
 from .models import Consequence, Course, IndexRow, ProblemDetail
 
-__version__ = "2.1.0"
+__version__ = "2.3.1"
 __author__ = "Gary"
 __all__ = [
     "BASE_URL",
@@ -91,6 +91,20 @@ class MoodleSite:
             ),
             "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
         })
+
+    def clone(self) -> "MoodleSite":
+        """创建复用当前登录 Cookie 的独立客户端。
+
+        并发解题时多个线程需要独立 ``requests.Session``，但同一账号重复登录
+        会让平台使旧会话失效；因此只登录一次，再把 Cookie 复制到克隆客户端。
+
+        Returns:
+            共享同一登录会话的独立客户端。
+        """
+        cloned: MoodleSite = MoodleSite(base_url=self.base_url, timeout=self.timeout)
+        # 关键步骤：复制 Cookie 而不重新登录，避免旧会话被平台踢下线。
+        cloned.session.cookies.update(self.session.cookies)
+        return cloned
 
     def _url(self, path: str) -> str:
         """拼接完整 URL。

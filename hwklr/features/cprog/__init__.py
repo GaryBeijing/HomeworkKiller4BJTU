@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-01 00:01
-# 最后更新: 2026-11-01 19:22
+# 最后更新: 2026-11-01 20:26
 # 文件名: __init__.py
 # 主要用途: 实现“C程序设计”功能：课程/题目选择、启发模式、题解模式与设置板块（依赖延迟加载）。
-# 文件版本: 2.2.0
+# 文件版本: 2.3.1
 """C 程序设计功能。
 
 重制自 ``B_CHelper``，主要变化：
@@ -50,7 +50,7 @@ from .models import (
 from .parsers import deterministic_structure
 from .site import MoodleError, MoodleSite, SubmitError
 
-__version__ = "2.2.0"
+__version__ = "2.3.1"
 __author__ = "Gary"
 __all__ = ["CProgrammingFeature"]
 
@@ -58,6 +58,8 @@ _LOGGER: Final[logging.Logger] = logging.getLogger(__name__)
 _MAX_ATTEMPTS: Final[int] = 5
 _MAX_SUBMIT_ERRORS: Final[int] = 3
 _MAX_EVENTS: Final[int] = 200
+_DEFAULT_CONCURRENCY: Final[int] = 1
+_MAX_CONCURRENCY: Final[int] = 8
 _THINKING_LABELS: Final[dict[str, str]] = {
     "off": "关闭",
     "low": "低",
@@ -85,6 +87,51 @@ def _status_code(status: str) -> str:
         大写状态前缀。
     """
     return str(status or "").split(":", 1)[0].strip().upper()
+
+
+def _clamp_concurrency(value: Any) -> int:
+    """把并发数规范化为 1~8 的整数。
+
+    Args:
+        value: 配置或前端传入的并发数。
+
+    Returns:
+        合法并发数；无法识别时返回默认值 1。
+    """
+    try:
+        number: int = int(value)
+    except (TypeError, ValueError):
+        return _DEFAULT_CONCURRENCY
+    return max(1, min(_MAX_CONCURRENCY, number))
+
+
+def _split_chunks(items: list[int], count: int) -> list[list[int]]:
+    """按顺序把题目平均分成若干连续段。
+
+    余数分配给靠后的线程，例如 10 题 3 线程得到 ``3/3/4``。
+
+    Args:
+        items: 按课程顺序排列的题目模块 ID。
+        count: 期望的线程数。
+
+    Returns:
+        非空的连续分段列表。
+    """
+    if not items:
+        return []
+    workers: int = max(1, min(count, len(items)))
+    base: int
+    remainder: int
+    base, remainder = divmod(len(items), workers)
+    chunks: list[list[int]] = []
+    start: int = 0
+    for index in range(workers):
+        size: int = base + (1 if index >= workers - remainder else 0)
+        if size <= 0:
+            continue
+        chunks.append(items[start:start + size])
+        start += size
+    return chunks
 
 
 def _ai_complete(setting: dict[str, Any]) -> bool:
@@ -165,6 +212,9 @@ class CProgrammingFeature(Feature):
                 "base_url": str(setting.get("base_url") or ""),
                 "api_key": str(setting.get("api_key") or ""),
                 "thinking_level": str(setting.get("thinking_level") or "auto"),
+                "max_concurrency": _clamp_concurrency(
+                    setting.get("max_concurrency", _DEFAULT_CONCURRENCY)
+                ),
                 "enable_solution_mode": bool(setting.get("enable_solution_mode", False)),
             }
 
@@ -178,6 +228,9 @@ class CProgrammingFeature(Feature):
                     "api_key": str(values.get("api_key") or ""),
                     "thinking_level": str(
                         values.get("thinking_level") or "auto"
+                    ),
+                    "max_concurrency": _clamp_concurrency(
+                        values.get("max_concurrency", _DEFAULT_CONCURRENCY)
                     ),
                     "enable_solution_mode": bool(
                         values.get("enable_solution_mode", False)
@@ -272,6 +325,19 @@ class CProgrammingFeature(Feature):
                     ),
                 ),
                 SettingsFieldSpec(
+                    key="max_concurrency",
+                    label="最大并发数",
+                    kind="number",
+                    min_value=1,
+                    max_value=8,
+                    step=1,
+                    alert=True,
+                    help=(
+                        "默认 1（单线程顺序解题）。大于 1 时按题目顺序平均分配给"
+                        "多个线程同时解题；并发过高可能触发平台或 AI 限流。"
+                    ),
+                ),
+                SettingsFieldSpec(
                     key="enable_solution_mode",
                     label="启用题解模式",
                     kind="switch",
@@ -342,6 +408,8 @@ class CProgrammingFeature(Feature):
             "current": 0,
             "total": 0,
             "title": "",
+            "concurrency": _DEFAULT_CONCURRENCY,
+            "problems": [],
             "events": [],
             "result": None,
             "error": "",
@@ -392,6 +460,17 @@ class CProgrammingFeature(Feature):
         """
         return bool(self._read_ai_setting().get("enable_solution_mode", False))
 
+    def _read_max_concurrency(self) -> int:
+        """读取并规范化最大并发数。
+
+        Returns:
+            1~8 的并发数。
+        """
+        setting: dict[str, Any] = self._read_ai_setting()
+        return _clamp_concurrency(
+            setting.get("max_concurrency", _DEFAULT_CONCURRENCY)
+        )
+
     def _get_state(self, params: dict[str, Any]) -> ApiResult:
         """返回登录、AI 与课程状态。
 
@@ -424,20 +503,35 @@ class CProgrammingFeature(Feature):
             ValueError: 用户名为空时抛出。
             MoodleError: 登录失败时抛出。
         """
+        if self._site is not None and self._logged_in:
+            return self._site
+        site: MoodleSite = self._create_site()
+        self._site = site
+        self._logged_in = True
+        self._username = self._read_username()
+        return site
+
+    def _create_site(self) -> MoodleSite:
+        """创建并登录一个独立的 CITEL 客户端。
+
+        并发解题时每个工作线程使用自己的会话，避免共享 ``requests.Session``。
+
+        Returns:
+            已登录客户端。
+
+        Raises:
+            ValueError: 用户名为空时抛出。
+            MoodleError: 登录失败时抛出。
+        """
         username: str = self._read_username()
         if not username:
             raise ValueError("请先在设置中填写用户名")
-        if self._site is not None and self._logged_in:
-            return self._site
         site: MoodleSite = MoodleSite()
         ok: bool
         message: str
         ok, message = site.login(username, f"{username}@Bjtu")
         if not ok:
             raise MoodleError(message or "登录 CITEL 失败")
-        self._site = site
-        self._logged_in = True
-        self._username = username
         return site
 
     def _build_ai(self) -> AIClient:
@@ -546,11 +640,14 @@ class CProgrammingFeature(Feature):
                 return part
         return None
 
-    def _ensure_detail(self, problem: ProblemRef) -> ProblemDetail:
+    def _ensure_detail(
+        self, problem: ProblemRef, site: MoodleSite | None = None
+    ) -> ProblemDetail:
         """读取并缓存题目详情。
 
         Args:
             problem: 题目引用。
+            site: 可选的独立客户端；并发线程必须传入自己的会话。
 
         Returns:
             题目详情。
@@ -558,18 +655,21 @@ class CProgrammingFeature(Feature):
         detail: ProblemDetail | None = self._details.get(problem.module_id)
         if detail is not None:
             return detail
-        site: MoodleSite = self._ensure_login()
-        detail = site.get_problem(problem.module_id)
+        client: MoodleSite = site or self._ensure_login()
+        detail = client.get_problem(problem.module_id)
         if detail.activity_id is not None:
             problem.activity_id = detail.activity_id
         self._details[problem.module_id] = detail
         return detail
 
-    def _is_solved(self, problem: ProblemRef) -> tuple[bool, str]:
+    def _is_solved(
+        self, problem: ProblemRef, site: MoodleSite | None = None
+    ) -> tuple[bool, str]:
         """检查题目是否已经 AC（包含历史提交）。
 
         Args:
             problem: 题目引用。
+            site: 可选的独立客户端；并发线程必须传入自己的会话。
 
         Returns:
             ``(是否已通过, 说明)``。
@@ -578,11 +678,11 @@ class CProgrammingFeature(Feature):
             return True, problem.my_result
         if not problem.my_result:
             return False, ""
-        site: MoodleSite = self._ensure_login()
+        client: MoodleSite = site or self._ensure_login()
         try:
             solved: bool
             detail: str
-            solved, detail = site.has_any_ac(problem.module_id, problem.activity_id)
+            solved, detail = client.has_any_ac(problem.module_id, problem.activity_id)
         except MoodleError:
             return False, problem.my_result
         if solved:
@@ -752,19 +852,41 @@ class CProgrammingFeature(Feature):
         if not isinstance(raw_ids, list) or not raw_ids:
             raise ValueError("请选择至少一道题目")
         module_ids: list[int] = []
+        seen: set[int] = set()
         for raw in raw_ids:
             try:
-                module_ids.append(int(raw))
+                module_id: int = int(raw)
             except (TypeError, ValueError) as exc:
                 raise ValueError("题目 ID 列表格式错误") from exc
+            if module_id not in seen:
+                seen.add(module_id)
+                module_ids.append(module_id)
         if not self._solution_mode_enabled():
             raise ValueError("题解模式未启用，请先在设置中开启")
         if not _ai_complete(self._read_ai_setting()):
             raise ValueError("请先在设置中完成 C 程序设计 AI 配置")
         if self._structure is None:
             raise ValueError("请先选择课程")
+
+        # 步骤 1：按课程顺序排列题目，便于并发时按顺序连续分段。
+        order: dict[int, int] = {}
+        for part in self._structure.parts:
+            for problem in part.problems:
+                order[problem.module_id] = len(order)
+        module_ids.sort(key=lambda item: order.get(item, 10**9))
+
+        # 步骤 2：生成每个题目的实时状态，供前端立即显示“等待队列”。
+        problem_states: list[dict[str, Any]] = []
         for module_id in module_ids:
-            self._find_problem(module_id)
+            problem: ProblemRef = self._find_problem(module_id)
+            problem_states.append({
+                "module_id": module_id,
+                "title": problem.title,
+                "status": "等待队列",
+                "attempts": 0,
+                "worker": None,
+            })
+        concurrency: int = self._read_max_concurrency()
 
         job_id: str = uuid.uuid4().hex
         job: dict[str, Any] = self._idle_job()
@@ -774,6 +896,8 @@ class CProgrammingFeature(Feature):
             "phase": "starting",
             "message": "准备题解模式...",
             "total": len(module_ids),
+            "concurrency": concurrency,
+            "problems": problem_states,
         })
         with self._job_lock:
             self._job = job
@@ -785,7 +909,11 @@ class CProgrammingFeature(Feature):
         )
         self._job_thread = thread
         thread.start()
-        return success({"job_id": job_id})
+        return success({
+            "job_id": job_id,
+            "concurrency": concurrency,
+            "problems": copy.deepcopy(problem_states),
+        })
 
     def _get_solution_job(self, params: dict[str, Any]) -> ApiResult:
         """读取题解任务状态。
@@ -803,264 +931,451 @@ class CProgrammingFeature(Feature):
             return failure("任务不存在或已过期")
         return success(job)
 
+    def _set_problem_status(
+        self,
+        job_id: str,
+        module_id: int,
+        status: str,
+        attempts: int | None = None,
+        worker: int | None = None,
+    ) -> None:
+        """更新单个题目的实时状态。
+
+        Args:
+            job_id: 任务 ID。
+            module_id: 题目模块 ID。
+            status: 展示给前端的短状态。
+            attempts: 当前尝试次数；``None`` 表示不更新。
+            worker: 处理该题的线程序号（从 0 开始）；``None`` 表示不更新。
+        """
+        with self._job_lock:
+            if self._job.get("job_id") != job_id:
+                return
+            for item in self._job.get("problems", []):
+                if item.get("module_id") == module_id:
+                    item["status"] = status
+                    if attempts is not None:
+                        item["attempts"] = attempts
+                    if worker is not None:
+                        item["worker"] = worker
+                    break
+
+    def _complete_problem(self, job_id: str, title: str) -> None:
+        """标记一道题处理完成并更新进度。
+
+        Args:
+            job_id: 任务 ID。
+            title: 完成的题目名称。
+        """
+        with self._job_lock:
+            if self._job.get("job_id") != job_id:
+                return
+            total: int = int(self._job.get("total") or 0)
+            current: int = min(int(self._job.get("current") or 0) + 1, total)
+            self._job["current"] = current
+            self._job["title"] = title
+            self._job["message"] = f"已完成 {current}/{total} 题"
+
+    def _solve_problem(
+        self,
+        job_id: str,
+        module_id: int,
+        site: MoodleSite,
+        ai: AIClient,
+        worker: int,
+    ) -> dict[str, Any]:
+        """处理一道题：生成思路、生成题解、提交并按判题结果修正。
+
+        Args:
+            job_id: 任务 ID。
+            module_id: 题目模块 ID。
+            site: 该线程独立的 CITEL 客户端。
+            ai: 该线程独立的 AI 客户端。
+            worker: 线程序号（从 0 开始）。
+
+        Returns:
+            ``{"kind": "ac"/"failed"/"already", "data": {...}}``。
+        """
+        problem: ProblemRef = self._find_problem(module_id)
+        solved: bool
+        solved_text: str
+        solved, solved_text = self._is_solved(problem, site=site)
+        if solved:
+            self._set_problem_status(job_id, module_id, "AC", attempts=0, worker=worker)
+            self._push_event(job_id, f"跳过已通过：{problem.title}", "success")
+            return {
+                "kind": "already",
+                "data": {
+                    "module_id": problem.module_id,
+                    "title": problem.title,
+                    "message": solved_text or "此前已 AC",
+                },
+            }
+
+        detail: ProblemDetail = self._ensure_detail(problem, site=site)
+        part: Part | None = self._part_of(module_id)
+        part_name: str = part.name if part else ""
+        # 每题独立状态：自动模式从“关闭思考 + 5000 输出上限”开始。
+        level: str = ai.resolve_thinking_level()
+        budget: int = INITIAL_MAX_TOKENS
+        analysis: QuestionAnalysis | None = self._analyses.get(module_id)
+        previous: Consequence | None = None
+        attempts: int = self._attempts.get(module_id, 0)
+        submit_errors: int = 0
+        failure_record: dict[str, Any] | None = None
+
+        self._set_problem_status(
+            job_id, module_id, "生成题解", attempts=attempts, worker=worker
+        )
+        self._push_event(
+            job_id,
+            f"开始解题：{problem.title}"
+            f"（线程 {worker + 1}，思考：{_THINKING_LABELS.get(level, level)}）",
+            "info",
+        )
+
+        while attempts < _MAX_ATTEMPTS:
+            # 步骤 1：需要时生成思路；判题逻辑失败后会置空以更高等级重析。
+            if analysis is None:
+                self._set_problem_status(
+                    job_id, module_id, "生成题解", attempts=attempts, worker=worker
+                )
+                try:
+                    analysis = analysis_question_info(
+                        ai,
+                        detail,
+                        previous=previous,
+                        course_name=(
+                            self._structure.course_name if self._structure else ""
+                        ),
+                        part_name=part_name,
+                        max_tokens=budget,
+                        thinking_level=level,
+                    )
+                except AIError as exc:
+                    failure_record = {
+                        "module_id": problem.module_id,
+                        "title": problem.title,
+                        "status": "AI_ERROR",
+                        "summary": str(exc),
+                        "compile_message": "",
+                        "attempts": attempts,
+                    }
+                    self._set_problem_status(
+                        job_id, module_id, "AI错误", attempts=attempts, worker=worker
+                    )
+                    self._push_event(
+                        job_id, f"生成思路失败：{problem.title} - {exc}", "error"
+                    )
+                    break
+                with self._state_lock:
+                    self._analyses[module_id] = analysis
+                self._push_event(
+                    job_id,
+                    f"思路已生成：{problem.title}"
+                    f"（思考：{_THINKING_LABELS.get(level, level)}）",
+                    "info",
+                )
+
+            # 步骤 2：生成题解。
+            attempts += 1
+            self._set_problem_status(
+                job_id, module_id, "生成题解", attempts=attempts, worker=worker
+            )
+            try:
+                solution: SolutionDraft = generate_solution(
+                    ai,
+                    detail,
+                    analysis,
+                    previous=previous,
+                    max_tokens=budget,
+                    thinking_level=level,
+                )
+            except AIError as exc:
+                failure_record = {
+                    "module_id": problem.module_id,
+                    "title": problem.title,
+                    "status": "AI_ERROR",
+                    "summary": str(exc),
+                    "compile_message": "",
+                    "attempts": attempts - 1,
+                }
+                self._set_problem_status(
+                    job_id,
+                    module_id,
+                    f"AI错误：第{attempts}次尝试",
+                    attempts=attempts - 1,
+                    worker=worker,
+                )
+                self._push_event(
+                    job_id, f"生成题解失败：{problem.title} - {exc}", "error"
+                )
+                break
+            with self._state_lock:
+                self._solutions[module_id] = solution
+
+            # 关键步骤：提交前确保 activity_id 已解析。
+            activity_id: int | None = problem.activity_id
+            if activity_id is None:
+                activity_id = site.resolve_activity_id(module_id)
+                problem.activity_id = activity_id
+            if activity_id is None:
+                failure_record = {
+                    "module_id": problem.module_id,
+                    "title": problem.title,
+                    "status": "NO_ACTIVITY_ID",
+                    "summary": "无法确定该题的提交编号",
+                    "compile_message": "",
+                    "attempts": attempts - 1,
+                }
+                self._set_problem_status(
+                    job_id, module_id, "无法提交", attempts=attempts - 1, worker=worker
+                )
+                self._push_event(
+                    job_id, f"无法提交：{problem.title}（缺少 activity_id）", "error"
+                )
+                break
+
+            # 步骤 3：提交并等待判题。
+            self._set_problem_status(
+                job_id, module_id, "提交中", attempts=attempts, worker=worker
+            )
+            try:
+                submit_id: int | None = site.submit(
+                    activity_id, solution.code, "gcc"
+                )
+            except SubmitError as exc:
+                submit_errors += 1
+                attempts -= 1  # 被拒绝的提交不消耗次数。
+                self._push_event(
+                    job_id, f"提交被拒绝：{problem.title} - {exc}", "warn"
+                )
+                if submit_errors >= _MAX_SUBMIT_ERRORS:
+                    failure_record = {
+                        "module_id": problem.module_id,
+                        "title": problem.title,
+                        "status": "SUBMIT_REJECTED",
+                        "summary": str(exc),
+                        "compile_message": "",
+                        "attempts": attempts,
+                    }
+                    self._set_problem_status(
+                        job_id, module_id, "提交失败", attempts=attempts, worker=worker
+                    )
+                    break
+                time.sleep(1.0)
+                continue
+
+            with self._state_lock:
+                self._attempts[module_id] = attempts
+            consequence: Consequence = site.poll_consequence(
+                activity_id, submit_id, timeout=150.0
+            )
+            with self._state_lock:
+                self._last_consequences[module_id] = consequence
+            problem.my_result = (
+                "AC: Accepted" if consequence.is_ac else consequence.status
+            )
+            if consequence.is_ac:
+                self._set_problem_status(
+                    job_id, module_id, "AC", attempts=attempts, worker=worker
+                )
+                ac_record: dict[str, Any] = {
+                    "module_id": problem.module_id,
+                    "title": problem.title,
+                    "solution_title": solution.solution_title,
+                    "explanation": solution.explanation,
+                    "code": solution.code,
+                    "notes": solution.notes,
+                    "attempts": attempts,
+                }
+                self._push_event(
+                    job_id, f"AC：{problem.title}（第 {attempts} 次）", "success"
+                )
+                return {"kind": "ac", "data": ac_record}
+
+            # 步骤 4：未通过。PE/CE 只重写代码；其他失败按自动规则升级。
+            previous = consequence
+            status_code: str = _status_code(consequence.status) or "错误"
+            self._set_problem_status(
+                job_id,
+                module_id,
+                f"{status_code}：第{attempts}次尝试",
+                attempts=attempts,
+                worker=worker,
+            )
+            self._push_event(
+                job_id,
+                f"{problem.title} 第 {attempts} 次未通过：{consequence.status}",
+                "warn",
+            )
+            if status_code in _NO_ESCALATE_STATUSES:
+                self._push_event(
+                    job_id,
+                    f"{problem.title} 为 {status_code}，不提高思考等级与"
+                    "输出上限，仅重新生成解答代码",
+                    "info",
+                )
+                continue
+            if ai.auto_thinking:
+                old_level: str = level
+                old_budget: int = budget
+                level = next_thinking_level(level)
+                budget = min(budget * 2, MAX_OUTPUT_TOKENS)
+                if level != old_level or budget != old_budget:
+                    self._push_event(
+                        job_id,
+                        f"{problem.title} 判题失败，思考等级 "
+                        f"{_THINKING_LABELS.get(old_level, old_level)} → "
+                        f"{_THINKING_LABELS.get(level, level)}，输出上限 "
+                        f"{old_budget} → {budget}",
+                        "info",
+                    )
+            # 逻辑失败后带上判题反馈重新分析（PE/CE 保持原思路）。
+            analysis = None
+
+        if failure_record is None:
+            last: Consequence | None = self._last_consequences.get(module_id)
+            failure_record = {
+                "module_id": problem.module_id,
+                "title": problem.title,
+                "status": last.status if last else "FAILED",
+                "summary": last.summary if last else "",
+                "compile_message": last.compile_message if last else "",
+                "attempts": self._attempts.get(module_id, attempts),
+            }
+            self._set_problem_status(
+                job_id,
+                module_id,
+                "错误：尝试次数过多",
+                attempts=self._attempts.get(module_id, attempts),
+                worker=worker,
+            )
+        self._push_event(
+            job_id,
+            f"失败：{problem.title}（{failure_record.get('status', 'FAILED')}）",
+            "error",
+        )
+        return {"kind": "failed", "data": failure_record}
+
     def _run_solution_job(self, job_id: str, module_ids: list[int]) -> None:
-        """后台执行题解模式：逐题“思考一题、提交一题”，失败时按规则修正。
+        """后台执行题解模式：按并发数分段，各线程逐题“思考一题、提交一题”。
 
         自动思考模式下，WA/TLE/MLE/RE 等逻辑失败会把思考等级提高一级并把
         输出预算翻倍；PE/CE 不提高等级与预算，只重新生成代码。
 
         Args:
             job_id: 任务 ID。
-            module_ids: 选中的题目模块 ID。
+            module_ids: 已按课程顺序排列的题目模块 ID。
         """
         ac_list: list[dict[str, Any]] = []
         failed_list: list[dict[str, Any]] = []
         already_list: list[dict[str, Any]] = []
         try:
-            site: MoodleSite = self._ensure_login()
-            ai: AIClient = self._build_ai()
             total: int = len(module_ids)
-            course_name: str = (
-                self._structure.course_name if self._structure else ""
-            )
+            concurrency: int = self._read_max_concurrency()
+            chunks: list[list[int]] = _split_chunks(module_ids, concurrency)
+            workers: int = len(chunks)
             self._update_job(
                 job_id,
-                phase="analysis",
+                phase="solution",
                 total=total,
-                message="准备题解模式...",
+                current=0,
+                concurrency=workers,
+                message=f"开始解题：{total} 题，{workers} 线程",
+            )
+            self._push_event(
+                job_id, f"启动 {workers} 个解题线程，共 {total} 题", "info"
             )
 
-            # 步骤 1：逐题处理——先思考当前题，再生成题解并提交，不再批量预生成思路。
-            for index, module_id in enumerate(module_ids, 1):
-                problem: ProblemRef = self._find_problem(module_id)
-                self._update_job(
-                    job_id,
-                    current=index,
-                    total=total,
-                    title=problem.title,
-                    message=f"题目 {index}/{total}：{problem.title}",
-                )
-                solved: bool
-                solved_text: str
-                solved, solved_text = self._is_solved(problem)
-                if solved:
-                    already_list.append({
-                        "module_id": problem.module_id,
-                        "title": problem.title,
-                        "message": solved_text or "此前已 AC",
-                    })
-                    self._push_event(job_id, f"跳过已通过：{problem.title}", "success")
-                    continue
+            # 步骤 1：只登录一次，再把登录 Cookie 克隆给各线程。
+            # 同一账号重复登录会让平台使旧会话失效，导致只有最后一个线程能正常访问。
+            base_site: MoodleSite = self._ensure_login()
+            contexts: list[tuple[MoodleSite, AIClient]] = []
+            for _ in range(workers):
+                contexts.append((base_site.clone(), self._build_ai()))
 
-                detail: ProblemDetail = self._ensure_detail(problem)
-                part: Part | None = self._part_of(module_id)
-                part_name: str = part.name if part else ""
-                # 每题独立状态：自动模式从“关闭思考 + 5000 输出上限”开始。
-                level: str = ai.resolve_thinking_level()
-                budget: int = INITIAL_MAX_TOKENS
-                analysis: QuestionAnalysis | None = self._analyses.get(module_id)
-                previous: Consequence | None = None
-                attempts: int = self._attempts.get(module_id, 0)
-                submit_errors: int = 0
-                solved_this: bool = False
-                failure_record: dict[str, Any] | None = None
+            # 步骤 2：线程按连续分段处理题目。
+            outcomes: list[dict[str, Any]] = []
+            outcomes_lock: threading.Lock = threading.Lock()
 
-                while attempts < _MAX_ATTEMPTS:
-                    # 步骤 1：需要时生成思路；判题逻辑失败后会置空以更高等级重析。
-                    if analysis is None:
-                        self._update_job(
-                            job_id,
-                            phase="analysis",
-                            message=(
-                                f"生成思路 {index}/{total}：{problem.title}"
-                                f"（思考：{_THINKING_LABELS.get(level, level)}）"
-                            ),
+            def worker(
+                worker_index: int,
+                chunk: list[int],
+                site: MoodleSite,
+                ai: AIClient,
+            ) -> None:
+                """处理一个连续题目分段。"""
+                for module_id in chunk:
+                    try:
+                        outcome: dict[str, Any] = self._solve_problem(
+                            job_id, module_id, site, ai, worker_index
+                        )
+                    except Exception as exc:  # 单题异常不拖垮整个线程。
+                        _LOGGER.exception(
+                            "解题线程 %s 处理题目 %s 失败",
+                            worker_index + 1,
+                            module_id,
                         )
                         try:
-                            analysis = analysis_question_info(
-                                ai,
-                                detail,
-                                previous=previous,
-                                course_name=course_name,
-                                part_name=part_name,
-                                max_tokens=budget,
-                                thinking_level=level,
-                            )
-                        except AIError as exc:
-                            failure_record = {
-                                "module_id": problem.module_id,
-                                "title": problem.title,
-                                "status": "AI_ERROR",
+                            title: str = self._find_problem(module_id).title
+                        except Exception:
+                            title = str(module_id)
+                        self._set_problem_status(
+                            job_id,
+                            module_id,
+                            "错误：内部异常",
+                            attempts=self._attempts.get(module_id, 0),
+                            worker=worker_index,
+                        )
+                        outcome = {
+                            "kind": "failed",
+                            "data": {
+                                "module_id": module_id,
+                                "title": title,
+                                "status": "ERROR",
                                 "summary": str(exc),
                                 "compile_message": "",
-                                "attempts": attempts,
-                            }
-                            self._push_event(
-                                job_id,
-                                f"生成思路失败：{problem.title} - {exc}",
-                                "error",
-                            )
-                            break
-                        self._analyses[module_id] = analysis
-                        self._push_event(
-                            job_id,
-                            f"思路已生成：{problem.title}"
-                            f"（思考：{_THINKING_LABELS.get(level, level)}）",
-                            "info",
-                        )
-
-                    # 步骤 2：生成题解并提交。
-                    attempts += 1
-                    level_label: str = _THINKING_LABELS.get(level, level)
-                    self._update_job(
-                        job_id,
-                        phase="solution",
-                        message=(
-                            f"题解 {index}/{total}：{problem.title} "
-                            f"（第 {attempts}/{_MAX_ATTEMPTS} 次，思考：{level_label}）"
-                        ),
-                    )
-                    try:
-                        solution: SolutionDraft = generate_solution(
-                            ai,
-                            detail,
-                            analysis,
-                            previous=previous,
-                            max_tokens=budget,
-                            thinking_level=level,
-                        )
-                    except AIError as exc:
-                        failure_record = {
-                            "module_id": problem.module_id,
-                            "title": problem.title,
-                            "status": "AI_ERROR",
-                            "summary": str(exc),
-                            "compile_message": "",
-                            "attempts": attempts - 1,
+                                "attempts": self._attempts.get(module_id, 0),
+                            },
                         }
-                        self._push_event(
-                            job_id,
-                            f"生成题解失败：{problem.title} - {exc}",
-                            "error",
-                        )
-                        break
-                    self._solutions[module_id] = solution
-
-                    # 关键步骤：提交前确保 activity_id 已解析。
-                    activity_id: int | None = problem.activity_id
-                    if activity_id is None:
-                        activity_id = site.resolve_activity_id(module_id)
-                        problem.activity_id = activity_id
-                    if activity_id is None:
-                        failure_record = {
-                            "module_id": problem.module_id,
-                            "title": problem.title,
-                            "status": "NO_ACTIVITY_ID",
-                            "summary": "无法确定该题的提交编号",
-                            "compile_message": "",
-                            "attempts": attempts - 1,
-                        }
-                        self._push_event(
-                            job_id,
-                            f"无法提交：{problem.title}（缺少 activity_id）",
-                            "error",
-                        )
-                        break
-                    try:
-                        submit_id: int | None = site.submit(
-                            activity_id, solution.code, "gcc"
-                        )
-                    except SubmitError as exc:
-                        submit_errors += 1
-                        attempts -= 1  # 被拒绝的提交不消耗次数。
-                        self._push_event(
-                            job_id, f"提交被拒绝：{problem.title} - {exc}", "warn"
-                        )
-                        if submit_errors >= _MAX_SUBMIT_ERRORS:
-                            failure_record = {
-                                "module_id": problem.module_id,
-                                "title": problem.title,
-                                "status": "SUBMIT_REJECTED",
-                                "summary": str(exc),
-                                "compile_message": "",
-                                "attempts": attempts,
-                            }
-                            break
-                        time.sleep(1.0)
-                        continue
-
-                    with self._state_lock:
-                        self._attempts[module_id] = attempts
-                    consequence: Consequence = site.poll_consequence(
-                        activity_id, submit_id, timeout=150.0
+                    with outcomes_lock:
+                        outcomes.append(outcome)
+                    data: Any = outcome.get("data")
+                    title_text: str = (
+                        str(data.get("title") or "")
+                        if isinstance(data, dict)
+                        else ""
                     )
-                    self._last_consequences[module_id] = consequence
-                    problem.my_result = (
-                        "AC: Accepted" if consequence.is_ac else consequence.status
-                    )
-                    if consequence.is_ac:
-                        solved_this = True
-                        ac_list.append({
-                            "module_id": problem.module_id,
-                            "title": problem.title,
-                            "solution_title": solution.solution_title,
-                            "explanation": solution.explanation,
-                            "code": solution.code,
-                            "notes": solution.notes,
-                            "attempts": attempts,
-                        })
-                        self._push_event(
-                            job_id, f"AC：{problem.title}（第 {attempts} 次）", "success"
-                        )
-                        break
+                    self._complete_problem(job_id, title_text)
 
-                    # 步骤 3：未通过。PE/CE 只重写代码；其他失败按自动规则升级。
-                    previous = consequence
-                    status_code: str = _status_code(consequence.status)
-                    self._push_event(
-                        job_id,
-                        f"{problem.title} 第 {attempts} 次未通过：{consequence.status}",
-                        "warn",
+            if workers <= 1:
+                worker(0, chunks[0], contexts[0][0], contexts[0][1])
+            else:
+                threads: list[threading.Thread] = []
+                for index, chunk in enumerate(chunks):
+                    thread: threading.Thread = threading.Thread(
+                        target=worker,
+                        args=(index, chunk, contexts[index][0], contexts[index][1]),
+                        name=f"CSolutionWorker{index + 1}",
+                        daemon=True,
                     )
-                    if status_code in _NO_ESCALATE_STATUSES:
-                        self._push_event(
-                            job_id,
-                            f"{problem.title} 为 {status_code}，不提高思考等级与"
-                            "输出上限，仅重新生成解答代码",
-                            "info",
-                        )
-                        continue
-                    if ai.auto_thinking:
-                        old_level: str = level
-                        old_budget: int = budget
-                        level = next_thinking_level(level)
-                        budget = min(budget * 2, MAX_OUTPUT_TOKENS)
-                        if level != old_level or budget != old_budget:
-                            self._push_event(
-                                job_id,
-                                f"{problem.title} 判题失败，思考等级 "
-                                f"{_THINKING_LABELS.get(old_level, old_level)} → "
-                                f"{_THINKING_LABELS.get(level, level)}，输出上限 "
-                                f"{old_budget} → {budget}",
-                                "info",
-                            )
-                    # 逻辑失败后带上判题反馈重新分析（PE/CE 保持原思路）。
-                    analysis = None
+                    thread.start()
+                    threads.append(thread)
+                for thread in threads:
+                    thread.join()
 
-                if not solved_this:
-                    if failure_record is None:
-                        last: Consequence | None = self._last_consequences.get(
-                            module_id
-                        )
-                        failure_record = {
-                            "module_id": problem.module_id,
-                            "title": problem.title,
-                            "status": last.status if last else "FAILED",
-                            "summary": last.summary if last else "",
-                            "compile_message": last.compile_message if last else "",
-                            "attempts": self._attempts.get(module_id, attempts),
-                        }
-                    failed_list.append(failure_record)
+            # 步骤 3：汇总各线程结果。
+            for outcome in outcomes:
+                kind: str = str(outcome.get("kind") or "failed")
+                data: Any = outcome.get("data")
+                payload: dict[str, Any] = data if isinstance(data, dict) else {}
+                if kind == "ac":
+                    ac_list.append(payload)
+                elif kind == "already":
+                    already_list.append(payload)
+                else:
+                    failed_list.append(payload)
 
             result: dict[str, Any] = {
                 "ac": ac_list,

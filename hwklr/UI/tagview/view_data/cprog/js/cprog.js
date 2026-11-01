@@ -1,10 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-11-01 00:01
-  最后更新: 2026-11-01 01:15
+  最后更新: 2026-11-01 20:39
   文件名: cprog.js
   主要用途: “C程序设计”页面逻辑：课程/题目选择、启发模式分步弹窗、题解模式后台任务与结果弹窗（仅展示一次）。
-  文件版本: 2.0.1
+  文件版本: 2.3.1
 */
 
 (function () {
@@ -35,8 +35,7 @@
     lastConsequence: null,
     solutionItems: [],
     solutionIndex: 0,
-    analysisFont: 14,
-    solutionFont: 14,
+    jobProblemStates: {},
     keydownHandler: null,
     lastNotifiedJobId: '',
     resultShownJobId: '',
@@ -78,8 +77,6 @@
     els.analysisBody = document.getElementById('c-analysis-body');
     els.analysisPrev = document.getElementById('c-analysis-prev');
     els.analysisNext = document.getElementById('c-analysis-next');
-    els.fontMinus = document.getElementById('c-font-minus');
-    els.fontPlus = document.getElementById('c-font-plus');
     els.solutionConfirm = document.getElementById('c-solution-confirm');
     els.solutionYes = document.getElementById('c-solution-yes');
     els.solutionNo = document.getElementById('c-solution-no');
@@ -91,8 +88,6 @@
     els.solutionExplanation = document.getElementById('c-solution-explanation');
     els.solutionCode = document.getElementById('c-solution-code');
     els.solutionNotes = document.getElementById('c-solution-notes');
-    els.solutionFontMinus = document.getElementById('c-solution-font-minus');
-    els.solutionFontPlus = document.getElementById('c-solution-font-plus');
     els.solutionResultClose = document.getElementById('c-solution-result-close');
   }
 
@@ -278,6 +273,7 @@
     }
     state.selectedCourseId = courseId;
     state.selected.clear();
+    state.jobProblemStates = {};
     renderCourses();
     if (showLoading !== false) {
       App.setLoading(true, '正在读取课程题目…');
@@ -344,6 +340,66 @@
   }
 
   /**
+   * 根据题目状态文本选择徽标样式。
+   * @param {string} status 状态文本。
+   * @returns {'ok'|'warn'|'bad'|'info'} 徽标样式。
+   */
+  function statusPillKind(status) {
+    const text = String(status || '');
+    if (text.startsWith('AC')) {
+      return 'ok';
+    }
+    if (text === '未提交') {
+      return 'info';
+    }
+    if (text === '等待队列') {
+      return 'queued';
+    }
+    if (text === '生成题解') {
+      return 'working';
+    }
+    if (text === '提交中') {
+      return 'submitting';
+    }
+    if (text.startsWith('错误') || text.startsWith('AI错误')
+        || text.includes('失败') || text.includes('无法') || text.includes('异常')
+        || /^(WA|TLE|MLE|RE|CE|PE|OLE|TR|RJ|MC)/.test(text)) {
+      return 'bad';
+    }
+    return text ? 'warn' : 'info';
+  }
+
+  /**
+   * 用后端任务状态实时更新题目列表中的状态徽标。
+   * @param {Array<Object>} problems 任务中的题目状态列表。
+   * @returns {void}
+   */
+  function updateProblemPills(problems) {
+    if (!Array.isArray(problems) || !els.problemBody) {
+      return;
+    }
+    const map = {};
+    problems.forEach((item) => {
+      if (item && item.module_id !== undefined) {
+        map[String(item.module_id)] = item;
+      }
+    });
+    state.jobProblemStates = map;
+    els.problemBody.querySelectorAll('tr[data-module-id]').forEach((row) => {
+      const item = map[row.dataset.moduleId];
+      if (!item || !item.status) {
+        return;
+      }
+      const pill = row.querySelector('.pill[data-job-status]');
+      if (!pill) {
+        return;
+      }
+      pill.textContent = String(item.status);
+      pill.className = 'pill ' + statusPillKind(item.status);
+    });
+  }
+
+  /**
    * 渲染当前部分的题目列表。
    * @returns {void}
    */
@@ -366,6 +422,7 @@
     }
     part.problems.forEach((problem) => {
       const row = document.createElement('tr');
+      row.dataset.moduleId = String(problem.module_id);
       const checkCell = document.createElement('td');
       checkCell.className = 'check-col';
       const checkbox = document.createElement('input');
@@ -378,11 +435,12 @@
       row.appendChild(node('td', '', String(problem.number)));
       row.appendChild(node('td', 'chapter-cell', String(problem.title || '未命名题目')));
       const statusCell = document.createElement('td');
-      const pill = node(
-        'span',
-        'pill ' + (isSolved(problem) ? 'ok' : problem.my_result ? 'warn' : 'info'),
-        isSolved(problem) ? 'AC' : (problem.my_result || '未提交')
-      );
+      const jobState = state.jobProblemStates[String(problem.module_id)];
+      const statusText = jobState && jobState.status
+        ? jobState.status
+        : (isSolved(problem) ? 'AC' : (problem.my_result || '未提交'));
+      const pill = node('span', 'pill ' + statusPillKind(statusText), statusText);
+      pill.dataset.jobStatus = '1';
       statusCell.appendChild(pill);
       row.appendChild(statusCell);
       els.problemBody.appendChild(row);
@@ -487,9 +545,13 @@
    * 更新本地题目状态。
    * @param {number} moduleId 模块 ID。
    * @param {string} status 新状态。
+   * @param {boolean} [keepJobState] 是否保留题解任务的实时状态覆盖。
    * @returns {void}
    */
-  function updateProblemStatus(moduleId, status) {
+  function updateProblemStatus(moduleId, status, keepJobState) {
+    if (!keepJobState) {
+      delete state.jobProblemStates[String(moduleId)];
+    }
     if (!state.structure) {
       return;
     }
@@ -605,9 +667,6 @@
     const analysis = data.analysis || {};
     if (els.analysisTitle) {
       els.analysisTitle.textContent = `${data.problem.title} · 启发模式`;
-    }
-    if (els.analysisModal) {
-      els.analysisModal.style.setProperty('--c-analysis-font', `${state.analysisFont}px`);
     }
     if (els.analysisStepper) {
       els.analysisStepper.querySelectorAll('.step').forEach((button, index) => {
@@ -851,8 +910,21 @@
       state.currentJob = null;
       state.resultShownJobId = '';
       state.lastNotifiedJobId = '';
+      state.jobProblemStates = {};
+      if (Array.isArray(data.problems)) {
+        updateProblemPills(data.problems);
+      } else {
+        moduleIds.forEach((moduleId) => {
+          state.jobProblemStates[String(moduleId)] = {
+            module_id: moduleId,
+            status: '等待队列',
+          };
+        });
+        renderProblems();
+      }
       updateModeUI();
       updateSelectionUI();
+      renderCourses();
       setBusy(false);
       schedulePoll();
     } catch (error) {
@@ -888,6 +960,7 @@
     try {
       const job = await App.callOk('get_solution_job', { job_id: state.jobId });
       state.currentJob = job;
+      updateProblemPills(job.problems);
       updateProgress(job);
       if (job.done) {
         if (state.jobTimer) {
@@ -897,6 +970,9 @@
         updateModeUI();
         updateSelectionUI();
         applySolutionStatuses(job.result || {});
+        // 任务结束后恢复课程按钮与部分标签（尤其是切换标签/手动刷新后完成时）。
+        renderCourses();
+        renderParts();
         // 结果只展示一次；切换标签再回来不重复弹出。
         if (App.active === PAGE_NAME && state.resultShownJobId !== state.jobId) {
           renderSolutionResult(job.result || {});
@@ -961,9 +1037,9 @@
    * @returns {void}
    */
   function applySolutionStatuses(result) {
-    (result.ac || []).forEach((item) => updateProblemStatus(item.module_id, 'AC: Accepted'));
-    (result.already_ac || []).forEach((item) => updateProblemStatus(item.module_id, 'AC: Accepted'));
-    (result.failed || []).forEach((item) => updateProblemStatus(item.module_id, item.status || '未通过'));
+    (result.ac || []).forEach((item) => updateProblemStatus(item.module_id, 'AC: Accepted', true));
+    (result.already_ac || []).forEach((item) => updateProblemStatus(item.module_id, 'AC: Accepted', true));
+    (result.failed || []).forEach((item) => updateProblemStatus(item.module_id, item.status || '未通过', true));
     renderProblems();
   }
 
@@ -1091,9 +1167,6 @@
       if (els.solutionNotes) {
         els.solutionNotes.textContent = '';
       }
-    }
-    if (els.solutionResult) {
-      els.solutionResult.style.setProperty('--c-solution-font', `${state.solutionFont}px`);
     }
   }
 
@@ -1243,30 +1316,6 @@
         }
       });
     }
-    if (els.fontMinus) {
-      els.fontMinus.addEventListener('click', () => {
-        state.analysisFont = Math.max(11, state.analysisFont - 1);
-        renderAnalysis();
-      });
-    }
-    if (els.fontPlus) {
-      els.fontPlus.addEventListener('click', () => {
-        state.analysisFont = Math.min(24, state.analysisFont + 1);
-        renderAnalysis();
-      });
-    }
-    if (els.solutionFontMinus) {
-      els.solutionFontMinus.addEventListener('click', () => {
-        state.solutionFont = Math.max(11, state.solutionFont - 1);
-        renderSolutionDetail();
-      });
-    }
-    if (els.solutionFontPlus) {
-      els.solutionFontPlus.addEventListener('click', () => {
-        state.solutionFont = Math.min(26, state.solutionFont + 1);
-        renderSolutionDetail();
-      });
-    }
     if (els.solutionResultClose) {
       els.solutionResultClose.addEventListener('click', () => {
         if (els.solutionResult) {
@@ -1343,20 +1392,32 @@
       App.toast(`读取 C 程序设计状态失败: ${error.message}`, 'error');
       return;
     }
-    if (state.jobId) {
-      await pollJob();
-      return;
-    }
+    // 标签切换会重新注入 HTML；先恢复缓存的课程、部分与题目。
     if (state.courses.length === 0) {
       await loadCourses(false);
       return;
     }
+    // 未完成任务或尚未展示结果时先轮询一次，更新 currentJob 后再统一渲染。
+    if (state.jobId && (!state.currentJob || state.currentJob.running
+        || state.resultShownJobId !== state.jobId)) {
+      await pollJob();
+    }
+    renderCachedView();
+  }
+
+  /**
+   * 根据内存中的课程/部分/题目状态重新渲染当前页面。
+   * 标签切换会重建 DOM，必须重新渲染，否则课程与部分标签会消失。
+   * @returns {void}
+   */
+  function renderCachedView() {
     renderCourses();
     if (state.structure) {
       renderParts();
       renderProblems();
     }
     updateSelectionUI();
+    updateModeUI();
   }
 
   App.registerPage(PAGE_NAME, { init: init, onActivate: onActivate });

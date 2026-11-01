@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
-# 最后更新: 2026-11-01 19:22
+# 最后更新: 2026-11-01 20:02
 # 文件名: config.py
 # 主要用途: 统一读写 config.json；V2 起按设置分组存放账号、密码、AI 与构建配置，并兼容打包后的可执行文件。
-# 文件版本: 2.2.0
+# 文件版本: 2.3.0
 """项目配置读写。
 
 配置文件固定位于**项目根目录**（``main.py`` 同级）的 ``config.json``。
@@ -20,7 +20,7 @@ import threading
 from pathlib import Path
 from typing import Any, Final
 
-__version__ = "2.2.0"
+__version__ = "2.3.0"
 __all__ = [
     "DEFAULT_CONFIG",
     "config_path",
@@ -45,6 +45,7 @@ DEFAULT_CONFIG: Final[dict[str, Any]] = {
         "base_url": "https://api.deepseek.com",
         "api_key": "",
         "thinking_level": "auto",
+        "max_concurrency": 1,
         "enable_solution_mode": False,
         "last_course_id": None,
     },

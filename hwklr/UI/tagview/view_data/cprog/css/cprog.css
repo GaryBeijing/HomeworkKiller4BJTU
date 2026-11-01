@@ -1,10 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-11-01 00:01
-  最后更新: 2026-11-01 01:15
+  最后更新: 2026-11-01 20:39
   文件名: cprog.css
   主要用途: “C程序设计”标签页样式：自适应高度布局、左侧进度、模式切换、启发弹窗与题解结果。
-  文件版本: 2.0.1
+  文件版本: 2.3.1
 */
 
 .content-host:has(> .tag-cprog) {
@@ -223,6 +223,22 @@
 
 .tag-cprog .data-table input[type="checkbox"]:disabled {
   cursor: not-allowed;
+}
+
+/* 题目状态徽标：未提交蓝、等待队列灰、生成题解橙、提交中黄、AC 绿、错误红。 */
+.tag-cprog .pill.queued {
+  background: #eef0f4;
+  color: #6b7280;
+}
+
+.tag-cprog .pill.working {
+  background: #fff0e5;
+  color: #c2410c;
+}
+
+.tag-cprog .pill.submitting {
+  background: #fff8cc;
+  color: #8a6d00;
 }
 
 .tag-cprog .c-actions {
