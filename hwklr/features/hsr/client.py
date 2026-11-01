@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
-# 作者: Gary
+# 作者: PhiloK (Remaster by Gary)
 # 编写日期: 2026-10-31 20:45
+# 最后更新: 2026-11-01 10:21
 # 文件名: client.py
 # 主要用途: 封装高铁答题系统的验证码、登录与考试接口。
-# 文件版本: 1.0.0
+# 文件版本: 2.0.2
 """高铁答题系统 API 客户端。
 
+原作者 PhiloK（``B1.0/hsr_client.py``）；本文件是 Gary 的 Remaster 实现。
 接口地址与原版保持一致；所有网络请求都使用显式超时，并在失败时抛出
 :class:`HsrApiError`，由上层转换为用户可读提示。
 """
@@ -21,7 +23,7 @@ from typing import Any, Final
 from .aes import aes_ecb_encrypt_b64
 from .captcha import solve_offset
 
-__version__ = "1.0.0"
+__version__ = "2.0.2"
 __all__ = ["BASE_URL", "HsrApiError", "HsrClient"]
 
 BASE_URL: Final[str] = "http://59.64.5.158/prod-api"

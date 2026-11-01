@@ -1,10 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-10-31 20:45
-  最后更新: 2026-11-01 00:01
+  最后更新: 2026-11-01 12:40
   文件名: settings.css
-  主要用途: “设置”标签页样式：动态设置分组、高亮提醒、开关与运行信息。
-  文件版本: 2.0.0
+  主要用途: “设置”标签页样式：动态设置分组、Feature 开发标记表、高亮提醒、可选填/高级字段标记、高级设置确认弹窗、开关与运行信息。
+  文件版本: 2.1.0
 */
 
 .tag-settings .settings-layout {
@@ -94,10 +94,116 @@
   font-weight: 600;
 }
 
+/* 可选填字段：灰字 + 左上角灰色星号。 */
+.tag-settings .settings-field.optional {
+  position: relative;
+  padding-left: 12px;
+}
+
+.tag-settings .settings-field.optional::before {
+  content: "*";
+  position: absolute;
+  top: -3px;
+  left: 0;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+}
+
+.tag-settings .settings-field.optional .settings-field-label,
+.tag-settings .settings-field.optional .settings-field-help {
+  color: var(--muted);
+}
+
+.tag-settings .settings-field.optional input,
+.tag-settings .settings-field.optional select {
+  color: var(--muted);
+}
+
+/* alert 字段：深黄色文字提醒这是高级设置（保证浅色背景上的对比度）。 */
+.tag-settings .settings-field.alert-field .settings-field-label {
+  color: #8a5a00;
+}
+
+/* 高级设置二次确认弹窗。 */
+.alert-confirm-backdrop {
+  z-index: 85;
+}
+
+.alert-confirm-modal {
+  width: min(480px, 100%);
+}
+
+.alert-confirm-modal h3 {
+  padding-right: 12px;
+  color: #8a5a00;
+}
+
+.alert-confirm-text {
+  white-space: pre-line;
+}
+
+.alert-confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+
 .tag-settings .settings-field-help {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.6;
+}
+
+/* Feature / 版本 / 开发构建 表格。 */
+.tag-settings .settings-feature-table {
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.tag-settings .settings-feature-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 90px 90px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid #eef0f6;
+}
+
+.tag-settings .settings-feature-row:last-child {
+  border-bottom: none;
+}
+
+.tag-settings .settings-feature-row.head {
+  background: var(--panel-soft);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.tag-settings .settings-feature-row .feature-name {
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.tag-settings .settings-feature-row .feature-version {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.tag-settings .settings-feature-row .feature-dev {
+  display: flex;
+  justify-content: center;
+}
+
+.tag-settings .settings-feature-row .feature-dev input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
 }
 
 .tag-settings .secret-wrap {

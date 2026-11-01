@@ -1,0 +1,217 @@
+/*
+  作者: Gary
+  编写日期: 2026-11-01 12:40
+  文件名: build.css
+  主要用途: “构建”标签页样式：自适应高度、工具信息、版本号校验、开发构建提示、日志文本框与操作按钮。
+  文件版本: 2.1.0
+*/
+
+.content-host:has(> .tag-build) {
+  height: 100%;
+}
+
+.tag-build {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+@media (min-width: 1001px) {
+  .tag-build {
+    height: 100%;
+  }
+}
+
+.tag-build .build-card {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: 14px;
+}
+
+.tag-build .build-meta {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.tag-build .build-meta-item {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  background: var(--panel-soft);
+  min-width: 0;
+}
+
+.tag-build .build-meta-item span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.tag-build .build-meta-item strong {
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.tag-build .build-form {
+  display: grid;
+  grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
+  align-items: end;
+  gap: 18px;
+}
+
+.tag-build .build-field {
+  display: grid;
+  gap: 6px;
+}
+
+.tag-build .build-field-label {
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.tag-build .build-version-error {
+  color: var(--bad);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.tag-build #build-version.invalid {
+  border-color: var(--bad);
+  box-shadow: 0 0 0 3px rgba(192, 58, 58, 0.16);
+}
+
+.tag-build .build-dev-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 2px;
+}
+
+.tag-build .build-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-soft);
+  font-size: 14px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.tag-build .build-check input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* 开发构建 (i) 悬浮提示。 */
+.tag-build .build-info {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--panel-border);
+  background: var(--panel-soft);
+  color: var(--muted);
+  font-size: 11px;
+  font-style: italic;
+  font-weight: 700;
+  cursor: help;
+}
+
+.tag-build .build-info-box {
+  position: absolute;
+  z-index: 20;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  width: min(360px, 70vw);
+  padding: 10px 12px;
+  transform: translateX(-50%);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1.7;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+.tag-build .build-info:hover .build-info-box,
+.tag-build .build-info:focus .build-info-box {
+  opacity: 1;
+}
+
+.tag-build .build-log-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tag-build .build-log-head h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.tag-build .build-log {
+  flex: 1 1 auto;
+  min-height: 180px;
+  width: 100%;
+  resize: none;
+  padding: 10px 12px;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  background: var(--panel-soft);
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.65;
+  white-space: pre;
+  overflow: auto;
+}
+
+.tag-build .build-log:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.tag-build .build-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+@media (max-width: 1000px) {
+  .tag-build .build-meta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tag-build .build-form {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+@media (max-width: 620px) {
+  .tag-build .build-meta {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tag-build .build-log {
+    min-height: 140px;
+  }
+}

@@ -1,13 +1,17 @@
 # Created by venv; see https://docs.python.org/3/library/venv.html
-B*/
-Include/
-Lib/
-Scripts/
-SoftwareIntro/
-pyvenv.cfg
+/B*/
+/Include/
+/Lib/
+/Scripts/
+/SoftwareIntro/
+/pyvenv.cfg
 
 # 运行期生成的缓存与本地凭据
 __pycache__/
 *.pyc
-config.json
-run.bat
+/config.json
+/run.bat
+
+# 构建产物与 python-embed 下载缓存（仅项目根目录的 build/，不要忽略功能源码目录）
+/build/
+hwklr/features/build/vendor/*.zip

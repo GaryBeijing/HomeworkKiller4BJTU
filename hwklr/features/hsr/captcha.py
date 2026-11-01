@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
-# 作者: Gary
+# 作者: PhiloK (Remaster by Gary)
 # 编写日期: 2026-10-31 20:45
+# 最后更新: 2026-11-01 10:21
 # 文件名: captcha.py
 # 主要用途: 使用 Pillow 对滑块拼图验证码做模板匹配并求出缺口横向偏移。
-# 文件版本: 1.0.0
+# 文件版本: 2.0.2
 """滑块验证码拼图匹配。
 
+原作者 PhiloK（``B1.0/hsr_client.py`` 中的验证码逻辑）；本文件是 Gary 的 Remaster 实现。
 与原版纯 Python 逐像素扫描相比，这里把像素差值计算交给 Pillow 的 C 实现
 （``ImageChops.difference`` + ``ImageStat``），并只统计拼图块不透明像素，
 在保持匹配结果一致的前提下显著降低耗时。
@@ -18,7 +20,7 @@ from typing import Final, NamedTuple
 
 from PIL import Image, ImageChops, ImageStat
 
-__version__ = "1.0.0"
+__version__ = "2.0.2"
 __all__ = ["CaptchaOffset", "solve_offset"]
 
 # alpha 通道大于该阈值才视为拼图块的有效像素（与原版一致）。

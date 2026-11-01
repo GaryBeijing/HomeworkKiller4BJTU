@@ -1,0 +1,69 @@
+<!--
+  作者: Gary
+  编写日期: 2026-11-01 12:40
+  文件名: index.html
+  主要用途: “构建”标签页结构：工具版本、导出显示版本号、开发构建开关、构建日志与构建按钮。
+  文件版本: 2.1.0
+-->
+<section class="tag-page tag-build" id="build-page">
+  <div class="hero">
+    <div>
+      <h1>构建</h1>
+      <p>把当前程序导出为可直接运行的分发包。发布构建会裁剪开发功能与参考文档；开发构建保留完整内容。构建在后台执行，过程显示在下方文本框。</p>
+    </div>
+    <div class="hero-badge" id="build-tool-badge">构建工具 —</div>
+  </div>
+
+  <section class="card build-card">
+    <div class="build-meta">
+      <div class="build-meta-item">
+        <span>构建工具版本</span>
+        <strong id="build-tool-version">—</strong>
+      </div>
+      <div class="build-meta-item">
+        <span>默认输出目录</span>
+        <strong id="build-output-path" class="mono">—</strong>
+      </div>
+      <div class="build-meta-item">
+        <span>开发构建格式</span>
+        <strong id="build-dev-format">—</strong>
+      </div>
+      <div class="build-meta-item">
+        <span>功能开发标记</span>
+        <strong id="build-dev-features">—</strong>
+      </div>
+    </div>
+
+    <div class="build-form">
+      <label class="build-field">
+        <span class="build-field-label">导出显示版本号</span>
+        <input id="build-version" class="mono" type="text" autocomplete="off" spellcheck="false" placeholder="x.y.z" aria-describedby="build-version-error">
+        <span id="build-version-error" class="build-version-error hidden" role="alert">版本号不合法！</span>
+      </label>
+
+      <div class="build-dev-row">
+        <label class="build-check">
+          <input id="build-dev" type="checkbox">
+          <span>开发构建</span>
+        </label>
+        <span class="build-info" tabindex="0" aria-label="开发构建说明">i
+          <span class="build-info-box">
+            不勾选（默认）：发布构建。排除标记为 dev 的功能、构建标签与参考文档，不显示终端，并启用字节码优化，尽可能精简包体。<br>
+            勾选：全局导出，包含全部功能与文档。格式为 zip 时使用 python-embed 作为运行时；格式为 executable 时使用 PyInstaller 打包并显示终端。
+          </span>
+        </span>
+      </div>
+    </div>
+
+    <div class="build-log-head">
+      <h2>构建输出</h2>
+      <span id="build-status" class="pill info">空闲</span>
+    </div>
+    <textarea id="build-log" class="build-log mono" readonly spellcheck="false" placeholder="构建日志会显示在这里…"></textarea>
+
+    <div class="build-actions">
+      <button id="build-open-settings" class="btn ghost" type="button">构建设置</button>
+      <button id="build-start" class="btn primary" type="button">构建</button>
+    </div>
+  </section>
+</section>

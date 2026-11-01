@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
-# 最后更新: 2026-11-01 00:01
+# 最后更新: 2026-11-01 12:40
 # 文件名: settings.py
-# 主要用途: 设置分组框架（FeatureSettingsGroup）与“设置”标签页功能实现。
-# 文件版本: 2.0.0
+# 主要用途: 设置分组框架（FeatureSettingsGroup）与“设置”标签页功能实现，支持构建功能的 Feature 开发标记表。
+# 文件版本: 2.1.0
 """设置分组与设置页功能。
 
 V2 起，每个功能通过 :class:`FeatureSettingsGroup` 注册自己的设置板块：
@@ -27,7 +27,7 @@ from hwklr import runtime_data
 from hwklr.config import load_config, update_config
 from hwklr.features.base import ApiResult, Feature, failure, success
 
-__version__ = "2.0.0"
+__version__ = "2.1.0"
 __author__ = "Gary"
 __all__ = ["FeatureSettingsGroup", "SettingsFeature", "SettingsFieldSpec"]
 
@@ -36,7 +36,14 @@ _LOGGER: Final[logging.Logger] = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class SettingsFieldSpec:
-    """一个设置字段的静态定义。"""
+    """一个设置字段的静态定义。
+
+    ``is_necessary`` 只用于提示字段是否影响正常使用，不会阻止离开设置页；
+    设为 ``False`` 时前端以灰字与灰色星号标记“可选填”。
+
+    ``alert`` 标记高级/高风险设置；前端在该字段被修改并保存（含自动保存）时
+    弹出二次确认，避免用户误改导致功能失效。
+    """
 
     key: str
     label: str
@@ -49,6 +56,8 @@ class SettingsFieldSpec:
     max_value: float | None = None
     step: float | None = None
     strip: bool = True
+    is_necessary: bool = True
+    alert: bool = False
 
 
 class FeatureSettingsGroup:
@@ -117,7 +126,7 @@ class FeatureSettingsGroup:
         values: dict[str, Any] = self.values()
         result: list[dict[str, Any]] = []
         for spec in self._field_specs:
-            result.append({
+            entry: dict[str, Any] = {
                 "key": spec.key,
                 "label": spec.label,
                 "kind": spec.kind,
@@ -131,7 +140,22 @@ class FeatureSettingsGroup:
                 "min": spec.min_value,
                 "max": spec.max_value,
                 "step": spec.step,
-            })
+                "is_necessary": spec.is_necessary,
+                "alert": spec.alert,
+            }
+            # #features 类型额外输出每行的名称、版本与开发标记，供前端渲染表格。
+            if spec.kind == "features":
+                raw_dev: Any = values.get(spec.key)
+                dev_map: dict[str, Any] = raw_dev if isinstance(raw_dev, dict) else {}
+                entry["rows"] = [
+                    {
+                        "name": name,
+                        "version": version,
+                        "dev": _as_dev_state(dev_map.get(name)),
+                    }
+                    for name, version in spec.options
+                ]
+            result.append(entry)
         return result
 
     def normalize(self, raw_values: dict[str, Any]) -> dict[str, Any]:
@@ -170,6 +194,29 @@ class FeatureSettingsGroup:
                 if allowed and text not in allowed:
                     raise ValueError("%s 的取值不合法" % spec.label)
                 normalized[spec.key] = text
+            elif spec.kind == "features":
+                current_map: Any = normalized.get(spec.key)
+                merged: dict[str, str] = {}
+                if isinstance(current_map, dict):
+                    for name, state in current_map.items():
+                        merged[str(name)] = (
+                            "dev" if _as_dev_state(state) else "release"
+                        )
+                if isinstance(raw, dict):
+                    allowed_names: set[str] = {
+                        name for name, _version in spec.options
+                    }
+                    for name, state in raw.items():
+                        if str(name) not in allowed_names:
+                            continue
+                        merged[str(name)] = (
+                            "dev" if _as_dev_state(state) else "release"
+                        )
+                # 只保留当前登记的功能，避免配置中残留已移除功能。
+                normalized[spec.key] = {
+                    name: merged.get(name, "release")
+                    for name, _version in spec.options
+                }
             else:
                 text = str(raw if raw is not None else "")
                 normalized[spec.key] = text.strip() if spec.strip else text
@@ -216,6 +263,20 @@ class FeatureSettingsGroup:
             "complete": self.is_complete(),
             "missing": self.missing_labels(),
         }
+
+
+def _as_dev_state(value: Any) -> bool:
+    """判断 features 字段中的一项是否标记为开发构建。
+
+    Args:
+        value: ``True`` / ``False``，或 ``"dev"`` / ``"release"`` 等前端值。
+
+    Returns:
+        标记为 dev 返回 ``True``。
+    """
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "on", "dev", "是"}
 
 
 def _as_bool(value: Any) -> bool:

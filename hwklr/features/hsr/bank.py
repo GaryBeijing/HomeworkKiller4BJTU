@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
-# 作者: Gary
+# 作者: PhiloK (Remaster by Gary)
 # 编写日期: 2026-10-31 20:45
+# 最后更新: 2026-11-01 10:21
 # 文件名: bank.py
 # 主要用途: 题库加载、题干归一化匹配与答案到选项编码的解析。
-# 文件版本: 1.0.0
+# 文件版本: 2.0.2
 """题库与答案解析。
 
-完整保留原版 ``hsr_bank.py`` 的匹配语义：
+原作者 PhiloK（``B1.0/hsr_bank.py``）；本文件是 Gary 的 Remaster 实现。
+完整保留原版的匹配语义：
 1. 题干归一化后优先精确匹配；
 2. 精确未命中时使用保守模糊匹配（相似度阈值 0.90）；
 3. 有题库答案选项时按“选项原文”匹配考卷选项，字母仅作兜底；
@@ -23,7 +25,7 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Final
 
-__version__ = "1.0.0"
+__version__ = "2.0.2"
 __all__ = [
     "Bank",
     "BankItem",

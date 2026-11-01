@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
-# 最后更新: 2026-11-01 00:01
+# 最后更新: 2026-11-01 12:40
 # 文件名: config.py
-# 主要用途: 统一读写项目根目录 config.json；V2 起按设置分组存放账号、高铁密码与 C 程序设计 AI 配置。
-# 文件版本: 2.0.0
+# 主要用途: 统一读写 config.json；V2 起按设置分组存放账号、密码、AI 与构建配置，并兼容打包后的可执行文件。
+# 文件版本: 2.1.0
 """项目配置读写。
 
 配置文件固定位于**项目根目录**（``main.py`` 同级）的 ``config.json``。
@@ -15,11 +15,12 @@ from __future__ import annotations
 import copy
 import json
 import logging
+import sys
 import threading
 from pathlib import Path
 from typing import Any, Final
 
-__version__ = "1.0.0"
+__version__ = "2.1.0"
 __all__ = [
     "DEFAULT_CONFIG",
     "config_path",
@@ -47,6 +48,15 @@ DEFAULT_CONFIG: Final[dict[str, Any]] = {
         "enable_solution_mode": False,
         "last_course_id": None,
     },
+    "build": {
+        "output_dir": "",
+        "dev_format": "executable",
+        "features": {
+            "高铁纵横": "release",
+            "C程序设计": "release",
+            "构建": "dev",
+        },
+    },
     "ui": {
         "width": 1100,
         "height": 720,
@@ -66,9 +76,15 @@ DEFAULT_CONFIG: Final[dict[str, Any]] = {
 def config_path() -> Path:
     """返回配置文件路径。
 
+    源码运行时位于项目根目录；PyInstaller 打包后位于可执行文件同级目录，
+    避免用户配置被写进程序内部目录。
+
     Returns:
-        项目根目录下 ``config.json`` 的绝对路径。
+        ``config.json`` 的绝对路径。
     """
+    if getattr(sys, "frozen", False):
+        # 打包后 __file__ 位于 _internal 内，配置应放在 exe 旁边。
+        return Path(sys.executable).resolve().parent / "config.json"
     # hwklr/config.py -> hwklr -> 项目根目录
     return Path(__file__).resolve().parent.parent / "config.json"
 
@@ -149,6 +165,23 @@ def _migrate_config(config: dict[str, Any]) -> dict[str, Any]:
     for key, value in DEFAULT_CONFIG["c_programming"].items():
         cprog.setdefault(key, copy.deepcopy(value))
     config["c_programming"] = cprog
+
+    # 步骤 3：补齐构建分组；features 中缺失的功能默认标记为 release。
+    build: dict[str, Any] = (
+        config.get("build") if isinstance(config.get("build"), dict) else {}
+    )
+    for key, value in DEFAULT_CONFIG["build"].items():
+        if key == "features":
+            continue
+        build.setdefault(key, copy.deepcopy(value))
+    stored_features: Any = build.get("features")
+    features: dict[str, Any] = (
+        dict(stored_features) if isinstance(stored_features, dict) else {}
+    )
+    for name, state in DEFAULT_CONFIG["build"]["features"].items():
+        features.setdefault(name, state)
+    build["features"] = features
+    config["build"] = build
     return config
 
 

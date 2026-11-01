@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
-# 作者: Gary
+# 作者: PhiloK (Remaster by Gary)
 # 编写日期: 2026-10-31 20:45
-# 最后更新: 2026-11-01 00:01
+# 最后更新: 2026-11-01 10:21
 # 文件名: __init__.py
 # 主要用途: 实现“高铁纵横”功能：登录、考试列表、自动答题与提交，并注册密码设置板块。
-# 文件版本: 2.0.0
+# 文件版本: 2.0.2
 """高铁纵横功能实现。
 
-重制自 ``B1.0/``：保留原有登录、验证码、考试列表、自动匹配答案、
+原作者 PhiloK（``B1.0/``）；本文件是 Gary 的 Remaster 实现。
+保留原有登录、验证码、考试列表、自动匹配答案、
 提交并显示得分的全部行为，同时把阻塞操作放到 pywebview 的桥接线程中执行，
 避免阻塞 UI。
 """
@@ -27,8 +28,8 @@ from hwklr.features.settings import FeatureSettingsGroup, SettingsFieldSpec
 from .bank import Bank
 from .client import HsrApiError, HsrClient
 
-__version__ = "2.0.0"
-__author__ = "Gary"
+__version__ = "2.0.2"
+__author__ = "PhiloK (Remaster by Gary)"
 __all__ = ["HSRFeature"]
 
 _LOGGER: Final[logging.Logger] = logging.getLogger(__name__)

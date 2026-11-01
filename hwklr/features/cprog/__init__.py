@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-01 00:01
+# 最后更新: 2026-11-01 10:21
 # 文件名: __init__.py
 # 主要用途: 实现“C程序设计”功能：课程/题目选择、启发模式、题解模式与设置板块。
-# 文件版本: 2.0.0
+# 文件版本: 2.0.2
 """C 程序设计功能。
 
 重制自 ``B_CHelper``，主要变化：
@@ -41,7 +42,7 @@ from .models import (
 from .parsers import deterministic_structure
 from .site import MoodleError, MoodleSite, SubmitError
 
-__version__ = "2.0.0"
+__version__ = "2.0.2"
 __author__ = "Gary"
 __all__ = ["CProgrammingFeature"]
 
@@ -220,6 +221,7 @@ class CProgrammingFeature(Feature):
                     kind="password",
                     secret=True,
                     strip=False,
+                    alert=True,
                     placeholder="仅保存在本机 config.json",
                 ),
                 SettingsFieldSpec(
@@ -235,6 +237,7 @@ class CProgrammingFeature(Feature):
                     key="enable_solution_mode",
                     label="启用题解模式",
                     kind="switch",
+                    alert=True,
                     help=(
                         "默认关闭。关闭时，C程序设计标签页中的题解模式不可选，"
                         "并显示锁头标志。"

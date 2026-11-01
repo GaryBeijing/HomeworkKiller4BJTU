@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
-# 作者: Gary
+# 作者: PhiloK (Remaster by Gary)
 # 编写日期: 2026-10-31 20:45
+# 最后更新: 2026-11-01 10:21
 # 文件名: aes.py
 # 主要用途: 提供 AES-128-ECB + PKCS7 加密，用于滑块验证码坐标校验参数。
-# 文件版本: 1.0.0
+# 文件版本: 2.0.2
 """AES-128-ECB 加密实现。
 
-与原版 ``hsr_aes.py`` 行为一致：匹配 crypto-js
+原作者 PhiloK（``B1.0/hsr_aes.py``）；本文件是 Gary 的 Remaster 实现。
+与原版行为一致：匹配 crypto-js
 ``AES.encrypt(key=Utf8(secretKey)).toString()`` 的加密结果。
 """
 from __future__ import annotations
@@ -14,7 +16,7 @@ from __future__ import annotations
 import base64
 from typing import Final
 
-__version__ = "1.0.0"
+__version__ = "2.0.2"
 __all__ = ["aes_ecb_encrypt_b64"]
 
 SBOX: Final[tuple[int, ...]] = (
