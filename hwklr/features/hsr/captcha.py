@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: PhiloK (Remaster by Gary)
 # 编写日期: 2026-10-31 20:45
-# 最后更新: 2026-11-01 10:21
+# 最后更新: 2026-11-01 12:15
 # 文件名: captcha.py
-# 主要用途: 使用 Pillow 对滑块拼图验证码做模板匹配并求出缺口横向偏移。
-# 文件版本: 2.0.2
+# 主要用途: 使用 Pillow 对滑块拼图验证码做模板匹配并求出缺口横向偏移（Pillow 延迟导入）。
+# 文件版本: 2.1.0
 """滑块验证码拼图匹配。
 
 原作者 PhiloK（``B1.0/hsr_client.py`` 中的验证码逻辑）；本文件是 Gary 的 Remaster 实现。
@@ -16,11 +16,12 @@ from __future__ import annotations
 
 import base64
 import io
-from typing import Final, NamedTuple
+from typing import TYPE_CHECKING, Final, NamedTuple
 
-from PIL import Image, ImageChops, ImageStat
+if TYPE_CHECKING:
+    from PIL import Image
 
-__version__ = "2.0.2"
+__version__ = "2.1.0"
 __all__ = ["CaptchaOffset", "solve_offset"]
 
 # alpha 通道大于该阈值才视为拼图块的有效像素（与原版一致）。
@@ -49,6 +50,9 @@ def _decode_image(raw_base64: str, mode: str) -> Image.Image:
         ValueError: 数据无法解析为图片时抛出。
     """
     try:
+        # 延迟导入 Pillow：只有真正识别验证码时才加载图片库，减少启动时间。
+        from PIL import Image
+
         raw_bytes: bytes = base64.b64decode(raw_base64)
         image: Image.Image = Image.open(io.BytesIO(raw_bytes))
         return image.convert(mode)
@@ -69,6 +73,9 @@ def solve_offset(original_base64: str, piece_base64: str) -> CaptchaOffset:
     Raises:
         ValueError: 图片为空、拼图块无有效像素或尺寸异常时抛出。
     """
+    # 延迟导入 Pillow：只有真正识别验证码时才加载图片库，减少启动时间。
+    from PIL import Image, ImageChops, ImageStat
+
     original: Image.Image = _decode_image(original_base64, "RGB")
     piece: Image.Image = _decode_image(piece_base64, "RGBA")
 

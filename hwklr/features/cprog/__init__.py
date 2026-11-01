@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-01 00:01
-# 最后更新: 2026-11-01 10:21
+# 最后更新: 2026-11-01 12:15
 # 文件名: __init__.py
-# 主要用途: 实现“C程序设计”功能：课程/题目选择、启发模式、题解模式与设置板块。
-# 文件版本: 2.0.2
+# 主要用途: 实现“C程序设计”功能：课程/题目选择、启发模式、题解模式与设置板块（依赖延迟加载）。
+# 文件版本: 2.1.0
 """C 程序设计功能。
 
 重制自 ``B_CHelper``，主要变化：
@@ -42,7 +42,7 @@ from .models import (
 from .parsers import deterministic_structure
 from .site import MoodleError, MoodleSite, SubmitError
 
-__version__ = "2.0.2"
+__version__ = "2.1.0"
 __author__ = "Gary"
 __all__ = ["CProgrammingFeature"]
 

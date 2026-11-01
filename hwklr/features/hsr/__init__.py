@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: PhiloK (Remaster by Gary)
 # 编写日期: 2026-10-31 20:45
-# 最后更新: 2026-11-01 10:21
+# 最后更新: 2026-11-01 12:15
 # 文件名: __init__.py
-# 主要用途: 实现“高铁纵横”功能：登录、考试列表、自动答题与提交，并注册密码设置板块。
-# 文件版本: 2.0.2
+# 主要用途: 实现“高铁纵横”功能：登录、考试列表、自动答题与提交，并注册密码设置板块（题库延迟加载）。
+# 文件版本: 2.1.0
 """高铁纵横功能实现。
 
 原作者 PhiloK（``B1.0/``）；本文件是 Gary 的 Remaster 实现。
@@ -28,7 +28,7 @@ from hwklr.features.settings import FeatureSettingsGroup, SettingsFieldSpec
 from .bank import Bank
 from .client import HsrApiError, HsrClient
 
-__version__ = "2.0.2"
+__version__ = "2.1.0"
 __author__ = "PhiloK (Remaster by Gary)"
 __all__ = ["HSRFeature"]
 
@@ -52,13 +52,26 @@ class HSRFeature(Feature):
             universal_param: 窗口层注入的通用参数。
         """
         super().__init__(universal_param)
-        # 内置知识库固定从 runtime_data 读取，不在运行时依赖 B1.0 目录。
-        self._bank: Bank = Bank(list(runtime_data.load_bank(_BANK_FEATURE_KEY)))
+        # 内置知识库在首次使用时才读取并构建索引，避免拖慢程序启动。
+        self._bank_cache: Bank | None = None
         self._client: HsrClient | None = None
         self._records: list[dict[str, Any]] = []
         self._last_exam: dict[str, Any] | None = None
         self._lock: threading.RLock = threading.RLock()
         self._settings_group: FeatureSettingsGroup = self._build_settings_group()
+
+    @property
+    def _bank(self) -> Bank:
+        """返回内置题库，首次访问时从 ``runtime_data`` 读取。
+
+        Returns:
+            已完成索引构建的题库对象。
+        """
+        if self._bank_cache is None:
+            self._bank_cache = Bank(
+                list(runtime_data.load_bank(_BANK_FEATURE_KEY))
+            )
+        return self._bank_cache
 
     @property
     def settings_group(self) -> FeatureSettingsGroup:

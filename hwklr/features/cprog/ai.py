@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-01 00:01
+# 最后更新: 2026-11-01 12:15
 # 文件名: ai.py
-# 主要用途: OpenAI 兼容 AI 客户端，以及启发模式讲解与题解模式的严格 JSON 提示词。
-# 文件版本: 2.0.0
+# 主要用途: OpenAI 兼容 AI 客户端（SDK 延迟导入），以及启发模式讲解与题解模式的严格 JSON 提示词。
+# 文件版本: 2.1.0
 """AI 客户端与结构化提示词。
 
 所有 AI 调用都要求返回 JSON 对象，并在本地做字段校验：
@@ -14,14 +15,15 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from openai import OpenAI
+if TYPE_CHECKING:
+    from openai import OpenAI
 
 from .models import Consequence, ProblemDetail, QuestionAnalysis, SolutionDraft
 from .parsers import clean_text
 
-__version__ = "2.0.0"
+__version__ = "2.1.0"
 __author__ = "Gary"
 __all__ = [
     "AIClient",
@@ -131,6 +133,9 @@ class AIClient:
         provider: str = str(setting.get("provider") or "deepseek").lower()
         if not api_key and provider == "local":
             api_key = "not-needed"
+        # 延迟导入 OpenAI SDK：仅在实际调用 AI 时才加载，避免拖慢程序启动。
+        from openai import OpenAI
+
         self._client: OpenAI = OpenAI(
             api_key=api_key or "not-needed",
             base_url=self.base_url,

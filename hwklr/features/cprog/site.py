@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-01 00:01
+# 最后更新: 2026-11-01 12:15
 # 文件名: site.py
-# 主要用途: CITEL / Moodle 课程平台的同步 HTTP 客户端（登录、课程、提交与判题轮询）。
-# 文件版本: 2.0.0
+# 主要用途: CITEL / Moodle 课程平台的同步 HTTP 客户端（登录、课程、提交与判题轮询；requests 延迟导入）。
+# 文件版本: 2.1.0
 """CITEL 课程平台客户端。
 
 V2 由 CLI 的异步实现改为同步方法：调用发生在 pywebview 的桥接线程或
@@ -12,14 +13,15 @@ V2 由 CLI 的异步实现改为同步方法：调用发生在 pywebview 的桥�
 from __future__ import annotations
 
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import requests
+if TYPE_CHECKING:
+    import requests
 
 from . import parsers
 from .models import Consequence, Course, IndexRow, ProblemDetail
 
-__version__ = "2.0.0"
+__version__ = "2.1.0"
 __author__ = "Gary"
 __all__ = [
     "BASE_URL",
@@ -74,8 +76,12 @@ class MoodleSite:
             base_url: 平台根地址。
             timeout: 普通请求超时秒数。
         """
+        # 延迟导入 requests：只有真正访问 CITEL 时才加载网络库，减少启动时间。
+        import requests
+
         self.base_url: str = base_url.rstrip("/")
         self.timeout: float = timeout
+        self._request_error: type[BaseException] = requests.RequestException
         self.session: requests.Session = requests.Session()
         self.session.headers.update({
             "User-Agent": (
@@ -118,7 +124,7 @@ class MoodleSite:
             )
             response.raise_for_status()
             return response
-        except requests.RequestException as exc:
+        except self._request_error as exc:
             raise MoodleError(f"访问课程网站失败：{exc}") from exc
 
     def _post_sync(
@@ -143,7 +149,7 @@ class MoodleSite:
             )
             response.raise_for_status()
             return response
-        except requests.RequestException as exc:
+        except self._request_error as exc:
             raise MoodleError(f"向课程网站提交请求失败：{exc}") from exc
 
     def login(self, username: str, password: str) -> tuple[bool, str]:

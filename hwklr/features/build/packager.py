@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-01 12:40
+# 最后更新: 2026-11-01 11:58
 # 文件名: packager.py
 # 主要用途: 构建功能的打包实现：源码裁剪、PyInstaller 目录版/可执行文件、python-embed zip 与版本注入。
 # 文件版本: 2.1.0
@@ -297,6 +298,15 @@ def _build_executable(
     else:
         # 发布构建：不显示终端，并启用字节码优化以减小体积、加快启动。
         cmd.extend(["--windowed", "--optimize", "2"])
+        # 生产环境不会走到的模块：
+        # - openpyxl / docx：仅用于 HSR 题库的多格式导入函数，当前 UI 无入口；
+        # - setuptools / packaging：仅构建或 cffi 编译辅助使用，运行时不需要；
+        # - lxml：C 页面解析已改用 bs4 自带的 html.parser，不再需要 lxml 二进制。
+        for module in ("openpyxl", "docx", "setuptools", "packaging", "lxml"):
+            cmd.extend(["--exclude-module", module])
+    # PyInstaller 仅用于构建，不属于应用运行依赖；显式排除可避免将来误导入时进入产物。
+    # 该选项只影响目标程序的依赖收集，不会影响当前正在执行的构建进程。
+    cmd.extend(["--exclude-module", "PyInstaller"])
     # 可选功能通过动态导入加载，必须显式告诉 PyInstaller 收集。
     for spec in included:
         cmd.extend(["--hidden-import", spec.module])

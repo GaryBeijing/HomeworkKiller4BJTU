@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-01 00:01
+# 最后更新: 2026-11-01 12:15
 # 文件名: parsers.py
-# 主要用途: CITEL / Moodle 页面解析（登录、课程、题目、判题结果与提交历史）。
-# 文件版本: 2.0.0
+# 主要用途: CITEL / Moodle 页面解析（登录、课程、题目、判题结果与提交历史；bs4/lxml 延迟导入）。
+# 文件版本: 2.1.0
 """纯 HTML 解析工具。
 
 解析与网络、UI 分离，便于离线测试；逻辑沿用 B_CHelper 的实现。
@@ -11,9 +12,10 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from bs4 import BeautifulSoup, Tag
+if TYPE_CHECKING:
+    from bs4 import BeautifulSoup, Tag
 
 from .models import (
     Consequence,
@@ -27,7 +29,7 @@ from .models import (
     TestCaseResult,
 )
 
-__version__ = "2.0.0"
+__version__ = "2.1.0"
 __author__ = "Gary"
 __all__ = [
     "clean_text",
@@ -47,6 +49,25 @@ __all__ = [
 ]
 
 _NEWLINE_MARK: str = "↵"
+
+
+def _make_soup(html: str) -> Any:
+    """使用纯 Python 的 html.parser 解析 HTML。
+
+    选择 html.parser 而非 lxml 是有意为之：
+    - 不再需要打包 ~7MB 的 lxml 二进制；
+    - bs4 在首次解析时才导入，避免拖慢程序启动；
+    - 已用 B_CHelper 的全部页面快照对比，两种后端输出一致。
+
+    Args:
+        html: 原始 HTML 文本。
+
+    Returns:
+        BeautifulSoup 根节点。
+    """
+    from bs4 import BeautifulSoup
+
+    return BeautifulSoup(html, "html.parser")
 
 
 def clean_text(value: str) -> str:
@@ -86,7 +107,7 @@ def parse_login_token(html: str) -> str:
     Returns:
         token 字符串；不存在时返回空串。
     """
-    soup: BeautifulSoup = BeautifulSoup(html, "lxml")
+    soup: BeautifulSoup = _make_soup(html)
     field: Tag | None = soup.find("input", {"name": "logintoken"})
     return str(field.get("value", "")) if field else ""
 
@@ -112,7 +133,7 @@ def login_error_message(html: str) -> str:
     Returns:
         可读错误信息；未找到时返回空串。
     """
-    soup: BeautifulSoup = BeautifulSoup(html, "lxml")
+    soup: BeautifulSoup = _make_soup(html)
     node: Tag | None = soup.find(id="loginerrormessage") or soup.find(class_="loginerrors")
     if node:
         return clean_text(node.get_text(" ", strip=True))
@@ -130,7 +151,7 @@ def parse_courses(html: str) -> list[Course]:
     Returns:
         课程列表（按页面出现顺序）。
     """
-    soup: BeautifulSoup = BeautifulSoup(html, "lxml")
+    soup: BeautifulSoup = _make_soup(html)
     found: dict[int, str] = {}
     for link in soup.select('a[href*="course/view.php?id="]'):
         href: str = str(link.get("href", ""))
@@ -154,7 +175,7 @@ def parse_course_title(html: str, fallback: str = "") -> str:
     Returns:
         课程名。
     """
-    soup: BeautifulSoup = BeautifulSoup(html, "lxml")
+    soup: BeautifulSoup = _make_soup(html)
     title: str = soup.title.get_text(" ", strip=True) if soup.title else ""
     if title.startswith("Course:"):
         title = title[len("Course:"):].strip()
@@ -193,7 +214,7 @@ def parse_programming_index(html: str) -> list[IndexRow]:
     Returns:
         题目行列表。
     """
-    soup: BeautifulSoup = BeautifulSoup(html, "lxml")
+    soup: BeautifulSoup = _make_soup(html)
     table: Tag | None = next(
         (
             candidate
@@ -324,7 +345,7 @@ def parse_problem_page(html: str, module_id: int = 0) -> ProblemDetail:
     Returns:
         题目详情。
     """
-    soup: BeautifulSoup = BeautifulSoup(html, "lxml")
+    soup: BeautifulSoup = _make_soup(html)
     main: Tag = soup.find(id="region-main") or soup
 
     heading: Tag | None = main.find("h1", class_="name") or main.find("h1")
@@ -404,7 +425,7 @@ def parse_consequence(html: str, submit_id: int | None = None) -> Consequence:
     Returns:
         判题结果。
     """
-    soup: BeautifulSoup = BeautifulSoup(html, "lxml")
+    soup: BeautifulSoup = _make_soup(html)
     main: Tag = soup.find(id="region-main") or soup
     full_text: str = clean_text(main.get_text("\n", strip=True))
 
@@ -545,7 +566,7 @@ def result_is_terminal(html: str, consequence: Consequence) -> bool:
     """
     if consequence.compile_message:
         return True
-    soup: BeautifulSoup = BeautifulSoup(html, "lxml")
+    soup: BeautifulSoup = _make_soup(html)
     main: Tag = soup.find(id="region-main") or soup
     if main.find("table", id="test-result-detail-table") is not None:
         return True
@@ -574,7 +595,7 @@ def parse_history_submit_ids(html: str) -> list[int]:
         if value not in ids:
             ids.append(value)
     if not ids:
-        soup: BeautifulSoup = BeautifulSoup(html, "lxml")
+        soup: BeautifulSoup = _make_soup(html)
         for field in soup.find_all("input", class_="diff1"):
             value = str(field.get("value") or "").strip()
             if value.isdigit() and int(value) not in ids:
