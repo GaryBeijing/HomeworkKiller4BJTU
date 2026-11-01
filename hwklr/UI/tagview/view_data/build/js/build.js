@@ -1,17 +1,17 @@
 /*
   作者: Gary
   编写日期: 2026-11-01 12:40
-  最后更新: 2026-11-01 12:38
+  最后更新: 2026-11-01 13:05
   文件名: build.js
-  主要用途: “构建”页面逻辑：程序名称/图标、版本号校验、开发环境遮罩、启动后台构建并轮询日志。
-  文件版本: 2.1.2
+  主要用途: “构建”页面逻辑：程序名称/图标、四段版本号校验、开发环境遮罩与源码迁移、后台构建轮询。
+  文件版本: 2.1.3
 */
 
 (function () {
   'use strict';
 
   const PAGE_NAME = '构建';
-  const VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
+  const VERSION_PATTERN = /^\d+\.\d+\.\d+(?:\.\d+)?$/;
   const POLL_INTERVAL = 700;
   const MAX_ICON_BYTES = 8 * 1024 * 1024;
   const PHASE_LABELS = {
@@ -47,6 +47,7 @@
     devEnvReady: false,
     pythonAvailable: false,
     devEnvPath: '',
+    devSourcePath: '',
     settingUp: false,
   };
 
@@ -239,7 +240,14 @@
       els.devPlaceholder.classList.remove('hidden');
     }
     if (els.devPlaceholderPath) {
-      els.devPlaceholderPath.textContent = path ? `HwklrVenv：${path}` : '';
+      const parts = [];
+      if (path) {
+        parts.push(`HwklrVenv：${path}`);
+      }
+      if (state.devSourcePath) {
+        parts.push(`源码：${state.devSourcePath}`);
+      }
+      els.devPlaceholderPath.textContent = parts.join(' · ');
     }
     setBackgroundInert(false);
   }
@@ -272,6 +280,7 @@
     state.devEnvReady = Boolean(data.dev_env_ready);
     state.pythonAvailable = Boolean(data.python_available);
     state.devEnvPath = String(data.dev_env_path || '');
+    state.devSourcePath = String(data.dev_source_path || '');
 
     if (!state.devPackage) {
       if (els.page) {
@@ -341,6 +350,9 @@
     try {
       const result = await App.callOk('setup_dev_venv');
       state.devEnvReady = true;
+      state.devSourcePath = String(
+        (result && result.source) || state.devSourcePath
+      );
       showDevPlaceholder(String((result && result.path) || state.devEnvPath));
       App.toast('开发环境已就绪', 'success');
     } catch (error) {
@@ -540,7 +552,10 @@
       return;
     }
     if (!validateVersion()) {
-      App.toast('版本号不合法！请填写 x.x.x 形式（例如 2.1.0）', 'error');
+      App.toast(
+        '版本号不合法！请填写 x.x.x 或 x.x.x.x 形式（例如 2.1.3.7559）',
+        'error'
+      );
       if (els.version) {
         els.version.focus();
       }

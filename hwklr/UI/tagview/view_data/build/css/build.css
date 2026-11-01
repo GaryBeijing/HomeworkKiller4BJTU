@@ -1,10 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-11-01 12:40
-  最后更新: 2026-11-01 12:38
+  最后更新: 2026-11-01 13:05
   文件名: build.css
   主要用途: “构建”标签页样式：程序名称/图标选择、版本号校验、开发环境毛玻璃遮罩、日志与操作按钮。
-  文件版本: 2.1.2
+  文件版本: 2.1.3
 */
 
 .content-host:has(> .tag-build) {
@@ -29,7 +29,17 @@
   flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
+  gap: 12px;
+}
+
+/* 表单/信息/日志区域可收缩并内部滚动，操作按钮固定在卡片底部。 */
+.tag-build .build-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
   gap: 14px;
+  overflow: auto;
 }
 
 .tag-build .build-meta {
@@ -258,7 +268,7 @@
 
 .tag-build .build-log {
   flex: 1 1 auto;
-  min-height: 180px;
+  min-height: 120px;
   width: 100%;
   resize: none;
   padding: 10px 12px;
@@ -278,9 +288,12 @@
 }
 
 .tag-build .build-actions {
+  flex: 0 0 auto;
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--panel-border);
 }
 
 /* ---------------------------------------------------------------- 开发构建遮罩 */
@@ -434,6 +447,44 @@
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+/* 高度较小时压缩留白，保证底部按钮留在卡片内。 */
+@media (max-height: 1000px) {
+  .tag-build .hero {
+    margin-bottom: 12px;
+  }
+
+  .tag-build .hero p {
+    font-size: 13px;
+    line-height: 1.55;
+  }
+
+  .tag-build .build-body {
+    gap: 10px;
+  }
+
+  .tag-build .build-meta-item {
+    padding: 8px 10px;
+  }
+
+  .tag-build .build-form {
+    gap: 10px 14px;
+  }
+
+  .tag-build .build-log {
+    min-height: 100px;
+  }
+}
+
+@media (max-height: 760px) {
+  .tag-build .hero p {
+    display: none;
+  }
+
+  .tag-build .build-log {
+    min-height: 80px;
   }
 }
 

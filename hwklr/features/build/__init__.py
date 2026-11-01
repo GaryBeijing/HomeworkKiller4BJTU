@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-01 12:40
-# 最后更新: 2026-11-01 12:38
+# 最后更新: 2026-11-01 13:05
 # 文件名: __init__.py
-# 主要用途: 实现“构建”功能：程序名称/图标、Windows 版本号、开发环境搭建、导出参数与后台构建任务。
-# 文件版本: 2.1.2
+# 主要用途: 实现“构建”功能：程序名称/图标、四段导出默认版本、开发环境迁移、导出参数与后台构建任务。
+# 文件版本: 2.1.3
 """构建功能。
 
 - 页面收集“导出显示版本号”“程序名称”“程序图标”和“是否开发构建”；
@@ -28,7 +28,13 @@ from hwklr.features.base import ApiResult, Feature, failure, success
 from hwklr.features.manifest import OFFICIAL_FEATURES, FeatureSpec, feature_version
 from hwklr.features.settings import FeatureSettingsGroup, SettingsFieldSpec
 
-from .devenv import create_dev_venv, find_system_python, venv_path, venv_ready
+from .devenv import (
+    create_dev_venv,
+    dev_env_ready,
+    find_system_python,
+    source_path,
+    venv_path,
+)
 from .packager import (
     VERSION_PATTERN,
     BuildError,
@@ -39,7 +45,7 @@ from .packager import (
     resolve_output_dir,
 )
 
-__version__ = "2.1.2"
+__version__ = "2.1.3"
 __author__ = "Gary"
 __all__ = ["BuildFeature"]
 
@@ -82,18 +88,17 @@ def _as_bool(value: Any) -> bool:
 def _default_export_version() -> str:
     """计算构建页默认导出版本号。
 
-    Windows 上把最后一位填为 12 位时间戳对 9973 取模的结果；
-    其他平台直接使用当前程序版本。
+    规则为“原三段版本号 + 12 位时间戳对 9973 取模”的第四段，
+    例如当前 2.1.3、构建时间 261101125959 → 2.1.3.7559。
 
     Returns:
-        形如 ``x.y.z`` 的版本号。
+        形如 ``x.y.z.w`` 的版本号。
     """
-    base: str = str(APP_VERSION)
-    parts: list[str] = base.split(".")
-    if sys.platform != "win32" or len(parts) < 2:
-        return base
+    base_parts: list[str] = str(APP_VERSION).split(".")[:3]
+    if len(base_parts) < 3:
+        return str(APP_VERSION)
     stamp: str = datetime.now().strftime("%y%m%d%H%M%S")
-    return "%s.%s.%d" % (parts[0], parts[1], int(stamp) % 9973)
+    return "%s.%d" % (".".join(base_parts), int(stamp) % 9973)
 
 
 class BuildFeature(Feature):
@@ -276,8 +281,9 @@ class BuildFeature(Feature):
             "default_name": APP_NAME,
             "buildable": not bool(getattr(sys, "frozen", False)),
             "dev_build": bool(DEV_BUILD),
-            "dev_env_ready": venv_ready(),
+            "dev_env_ready": dev_env_ready(),
             "dev_env_path": str(venv_path()),
+            "dev_source_path": str(source_path()),
             "python_available": python_found is not None,
             "python_path": python_found[1] if python_found else "",
             "output_dir": output_value,
@@ -375,7 +381,9 @@ class BuildFeature(Feature):
             params.get("version") or _default_export_version()
         ).strip()
         if not VERSION_PATTERN.match(version):
-            return failure("版本号不合法！请填写 x.x.x 形式（例如 2.1.0）")
+            return failure(
+                "版本号不合法！请填写 x.x.x 或 x.x.x.x 形式（例如 2.1.3.7559）"
+            )
         dev_build: bool = _as_bool(params.get("dev_build"))
         program_name: str = str(params.get("program_name") or "").strip()
         icon_data: str = str(params.get("icon_data") or "")

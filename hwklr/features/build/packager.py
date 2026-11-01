@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-01 12:40
-# 最后更新: 2026-11-01 12:38
+# 最后更新: 2026-11-01 13:05
 # 文件名: packager.py
-# 主要用途: 构建功能的打包实现：图标/名称/Windows 版本资源、源码裁剪、源码归档、PyInstaller 与 python-embed zip。
-# 文件版本: 2.1.2
+# 主要用途: 构建功能的打包实现：图标/名称/四段版本资源、源码裁剪、源码归档、PyInstaller 与 python-embed zip。
+# 文件版本: 2.1.3
 """构建打包实现。
 
 构建过程不依赖 UI，可独立调用 :func:`build_package`：
@@ -37,7 +37,7 @@ from typing import Any, Callable, Final, NamedTuple
 
 from hwklr.features.manifest import OFFICIAL_FEATURES, FeatureSpec
 
-__version__ = "2.1.2"
+__version__ = "2.1.3"
 __author__ = "Gary"
 __all__ = [
     "APP_EXE_NAME",
@@ -55,7 +55,9 @@ APP_EXE_NAME: Final[str] = "HomeworkKiller4BJTU"
 PYTHON_EMBED_MIRROR: Final[str] = (
     "https://mirrors.aliyun.com/python-release/windows"
 )
-VERSION_PATTERN: Final[re.Pattern[str]] = re.compile(r"^\d+\.\d+\.\d+$")
+VERSION_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"^\d+\.\d+\.\d+(?:\.\d+)?$"
+)
 _INVALID_FILENAME: Final[re.Pattern[str]] = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 _RESERVED_NAMES: Final[frozenset[str]] = frozenset(
     {"CON", "PRN", "AUX", "NUL"}
@@ -193,7 +195,7 @@ def build_package(
         BuildError: 参数非法、依赖缺失或构建失败时抛出。
     """
     if not VERSION_PATTERN.match(str(version or "")):
-        raise BuildError("版本号不合法！请填写 x.x.x 形式（例如 2.1.0）")
+        raise BuildError("版本号不合法！请填写 x.x.x 或 x.x.x.x 形式（例如 2.1.3.7559）")
     if getattr(sys, "frozen", False):
         raise BuildError("已打包的应用不能再次构建，请从源码运行本程序")
 
@@ -757,7 +759,7 @@ def _write_version_file(
 
     Args:
         path: 输出的 ``version_info.txt`` 路径。
-        version: 导出显示版本号 ``x.x.x``。
+        version: 导出显示版本号 ``x.x.x`` 或 ``x.x.x.x``。
         display_name: 程序显示名称。
         exe_name: 可执行文件名。
 
@@ -765,15 +767,18 @@ def _write_version_file(
         版本资源文件路径。
     """
     parts: list[int] = [int(item) for item in version.split(".")]
+    if len(parts) < 3:
+        raise BuildError("版本号至少需要三段")
     if any(part < 0 or part > 65535 for part in parts):
         raise BuildError("版本号每段必须在 0~65535 之间")
     major, minor, patch = parts[0], parts[1], parts[2]
+    build: int = parts[3] if len(parts) >= 4 else 0
     content: str = (
         "# 由 hwklr 构建功能自动生成。\n"
         "VSVersionInfo(\n"
         "  ffi=FixedFileInfo(\n"
-        "    filevers=(%d, %d, %d, 0),\n"
-        "    prodvers=(%d, %d, %d, 0),\n"
+        "    filevers=(%d, %d, %d, %d),\n"
+        "    prodvers=(%d, %d, %d, %d),\n"
         "    mask=0x3f,\n"
         "    flags=0x0,\n"
         "    OS=0x40004,\n"
@@ -800,9 +805,11 @@ def _write_version_file(
             major,
             minor,
             patch,
+            build,
             major,
             minor,
             patch,
+            build,
             display_name,
             version,
             exe_name,

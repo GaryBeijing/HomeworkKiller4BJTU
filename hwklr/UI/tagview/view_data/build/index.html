@@ -1,10 +1,10 @@
 <!--
   作者: Gary
   编写日期: 2026-11-01 12:40
-  最后更新: 2026-11-01 12:38
+  最后更新: 2026-11-01 13:05
   文件名: index.html
-  主要用途: “构建”标签页结构：程序名称/图标、版本号、开发构建开关、构建日志、构建按钮与开发环境遮罩。
-  文件版本: 2.1.2
+  主要用途: “构建”标签页结构：程序名称/图标、四段版本号、开发构建开关、构建日志与开发环境遮罩。
+  文件版本: 2.1.3
 -->
 <section class="tag-page tag-build" id="build-page">
   <div class="hero">
@@ -16,6 +16,7 @@
   </div>
 
   <section class="card build-card">
+    <div class="build-body">
     <div class="build-meta">
       <div class="build-meta-item">
         <span>构建工具版本</span>
@@ -38,7 +39,7 @@
     <div class="build-form">
       <label class="build-field build-version-field">
         <span class="build-field-label">导出显示版本号</span>
-        <input id="build-version" class="mono" type="text" autocomplete="off" spellcheck="false" placeholder="x.y.z" aria-describedby="build-version-error">
+        <input id="build-version" class="mono" type="text" autocomplete="off" spellcheck="false" placeholder="x.y.z 或 x.y.z.w" aria-describedby="build-version-error">
         <span id="build-version-error" class="build-version-error hidden" role="alert">版本号不合法！</span>
       </label>
 
@@ -84,6 +85,7 @@
       <span id="build-status" class="pill info">空闲</span>
     </div>
     <textarea id="build-log" class="build-log mono" readonly spellcheck="false" placeholder="构建日志会显示在这里…"></textarea>
+    </div>
 
     <div class="build-actions">
       <button id="build-open-settings" class="btn ghost" type="button">构建设置</button>
