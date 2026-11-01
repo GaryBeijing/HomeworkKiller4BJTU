@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-01 00:01
-# 最后更新: 2026-11-01 12:15
+# 最后更新: 2026-11-01 19:22
 # 文件名: __init__.py
 # 主要用途: 实现“C程序设计”功能：课程/题目选择、启发模式、题解模式与设置板块（依赖延迟加载）。
-# 文件版本: 2.1.0
+# 文件版本: 2.2.0
 """C 程序设计功能。
 
 重制自 ``B_CHelper``，主要变化：
@@ -28,7 +28,15 @@ from hwklr.config import load_config, update_config
 from hwklr.features.base import ApiResult, Feature, failure, success
 from hwklr.features.settings import FeatureSettingsGroup, SettingsFieldSpec
 
-from .ai import AIClient, AIError, analysis_question_info, generate_solution
+from .ai import (
+    AIClient,
+    AIError,
+    INITIAL_MAX_TOKENS,
+    MAX_OUTPUT_TOKENS,
+    analysis_question_info,
+    generate_solution,
+    next_thinking_level,
+)
 from .models import (
     Consequence,
     Course,
@@ -42,7 +50,7 @@ from .models import (
 from .parsers import deterministic_structure
 from .site import MoodleError, MoodleSite, SubmitError
 
-__version__ = "2.1.0"
+__version__ = "2.2.0"
 __author__ = "Gary"
 __all__ = ["CProgrammingFeature"]
 
@@ -50,6 +58,14 @@ _LOGGER: Final[logging.Logger] = logging.getLogger(__name__)
 _MAX_ATTEMPTS: Final[int] = 5
 _MAX_SUBMIT_ERRORS: Final[int] = 3
 _MAX_EVENTS: Final[int] = 200
+_THINKING_LABELS: Final[dict[str, str]] = {
+    "off": "关闭",
+    "low": "低",
+    "high": "高",
+    "max": "最高",
+}
+# PE（格式错误）与 CE（编译错误）不提高思考等级，只重新生成代码。
+_NO_ESCALATE_STATUSES: Final[tuple[str, ...]] = ("PE", "CE")
 _PROVIDER_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
     ("deepseek", "DeepSeek"),
     ("openai", "OpenAI"),
@@ -57,6 +73,18 @@ _PROVIDER_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
     ("local", "本地 OpenAI 兼容服务"),
     ("custom", "自定义 OpenAI 兼容 API"),
 )
+
+
+def _status_code(status: str) -> str:
+    """提取判题状态前缀（如 ``WA: Wrong Answer`` → ``WA``）。
+
+    Args:
+        status: 判题状态文本。
+
+    Returns:
+        大写状态前缀。
+    """
+    return str(status or "").split(":", 1)[0].strip().upper()
 
 
 def _ai_complete(setting: dict[str, Any]) -> bool:
@@ -136,7 +164,7 @@ class CProgrammingFeature(Feature):
                 "model": str(setting.get("model") or ""),
                 "base_url": str(setting.get("base_url") or ""),
                 "api_key": str(setting.get("api_key") or ""),
-                "temperature": setting.get("temperature", 0.3),
+                "thinking_level": str(setting.get("thinking_level") or "auto"),
                 "enable_solution_mode": bool(setting.get("enable_solution_mode", False)),
             }
 
@@ -148,7 +176,9 @@ class CProgrammingFeature(Feature):
                     "model": str(values.get("model") or ""),
                     "base_url": str(values.get("base_url") or ""),
                     "api_key": str(values.get("api_key") or ""),
-                    "temperature": float(values.get("temperature", 0.3)),
+                    "thinking_level": str(
+                        values.get("thinking_level") or "auto"
+                    ),
                     "enable_solution_mode": bool(
                         values.get("enable_solution_mode", False)
                     ),
@@ -192,8 +222,8 @@ class CProgrammingFeature(Feature):
             group_id="c_programming",
             title="C程序设计",
             description=(
-                "AI 服务配置。建议优先使用启发模式；题解模式会在十分需要真实实例时"
-                "直接生成并提交完整代码，请谨慎启用。"
+                "AI 服务与思考等级配置。建议优先使用启发模式；题解模式会在十分需要"
+                "真实实例时直接生成并提交完整代码，请谨慎启用。"
             ),
             field_specs=(
                 SettingsFieldSpec(
@@ -225,13 +255,21 @@ class CProgrammingFeature(Feature):
                     placeholder="仅保存在本机 config.json",
                 ),
                 SettingsFieldSpec(
-                    key="temperature",
-                    label="温度",
-                    kind="number",
-                    min_value=0.0,
-                    max_value=2.0,
-                    step=0.1,
-                    help="越高越发散，建议 0.2~0.4。",
+                    key="thinking_level",
+                    label="思考等级",
+                    kind="select",
+                    options=(
+                        ("auto", "自动（推荐）"),
+                        ("off", "关闭（最快）"),
+                        ("low", "低"),
+                        ("high", "高"),
+                        ("max", "最高"),
+                    ),
+                    help=(
+                        "自动：默认关闭思考；JSON 解析失败时加倍输出上限重试，"
+                        "判题出现逻辑失败（如 WA/TLE/MLE/RE）时逐级提高思考等级，"
+                        "PE/CE 只重写代码（上限 20000）。仅对 DeepSeek 服务商生效。"
+                    ),
                 ),
                 SettingsFieldSpec(
                     key="enable_solution_mode",
@@ -766,7 +804,10 @@ class CProgrammingFeature(Feature):
         return success(job)
 
     def _run_solution_job(self, job_id: str, module_ids: list[int]) -> None:
-        """后台执行题解模式：先生成全部思路，再逐题生成题解、提交与修正。
+        """后台执行题解模式：逐题“思考一题、提交一题”，失败时按规则修正。
+
+        自动思考模式下，WA/TLE/MLE/RE 等逻辑失败会把思考等级提高一级并把
+        输出预算翻倍；PE/CE 不提高等级与预算，只重新生成代码。
 
         Args:
             job_id: 任务 ID。
@@ -778,17 +819,26 @@ class CProgrammingFeature(Feature):
         try:
             site: MoodleSite = self._ensure_login()
             ai: AIClient = self._build_ai()
-            ready: list[tuple[ProblemRef, ProblemDetail, QuestionAnalysis]] = []
+            total: int = len(module_ids)
+            course_name: str = (
+                self._structure.course_name if self._structure else ""
+            )
+            self._update_job(
+                job_id,
+                phase="analysis",
+                total=total,
+                message="准备题解模式...",
+            )
 
-            # 步骤 1：先为所有未完成题目生成启发模式思路（有缓存则直接复用）。
-            self._update_job(job_id, phase="analysis", message="正在生成启发思路...")
+            # 步骤 1：逐题处理——先思考当前题，再生成题解并提交，不再批量预生成思路。
             for index, module_id in enumerate(module_ids, 1):
                 problem: ProblemRef = self._find_problem(module_id)
                 self._update_job(
                     job_id,
                     current=index,
+                    total=total,
                     title=problem.title,
-                    message=f"启发思路 {index}/{len(module_ids)}：{problem.title}",
+                    message=f"题目 {index}/{total}：{problem.title}",
                 )
                 solved: bool
                 solved_text: str
@@ -801,93 +851,119 @@ class CProgrammingFeature(Feature):
                     })
                     self._push_event(job_id, f"跳过已通过：{problem.title}", "success")
                     continue
-                detail: ProblemDetail = self._ensure_detail(problem)
-                analysis: QuestionAnalysis | None = self._analyses.get(problem.module_id)
-                if analysis is None:
-                    part: Part | None = self._part_of(problem.module_id)
-                    try:
-                        analysis = analysis_question_info(
-                            ai,
-                            detail,
-                            previous=None,
-                            course_name=self._structure.course_name if self._structure else "",
-                            part_name=part.name if part else "",
-                        )
-                    except AIError as exc:
-                        failed_list.append({
-                            "module_id": problem.module_id,
-                            "title": problem.title,
-                            "status": "AI_ERROR",
-                            "summary": str(exc),
-                            "compile_message": "",
-                            "attempts": self._attempts.get(problem.module_id, 0),
-                        })
-                        self._push_event(
-                            job_id, f"生成思路失败：{problem.title} - {exc}", "error"
-                        )
-                        continue
-                    self._analyses[problem.module_id] = analysis
-                    self._push_event(job_id, f"思路已生成：{problem.title}", "info")
-                ready.append((problem, detail, analysis))
 
-            # 步骤 2：逐题生成题解、提交，失败时把判题错误回传给 AI（最多 5 次）。
-            self._update_job(job_id, phase="solution", message="正在生成并提交题解...")
-            total: int = len(ready)
-            for index, (problem, detail, analysis) in enumerate(ready, 1):
-                self._update_job(
-                    job_id,
-                    current=index,
-                    total=total,
-                    title=problem.title,
-                    message=f"题解 {index}/{total}：{problem.title}",
-                )
+                detail: ProblemDetail = self._ensure_detail(problem)
+                part: Part | None = self._part_of(module_id)
+                part_name: str = part.name if part else ""
+                # 每题独立状态：自动模式从“关闭思考 + 5000 输出上限”开始。
+                level: str = ai.resolve_thinking_level()
+                budget: int = INITIAL_MAX_TOKENS
+                analysis: QuestionAnalysis | None = self._analyses.get(module_id)
                 previous: Consequence | None = None
-                attempts: int = self._attempts.get(problem.module_id, 0)
+                attempts: int = self._attempts.get(module_id, 0)
                 submit_errors: int = 0
                 solved_this: bool = False
+                failure_record: dict[str, Any] | None = None
+
                 while attempts < _MAX_ATTEMPTS:
+                    # 步骤 1：需要时生成思路；判题逻辑失败后会置空以更高等级重析。
+                    if analysis is None:
+                        self._update_job(
+                            job_id,
+                            phase="analysis",
+                            message=(
+                                f"生成思路 {index}/{total}：{problem.title}"
+                                f"（思考：{_THINKING_LABELS.get(level, level)}）"
+                            ),
+                        )
+                        try:
+                            analysis = analysis_question_info(
+                                ai,
+                                detail,
+                                previous=previous,
+                                course_name=course_name,
+                                part_name=part_name,
+                                max_tokens=budget,
+                                thinking_level=level,
+                            )
+                        except AIError as exc:
+                            failure_record = {
+                                "module_id": problem.module_id,
+                                "title": problem.title,
+                                "status": "AI_ERROR",
+                                "summary": str(exc),
+                                "compile_message": "",
+                                "attempts": attempts,
+                            }
+                            self._push_event(
+                                job_id,
+                                f"生成思路失败：{problem.title} - {exc}",
+                                "error",
+                            )
+                            break
+                        self._analyses[module_id] = analysis
+                        self._push_event(
+                            job_id,
+                            f"思路已生成：{problem.title}"
+                            f"（思考：{_THINKING_LABELS.get(level, level)}）",
+                            "info",
+                        )
+
+                    # 步骤 2：生成题解并提交。
                     attempts += 1
+                    level_label: str = _THINKING_LABELS.get(level, level)
                     self._update_job(
                         job_id,
+                        phase="solution",
                         message=(
                             f"题解 {index}/{total}：{problem.title} "
-                            f"（第 {attempts}/{_MAX_ATTEMPTS} 次）"
+                            f"（第 {attempts}/{_MAX_ATTEMPTS} 次，思考：{level_label}）"
                         ),
                     )
                     try:
                         solution: SolutionDraft = generate_solution(
-                            ai, detail, analysis, previous=previous
+                            ai,
+                            detail,
+                            analysis,
+                            previous=previous,
+                            max_tokens=budget,
+                            thinking_level=level,
                         )
                     except AIError as exc:
-                        failed_list.append({
+                        failure_record = {
                             "module_id": problem.module_id,
                             "title": problem.title,
                             "status": "AI_ERROR",
                             "summary": str(exc),
                             "compile_message": "",
                             "attempts": attempts - 1,
-                        })
+                        }
                         self._push_event(
-                            job_id, f"生成题解失败：{problem.title} - {exc}", "error"
+                            job_id,
+                            f"生成题解失败：{problem.title} - {exc}",
+                            "error",
                         )
                         break
-                    self._solutions[problem.module_id] = solution
+                    self._solutions[module_id] = solution
+
                     # 关键步骤：提交前确保 activity_id 已解析。
                     activity_id: int | None = problem.activity_id
                     if activity_id is None:
-                        activity_id = site.resolve_activity_id(problem.module_id)
+                        activity_id = site.resolve_activity_id(module_id)
                         problem.activity_id = activity_id
                     if activity_id is None:
-                        failed_list.append({
+                        failure_record = {
                             "module_id": problem.module_id,
                             "title": problem.title,
                             "status": "NO_ACTIVITY_ID",
                             "summary": "无法确定该题的提交编号",
                             "compile_message": "",
                             "attempts": attempts - 1,
-                        })
+                        }
                         self._push_event(
-                            job_id, f"无法提交：{problem.title}（缺少 activity_id）", "error"
+                            job_id,
+                            f"无法提交：{problem.title}（缺少 activity_id）",
+                            "error",
                         )
                         break
                     try:
@@ -901,24 +977,24 @@ class CProgrammingFeature(Feature):
                             job_id, f"提交被拒绝：{problem.title} - {exc}", "warn"
                         )
                         if submit_errors >= _MAX_SUBMIT_ERRORS:
-                            failed_list.append({
+                            failure_record = {
                                 "module_id": problem.module_id,
                                 "title": problem.title,
                                 "status": "SUBMIT_REJECTED",
                                 "summary": str(exc),
                                 "compile_message": "",
                                 "attempts": attempts,
-                            })
+                            }
                             break
                         time.sleep(1.0)
                         continue
 
                     with self._state_lock:
-                        self._attempts[problem.module_id] = attempts
+                        self._attempts[module_id] = attempts
                     consequence: Consequence = site.poll_consequence(
                         activity_id, submit_id, timeout=150.0
                     )
-                    self._last_consequences[problem.module_id] = consequence
+                    self._last_consequences[module_id] = consequence
                     problem.my_result = (
                         "AC: Accepted" if consequence.is_ac else consequence.status
                     )
@@ -937,24 +1013,54 @@ class CProgrammingFeature(Feature):
                             job_id, f"AC：{problem.title}（第 {attempts} 次）", "success"
                         )
                         break
+
+                    # 步骤 3：未通过。PE/CE 只重写代码；其他失败按自动规则升级。
                     previous = consequence
+                    status_code: str = _status_code(consequence.status)
                     self._push_event(
                         job_id,
                         f"{problem.title} 第 {attempts} 次未通过：{consequence.status}",
                         "warn",
                     )
+                    if status_code in _NO_ESCALATE_STATUSES:
+                        self._push_event(
+                            job_id,
+                            f"{problem.title} 为 {status_code}，不提高思考等级与"
+                            "输出上限，仅重新生成解答代码",
+                            "info",
+                        )
+                        continue
+                    if ai.auto_thinking:
+                        old_level: str = level
+                        old_budget: int = budget
+                        level = next_thinking_level(level)
+                        budget = min(budget * 2, MAX_OUTPUT_TOKENS)
+                        if level != old_level or budget != old_budget:
+                            self._push_event(
+                                job_id,
+                                f"{problem.title} 判题失败，思考等级 "
+                                f"{_THINKING_LABELS.get(old_level, old_level)} → "
+                                f"{_THINKING_LABELS.get(level, level)}，输出上限 "
+                                f"{old_budget} → {budget}",
+                                "info",
+                            )
+                    # 逻辑失败后带上判题反馈重新分析（PE/CE 保持原思路）。
+                    analysis = None
+
                 if not solved_this:
-                    last: Consequence | None = self._last_consequences.get(
-                        problem.module_id
-                    )
-                    failed_list.append({
-                        "module_id": problem.module_id,
-                        "title": problem.title,
-                        "status": last.status if last else "FAILED",
-                        "summary": last.summary if last else "",
-                        "compile_message": last.compile_message if last else "",
-                        "attempts": self._attempts.get(problem.module_id, attempts),
-                    })
+                    if failure_record is None:
+                        last: Consequence | None = self._last_consequences.get(
+                            module_id
+                        )
+                        failure_record = {
+                            "module_id": problem.module_id,
+                            "title": problem.title,
+                            "status": last.status if last else "FAILED",
+                            "summary": last.summary if last else "",
+                            "compile_message": last.compile_message if last else "",
+                            "attempts": self._attempts.get(module_id, attempts),
+                        }
+                    failed_list.append(failure_record)
 
             result: dict[str, Any] = {
                 "ac": ac_list,

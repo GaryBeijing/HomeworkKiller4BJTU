@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
-# 最后更新: 2026-11-01 12:40
+# 最后更新: 2026-11-01 19:22
 # 文件名: config.py
 # 主要用途: 统一读写 config.json；V2 起按设置分组存放账号、密码、AI 与构建配置，并兼容打包后的可执行文件。
-# 文件版本: 2.1.0
+# 文件版本: 2.2.0
 """项目配置读写。
 
 配置文件固定位于**项目根目录**（``main.py`` 同级）的 ``config.json``。
@@ -20,7 +20,7 @@ import threading
 from pathlib import Path
 from typing import Any, Final
 
-__version__ = "2.1.0"
+__version__ = "2.2.0"
 __all__ = [
     "DEFAULT_CONFIG",
     "config_path",
@@ -44,7 +44,7 @@ DEFAULT_CONFIG: Final[dict[str, Any]] = {
         "model": "deepseek-flash",
         "base_url": "https://api.deepseek.com",
         "api_key": "",
-        "temperature": 0.3,
+        "thinking_level": "auto",
         "enable_solution_mode": False,
         "last_course_id": None,
     },
@@ -162,6 +162,8 @@ def _migrate_config(config: dict[str, Any]) -> dict[str, Any]:
         if isinstance(config.get("c_programming"), dict)
         else {}
     )
+    # 2.2.0 起删除温度设置，旧配置中的残留字段直接丢弃。
+    cprog.pop("temperature", None)
     for key, value in DEFAULT_CONFIG["c_programming"].items():
         cprog.setdefault(key, copy.deepcopy(value))
     config["c_programming"] = cprog
