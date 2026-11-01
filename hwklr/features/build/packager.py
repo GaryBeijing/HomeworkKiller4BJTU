@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-01 12:40
-# 最后更新: 2026-11-01 11:58
+# 最后更新: 2026-11-01 12:38
 # 文件名: packager.py
-# 主要用途: 构建功能的打包实现：源码裁剪、PyInstaller 目录版/可执行文件、python-embed zip 与版本注入。
-# 文件版本: 2.1.0
+# 主要用途: 构建功能的打包实现：图标/名称/Windows 版本资源、源码裁剪、源码归档、PyInstaller 与 python-embed zip。
+# 文件版本: 2.1.2
 """构建打包实现。
 
 构建过程不依赖 UI，可独立调用 :func:`build_package`：
@@ -18,7 +18,9 @@
 """
 from __future__ import annotations
 
+import base64
 import importlib.metadata
+import io
 import json
 import os
 import re
@@ -35,7 +37,7 @@ from typing import Any, Callable, Final, NamedTuple
 
 from hwklr.features.manifest import OFFICIAL_FEATURES, FeatureSpec
 
-__version__ = "2.1.0"
+__version__ = "2.1.2"
 __author__ = "Gary"
 __all__ = [
     "APP_EXE_NAME",
@@ -46,6 +48,7 @@ __all__ = [
     "python_embed_url",
     "pyinstaller_version",
     "resolve_output_dir",
+    "safe_file_name",
 ]
 
 APP_EXE_NAME: Final[str] = "HomeworkKiller4BJTU"
@@ -53,6 +56,13 @@ PYTHON_EMBED_MIRROR: Final[str] = (
     "https://mirrors.aliyun.com/python-release/windows"
 )
 VERSION_PATTERN: Final[re.Pattern[str]] = re.compile(r"^\d+\.\d+\.\d+$")
+_INVALID_FILENAME: Final[re.Pattern[str]] = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+_RESERVED_NAMES: Final[frozenset[str]] = frozenset(
+    {"CON", "PRN", "AUX", "NUL"}
+    | {"COM%d" % index for index in range(1, 10)}
+    | {"LPT%d" % index for index in range(1, 10)}
+)
+_ICON_MAX_BYTES: Final[int] = 8 * 1024 * 1024
 
 _PROJECT_ROOT: Final[Path] = Path(__file__).resolve().parents[3]
 _VENDOR_DIR: Final[Path] = Path(__file__).resolve().parent / "vendor"
@@ -128,12 +138,36 @@ def resolve_output_dir(value: str) -> Path:
     return path.resolve()
 
 
+def safe_file_name(value: str) -> str:
+    """把程序显示名称转换为 Windows 可用的文件名。
+
+    允许中文与空格；替换 Windows 非法字符，处理保留名与首尾空白/点号。
+
+    Args:
+        value: 用户填写的程序名称。
+
+    Returns:
+        可用的文件名（不含扩展名）。
+    """
+    cleaned: str = _INVALID_FILENAME.sub("_", str(value or "").strip())
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" .")
+    cleaned = cleaned[:80].strip(" .")
+    if not cleaned:
+        return APP_EXE_NAME
+    if cleaned.upper() in _RESERVED_NAMES:
+        cleaned = "_" + cleaned
+    return cleaned
+
+
 def build_package(
     version: str,
     dev_build: bool,
     output_dir: str,
     dev_format: str,
     dev_features: set[str],
+    program_name: str = "",
+    icon_data: str = "",
+    icon_filename: str = "",
     *,
     log: LogFn,
     set_phase: PhaseFn,
@@ -146,6 +180,9 @@ def build_package(
         output_dir: 用户配置的输出目录；空字符串使用 ``/build/``。
         dev_format: 开发构建格式，``"zip"`` 或 ``"executable"``。
         dev_features: 在设置中标记为 dev 的功能名称集合。
+        program_name: 程序显示名称；空字符串使用默认名称。
+        icon_data: 图标的 Base64 或 Data URL；空字符串表示不设置图标。
+        icon_filename: 图标原始文件名，用于 .ico 兜底判断。
         log: 日志回调，接收单行文本。
         set_phase: 阶段回调，参数为 ``(phase, message, progress)``。
 
@@ -164,6 +201,8 @@ def build_package(
     target_format: str = str(dev_format or "executable").strip().lower()
     if target_format not in {"zip", "executable"}:
         raise BuildError("开发构建格式必须是 zip 或 executable")
+    display_name: str = str(program_name or "").strip() or APP_EXE_NAME
+    exe_name: str = safe_file_name(display_name)
 
     plans: list[_FeaturePlan] = [
         _FeaturePlan(
@@ -181,10 +220,15 @@ def build_package(
         raise BuildError("没有可打包的功能，请检查 Feature 开发标记")
 
     output_root: Path = resolve_output_dir(output_dir)
-    slug: str = "%s-v%s%s" % (APP_EXE_NAME, version, "-dev" if dev_build else "")
+    slug: str = "%s-v%s%s" % (
+        exe_name,
+        version,
+        "-dev" if dev_build else "",
+    )
     work_root: Path = output_root / ".work" / slug
     set_phase("prepare", "准备构建目录", 3)
     log("输出目录：%s" % output_root)
+    log("程序名称：%s（可执行文件名：%s）" % (display_name, exe_name))
     log("导出版本：%s%s" % (version, "（开发构建）" if dev_build else "（发布构建）"))
     log("包含功能：%s" % "、".join(spec.name for spec in included))
     if not output_root.exists():
@@ -194,6 +238,11 @@ def build_package(
     work_root.mkdir(parents=True, exist_ok=True)
 
     try:
+        icon_path: Path | None = _prepare_icon(
+            icon_data, icon_filename, work_root, log=log
+        )
+        if icon_path is not None:
+            log("程序图标：%s" % icon_path)
         if dev_build and target_format == "zip":
             result: dict[str, Any] = _build_embedded_zip(
                 version=version,
@@ -201,6 +250,9 @@ def build_package(
                 output_root=output_root,
                 work_root=work_root,
                 included=included,
+                display_name=display_name,
+                exe_name=exe_name,
+                icon_path=icon_path,
                 log=log,
                 set_phase=set_phase,
             )
@@ -212,6 +264,9 @@ def build_package(
                 work_root=work_root,
                 included=included,
                 dev_build=dev_build,
+                display_name=display_name,
+                exe_name=exe_name,
+                icon_path=icon_path,
                 log=log,
                 set_phase=set_phase,
             )
@@ -234,6 +289,9 @@ def _build_executable(
     work_root: Path,
     included: list[FeatureSpec],
     dev_build: bool,
+    display_name: str,
+    exe_name: str,
+    icon_path: Path | None,
     log: LogFn,
     set_phase: PhaseFn,
 ) -> dict[str, Any]:
@@ -246,6 +304,9 @@ def _build_executable(
         work_root: 本次构建的临时目录。
         included: 需要打包的功能。
         dev_build: 是否为开发构建。
+        display_name: 程序显示名称。
+        exe_name: 可执行文件名（不含扩展名）。
+        icon_path: 转换后的 .ico 路径；``None`` 表示没有自定义图标。
         log: 日志回调。
         set_phase: 阶段回调。
 
@@ -262,7 +323,13 @@ def _build_executable(
     stage: Path = work_root / "stage"
     set_phase("stage", "复制程序源码", 10)
     _copy_app_tree(stage, included, log=log)
-    _write_build_info(stage / "hwklr" / "_build_info.py", version, dev_build)
+    _write_build_info(
+        stage / "hwklr" / "_build_info.py",
+        version,
+        dev_build,
+        display_name,
+        "icon.ico" if icon_path is not None else "",
+    )
     log("源码已复制到临时目录。")
 
     dist_dir: Path = work_root / "dist"
@@ -274,7 +341,7 @@ def _build_executable(
         "--clean",
         "--onedir",
         "--name",
-        APP_EXE_NAME,
+        exe_name,
         "--distpath",
         str(dist_dir),
         "--workpath",
@@ -293,6 +360,16 @@ def _build_executable(
         "--add-data",
         _data_arg(stage / "hwklr" / "runtime_data", "hwklr/runtime_data"),
     ]
+    if icon_path is not None:
+        # --icon 写入 exe 资源（资源管理器、任务栏、Alt+Tab）；
+        # 同时把 ico 放到 _internal 供 pywebview 设置窗口图标。
+        cmd.extend(["--icon", str(icon_path)])
+        cmd.extend(["--add-data", _data_arg(icon_path, ".")])
+    if sys.platform == "win32":
+        version_file: Path = _write_version_file(
+            work_root / "version_info.txt", version, display_name, exe_name
+        )
+        cmd.extend(["--version-file", str(version_file)])
     if dev_build:
         cmd.append("--console")
     else:
@@ -343,7 +420,7 @@ def _build_executable(
     if code != 0:
         raise BuildError("PyInstaller 执行失败，退出码 %d" % code)
 
-    built: Path = dist_dir / APP_EXE_NAME
+    built: Path = dist_dir / exe_name
     if not built.is_dir():
         raise BuildError("未找到 PyInstaller 输出目录: %s" % built)
 
@@ -353,15 +430,25 @@ def _build_executable(
     shutil.copytree(built, artifact)
     if dev_build:
         _copy_dev_extras(artifact, log=log)
-    _write_manifest(artifact / "BUILD_INFO.json", version, dev_build, "executable", included)
+        _archive_sources(artifact, version, log=log)
+    _write_manifest(
+        artifact / "BUILD_INFO.json",
+        version,
+        dev_build,
+        "executable",
+        included,
+        display_name,
+        exe_name,
+    )
     size: int = _tree_size(artifact)
-    log("可执行文件：%s" % (artifact / (APP_EXE_NAME + ".exe")))
+    log("可执行文件：%s" % (artifact / (exe_name + ".exe")))
     log("产物大小：%.1f MB" % (size / 1024 / 1024))
     return {
         "kind": "directory",
         "path": str(artifact),
-        "exe": str(artifact / (APP_EXE_NAME + ".exe")),
+        "exe": str(artifact / (exe_name + ".exe")),
         "size": size,
+        "name": display_name,
     }
 
 
@@ -371,6 +458,9 @@ def _build_embedded_zip(
     output_root: Path,
     work_root: Path,
     included: list[FeatureSpec],
+    display_name: str,
+    exe_name: str,
+    icon_path: Path | None,
     log: LogFn,
     set_phase: PhaseFn,
 ) -> dict[str, Any]:
@@ -382,6 +472,9 @@ def _build_embedded_zip(
         output_root: 输出根目录。
         work_root: 本次构建的临时目录。
         included: 需要打包的功能。
+        display_name: 程序显示名称。
+        exe_name: 程序文件名（zip 内用于标记）。
+        icon_path: 转换后的 .ico 路径；``None`` 表示没有自定义图标。
         log: 日志回调。
         set_phase: 阶段回调。
 
@@ -394,8 +487,18 @@ def _build_embedded_zip(
 
     set_phase("stage", "复制程序源码", 8)
     _copy_app_tree(app_dir, included, log=log)
-    _write_build_info(app_dir / "hwklr" / "_build_info.py", version, True)
+    _write_build_info(
+        app_dir / "hwklr" / "_build_info.py",
+        version,
+        True,
+        display_name,
+        "icon.ico" if icon_path is not None else "",
+    )
+    if icon_path is not None:
+        shutil.copy2(icon_path, app_dir / "icon.ico")
+        shutil.copy2(icon_path, stage / "icon.ico")
     _copy_dev_extras(stage, log=log)
+    _archive_sources(stage, version, log=log)
 
     set_phase("download", "准备 python-embed 运行时", 20)
     embed_zip: Path = _ensure_embed_zip(log=log)
@@ -420,7 +523,15 @@ def _build_embedded_zip(
     log("已复制依赖包：%s" % _SITE_PACKAGES)
     _rewrite_pth(runtime_dir)
     _write_start_bat(stage / "start.bat")
-    _write_manifest(stage / "BUILD_INFO.json", version, True, "zip", included)
+    _write_manifest(
+        stage / "BUILD_INFO.json",
+        version,
+        True,
+        "zip",
+        included,
+        display_name,
+        exe_name,
+    )
 
     set_phase("package", "压缩分发包", 55)
     archive_path: Path = output_root / (slug + ".zip")
@@ -436,6 +547,7 @@ def _build_embedded_zip(
         "path": str(archive_path),
         "exe": "",
         "size": size,
+        "name": display_name,
     }
 
 
@@ -505,21 +617,34 @@ def _copy_app_tree(dest: Path, included: list[FeatureSpec], *, log: LogFn) -> No
     log("已按功能清单裁剪源码（保留 %d 个功能）。" % len(included))
 
 
-def _write_build_info(path: Path, version: str, dev_build: bool) -> None:
-    """写入导出构建的版本覆盖模块。
+def _write_build_info(
+    path: Path,
+    version: str,
+    dev_build: bool,
+    display_name: str,
+    icon_path: str = "",
+) -> None:
+    """写入导出构建的版本、名称、图标与开发标记。
 
     Args:
         path: ``_build_info.py`` 目标路径。
         version: 导出显示版本号。
         dev_build: 是否为开发构建。
+        display_name: 程序显示名称。
+        icon_path: 相对程序根目录的 ico 路径；空字符串表示没有图标。
     """
     path.parent.mkdir(parents=True, exist_ok=True)
+    # 默认名称留空，让程序沿用内置标题（含“· 作业助手”），只有自定义名称才覆盖。
+    export_name: str = "" if display_name == APP_EXE_NAME else display_name
     path.write_text(
         "# -*- coding: utf-8 -*-\n"
         "# 由 hwklr 构建功能自动生成，请勿手动修改。\n"
-        "__version__ = \"2.1.0\"\n"
+        "__version__ = %r\n"
         "EXPORT_VERSION = %r\n"
-        "DEV_BUILD = %r\n" % (version, bool(dev_build)),
+        "EXPORT_NAME = %r\n"
+        "DEV_BUILD = %r\n"
+        "ICON_PATH = %r\n"
+        % (__version__, version, export_name, bool(dev_build), icon_path),
         encoding="utf-8",
     )
 
@@ -530,6 +655,8 @@ def _write_manifest(
     dev_build: bool,
     build_format: str,
     included: list[FeatureSpec],
+    display_name: str,
+    exe_name: str,
 ) -> None:
     """在产物根目录写入构建信息。
 
@@ -539,9 +666,12 @@ def _write_manifest(
         dev_build: 是否为开发构建。
         build_format: ``executable`` 或 ``zip``。
         included: 包含的功能。
+        display_name: 程序显示名称。
+        exe_name: 可执行文件名（不含扩展名）。
     """
     data: dict[str, Any] = {
-        "app": APP_EXE_NAME,
+        "app": display_name,
+        "exe_name": exe_name,
         "version": version,
         "dev_build": bool(dev_build),
         "format": build_format,
@@ -551,6 +681,192 @@ def _write_manifest(
     path.write_text(
         json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
+
+
+def _prepare_icon(
+    icon_data: str,
+    icon_filename: str,
+    work_root: Path,
+    *,
+    log: LogFn,
+) -> Path | None:
+    """解码用户选择的图片并生成多尺寸 .ico。
+
+    Args:
+        icon_data: Base64 或 Data URL。
+        icon_filename: 原始文件名。
+        work_root: 本次构建临时目录。
+        log: 日志回调。
+
+    Returns:
+        生成的 ico 路径；没有提供图标时返回 ``None``。
+
+    Raises:
+        BuildError: 数据无法解码、文件过大或无法转换为图标时抛出。
+    """
+    payload: str = str(icon_data or "").strip()
+    if not payload:
+        return None
+    if payload.startswith("data:") and "," in payload:
+        payload = payload.split(",", 1)[1]
+    try:
+        raw: bytes = base64.b64decode(payload, validate=False)
+    except (ValueError, TypeError) as exc:
+        raise BuildError("图标数据无法解析：%s" % exc) from exc
+    if not raw:
+        raise BuildError("图标文件为空")
+    if len(raw) > _ICON_MAX_BYTES:
+        raise BuildError("图标文件过大（最大 8 MB）")
+
+    target: Path = work_root / "icon.ico"
+    try:
+        from PIL import Image
+
+        with Image.open(io.BytesIO(raw)) as image:
+            image.load()
+            rgba: Any = image.convert("RGBA")
+            longest: int = max(rgba.size)
+            sizes: list[tuple[int, int]] = [
+                (side, side)
+                for side in (16, 24, 32, 48, 64, 128, 256)
+                if side <= longest
+            ]
+            if not sizes:
+                side = max(1, min(longest, 16))
+                sizes = [(side, side)]
+            rgba.save(target, format="ICO", sizes=sizes)
+    except BuildError:
+        raise
+    except Exception as exc:
+        # 已经是合法 ico 时直接使用原始字节，避免重新编码失败。
+        if str(icon_filename or "").lower().endswith(".ico"):
+            target.write_bytes(raw)
+        else:
+            raise BuildError("无法读取图标文件：%s" % exc) from exc
+    log("图标已转换为 ico（%d 字节）。" % target.stat().st_size)
+    return target
+
+
+def _write_version_file(
+    path: Path,
+    version: str,
+    display_name: str,
+    exe_name: str,
+) -> Path:
+    """生成 PyInstaller Windows 版本资源文件。
+
+    Args:
+        path: 输出的 ``version_info.txt`` 路径。
+        version: 导出显示版本号 ``x.x.x``。
+        display_name: 程序显示名称。
+        exe_name: 可执行文件名。
+
+    Returns:
+        版本资源文件路径。
+    """
+    parts: list[int] = [int(item) for item in version.split(".")]
+    if any(part < 0 or part > 65535 for part in parts):
+        raise BuildError("版本号每段必须在 0~65535 之间")
+    major, minor, patch = parts[0], parts[1], parts[2]
+    content: str = (
+        "# 由 hwklr 构建功能自动生成。\n"
+        "VSVersionInfo(\n"
+        "  ffi=FixedFileInfo(\n"
+        "    filevers=(%d, %d, %d, 0),\n"
+        "    prodvers=(%d, %d, %d, 0),\n"
+        "    mask=0x3f,\n"
+        "    flags=0x0,\n"
+        "    OS=0x40004,\n"
+        "    fileType=0x1,\n"
+        "    subtype=0x0,\n"
+        "    date=(0, 0)\n"
+        "  ),\n"
+        "  kids=[\n"
+        "    StringFileInfo([\n"
+        "      StringTable('080404B0', [\n"
+        "        StringStruct('CompanyName', 'Gary'),\n"
+        "        StringStruct('FileDescription', %r),\n"
+        "        StringStruct('FileVersion', %r),\n"
+        "        StringStruct('InternalName', %r),\n"
+        "        StringStruct('OriginalFilename', %r),\n"
+        "        StringStruct('ProductName', %r),\n"
+        "        StringStruct('ProductVersion', %r)\n"
+        "      ])\n"
+        "    ]),\n"
+        "    VarFileInfo([VarStruct('Translation', [2052, 1200])])\n"
+        "  ]\n"
+        ")\n"
+        % (
+            major,
+            minor,
+            patch,
+            major,
+            minor,
+            patch,
+            display_name,
+            version,
+            exe_name,
+            exe_name + ".exe",
+            display_name,
+            version,
+        )
+    )
+    path.write_text(content, encoding="utf-8")
+    return path
+
+
+def _archive_sources(dest: Path, version: str, *, log: LogFn) -> Path:
+    """把当前源代码（不含测试）与 requirements.txt 归档到产物目录。
+
+    Args:
+        dest: 产物根目录。
+        version: 导出显示版本号。
+        log: 日志回调。
+
+    Returns:
+        生成的源码 zip 路径。
+    """
+    archive_path: Path = dest / ("source-v%s.zip" % version)
+    included: list[Path] = []
+    main_file: Path = _PROJECT_ROOT / "main.py"
+    requirements: Path = _PROJECT_ROOT / "requirements.txt"
+    for file_path in (main_file, requirements):
+        if file_path.is_file():
+            included.append(file_path)
+    for file_path in (_PROJECT_ROOT / "hwklr").rglob("*"):
+        if not file_path.is_file():
+            continue
+        relative: Path = file_path.relative_to(_PROJECT_ROOT)
+        parts: tuple[str, ...] = relative.parts
+        if "__pycache__" in parts:
+            continue
+        if file_path.suffix in {".pyc", ".pyo"}:
+            continue
+        if "tests" in parts or "test" in parts:
+            continue
+        if file_path.name.startswith("test_") or file_path.name.endswith("_test.py"):
+            continue
+        if relative.as_posix().startswith("hwklr/features/build/vendor/"):
+            continue
+        included.append(file_path)
+
+    with zipfile.ZipFile(
+        archive_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6
+    ) as archive:
+        for file_path in included:
+            archive.write(
+                file_path,
+                arcname=file_path.relative_to(_PROJECT_ROOT).as_posix(),
+            )
+    log(
+        "源码归档：%s（%d 个文件，%.1f MB）"
+        % (
+            archive_path.name,
+            len(included),
+            archive_path.stat().st_size / 1024 / 1024,
+        )
+    )
+    return archive_path
 
 
 def _ensure_embed_zip(*, log: LogFn) -> Path:

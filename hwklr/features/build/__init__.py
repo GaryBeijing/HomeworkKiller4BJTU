@@ -1,14 +1,16 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-01 12:40
+# 最后更新: 2026-11-01 12:38
 # 文件名: __init__.py
-# 主要用途: 实现“构建”功能：导出参数状态、设置板块（输出目录/开发格式/Feature 开发标记）与后台构建任务。
-# 文件版本: 2.1.0
+# 主要用途: 实现“构建”功能：程序名称/图标、Windows 版本号、开发环境搭建、导出参数与后台构建任务。
+# 文件版本: 2.1.2
 """构建功能。
 
-- 页面只负责收集“导出显示版本号”和“是否开发构建”，并轮询构建日志；
+- 页面收集“导出显示版本号”“程序名称”“程序图标”和“是否开发构建”；
 - 构建的实际工作交给 :mod:`hwklr.features.build.packager`；
-- 设置板块注册“默认构建目录”“开发构建格式”“Feature 开发标记”。
+- 设置板块注册“默认构建目录”“开发构建格式”“Feature 开发标记”；
+- 开发构建包启动后提供 HwklrVenv 开发环境搭建入口。
 """
 from __future__ import annotations
 
@@ -17,14 +19,16 @@ import sys
 import threading
 import traceback
 import uuid
+from datetime import datetime
 from typing import Any, Final
 
-from hwklr import __version__ as APP_VERSION
+from hwklr import APP_NAME, DEV_BUILD, __version__ as APP_VERSION
 from hwklr.config import load_config
 from hwklr.features.base import ApiResult, Feature, failure, success
 from hwklr.features.manifest import OFFICIAL_FEATURES, FeatureSpec, feature_version
 from hwklr.features.settings import FeatureSettingsGroup, SettingsFieldSpec
 
+from .devenv import create_dev_venv, find_system_python, venv_path, venv_ready
 from .packager import (
     VERSION_PATTERN,
     BuildError,
@@ -35,7 +39,7 @@ from .packager import (
     resolve_output_dir,
 )
 
-__version__ = "2.1.0"
+__version__ = "2.1.2"
 __author__ = "Gary"
 __all__ = ["BuildFeature"]
 
@@ -75,6 +79,23 @@ def _as_bool(value: Any) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "on", "是"}
 
 
+def _default_export_version() -> str:
+    """计算构建页默认导出版本号。
+
+    Windows 上把最后一位填为 12 位时间戳对 9973 取模的结果；
+    其他平台直接使用当前程序版本。
+
+    Returns:
+        形如 ``x.y.z`` 的版本号。
+    """
+    base: str = str(APP_VERSION)
+    parts: list[str] = base.split(".")
+    if sys.platform != "win32" or len(parts) < 2:
+        return base
+    stamp: str = datetime.now().strftime("%y%m%d%H%M%S")
+    return "%s.%s.%d" % (parts[0], parts[1], int(stamp) % 9973)
+
+
 class BuildFeature(Feature):
     """“构建”标签页功能。"""
 
@@ -86,6 +107,7 @@ class BuildFeature(Feature):
         """
         super().__init__(universal_param)
         self._job_lock: threading.Lock = threading.Lock()
+        self._dev_lock: threading.Lock = threading.Lock()
         self._job: dict[str, Any] = self._idle_job()
         self._thread: threading.Thread | None = None
         self._settings_group: FeatureSettingsGroup = self._build_settings_group()
@@ -226,6 +248,8 @@ class BuildFeature(Feature):
                 return self._start_build(params)
             if action == "get_job":
                 return self._get_job(params)
+            if action == "setup_dev_venv":
+                return self._setup_dev_venv(params)
             return failure("未知动作: %s" % action)
         except Exception as exc:  # 兜底，保证错误回传到 UI。
             _LOGGER.exception("构建功能未预期异常")
@@ -243,9 +267,19 @@ class BuildFeature(Feature):
         )
         output_value: str = str(setting.get("output_dir") or "")
         pyinstaller: str = pyinstaller_version()
+        python_found: tuple[list[str], str] | None = (
+            find_system_python() if DEV_BUILD else None
+        )
         return {
             "version": APP_VERSION,
+            "default_version": _default_export_version(),
+            "default_name": APP_NAME,
             "buildable": not bool(getattr(sys, "frozen", False)),
+            "dev_build": bool(DEV_BUILD),
+            "dev_env_ready": venv_ready(),
+            "dev_env_path": str(venv_path()),
+            "python_available": python_found is not None,
+            "python_path": python_found[1] if python_found else "",
             "output_dir": output_value,
             "output_path": str(resolve_output_dir(output_value)),
             "dev_format": str(setting.get("dev_format") or "executable"),
@@ -329,17 +363,23 @@ class BuildFeature(Feature):
         """启动一次后台构建。
 
         Args:
-            params: 必须包含 ``version``，可选 ``dev_build``。
+            params: 必须包含 ``version``，可选 ``dev_build``、
+                ``program_name``、``icon_data``、``icon_filename``。
 
         Returns:
             新任务的 ``job_id``。
         """
         if getattr(sys, "frozen", False):
             return failure("已打包的应用不能再次构建，请从源码运行本程序")
-        version: str = str(params.get("version") or APP_VERSION).strip()
+        version: str = str(
+            params.get("version") or _default_export_version()
+        ).strip()
         if not VERSION_PATTERN.match(version):
             return failure("版本号不合法！请填写 x.x.x 形式（例如 2.1.0）")
         dev_build: bool = _as_bool(params.get("dev_build"))
+        program_name: str = str(params.get("program_name") or "").strip()
+        icon_data: str = str(params.get("icon_data") or "")
+        icon_filename: str = str(params.get("icon_filename") or "")
         with self._job_lock:
             if self._job.get("running"):
                 return failure("已有构建任务正在运行，请等待完成")
@@ -370,7 +410,17 @@ class BuildFeature(Feature):
         dev_format: str = str(setting.get("dev_format") or "executable")
         self._thread = threading.Thread(
             target=self._run_job,
-            args=(job_id, version, dev_build, output_dir, dev_format, dev_features),
+            args=(
+                job_id,
+                version,
+                dev_build,
+                output_dir,
+                dev_format,
+                dev_features,
+                program_name,
+                icon_data,
+                icon_filename,
+            ),
             name="BuildJob-%s" % job_id,
             daemon=True,
         )
@@ -385,6 +435,9 @@ class BuildFeature(Feature):
         output_dir: str,
         dev_format: str,
         dev_features: set[str],
+        program_name: str,
+        icon_data: str,
+        icon_filename: str,
     ) -> None:
         """后台线程：执行构建并写入任务状态。
 
@@ -395,6 +448,9 @@ class BuildFeature(Feature):
             output_dir: 输出目录配置。
             dev_format: 开发构建格式。
             dev_features: 标记为 dev 的功能名称。
+            program_name: 程序显示名称。
+            icon_data: 图标 Base64/Data URL。
+            icon_filename: 图标原始文件名。
         """
         try:
             self._append_log("开始构建任务 %s" % job_id)
@@ -404,6 +460,9 @@ class BuildFeature(Feature):
                 output_dir=output_dir,
                 dev_format=dev_format,
                 dev_features=dev_features,
+                program_name=program_name,
+                icon_data=icon_data,
+                icon_filename=icon_filename,
                 log=self._append_log,
                 set_phase=self._set_phase,
             )
@@ -438,6 +497,26 @@ class BuildFeature(Feature):
                     "message": "构建失败",
                     "error": "构建异常: %s" % exc,
                 })
+
+    def _setup_dev_venv(self, params: dict[str, Any]) -> ApiResult:
+        """在开发构建包中创建 HwklrVenv。
+
+        Args:
+            params: 未使用的动作参数。
+
+        Returns:
+            搭建结果；失败时返回可读原因。
+        """
+        if not DEV_BUILD:
+            return failure("仅开发构建版本可搭建开发环境")
+        if not self._dev_lock.acquire(blocking=False):
+            return failure("正在搭建开发环境，请稍候")
+        try:
+            return success(create_dev_venv(log=self._append_log))
+        except RuntimeError as exc:
+            return failure(str(exc))
+        finally:
+            self._dev_lock.release()
 
     def _get_job(self, params: dict[str, Any]) -> ApiResult:
         """返回当前构建任务状态。

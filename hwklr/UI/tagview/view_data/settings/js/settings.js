@@ -1,10 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-10-31 20:45
-  最后更新: 2026-11-01 12:40
+  最后更新: 2026-11-01 12:38
   文件名: settings.js
-  主要用途: “设置”页面逻辑：动态分组、Feature 开发标记表、失焦/开关自动保存、高级设置二次确认、板块高亮与知识库信息。
-  文件版本: 2.1.0
+  主要用途: “设置”页面逻辑：动态分组、Feature 开发标记表、失焦/开关自动保存、任意更改二次确认、板块高亮与知识库信息。
+  文件版本: 2.1.2
 */
 
 (function () {
@@ -132,17 +132,13 @@
   }
 
   /**
-   * 判断字段保存前是否需要弹出高级设置警告。
-   * 仅当字段确实被修改、且当前值与首次渲染时的初始值不同才提示。
+   * 判断字段保存前是否需要弹出警告。
+   * V2.1 Patch2 起，只要字段发生了更改就提示，不再判断 alert 字段。
    * @param {HTMLElement} input 输入元素。
    * @returns {boolean} 需要警告返回 true。
    */
   function needsAlertConfirm(input) {
-    if (input.dataset.alert !== 'true' || !fieldChanged(input)) {
-      return false;
-    }
-    const baseline = state.baselines.get(baselineId(input));
-    return baseline !== undefined && fieldValue(input) !== baseline;
+    return fieldChanged(input);
   }
 
   /**

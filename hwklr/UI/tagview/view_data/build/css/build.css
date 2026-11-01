@@ -1,9 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-11-01 12:40
+  最后更新: 2026-11-01 12:38
   文件名: build.css
-  主要用途: “构建”标签页样式：自适应高度、工具信息、版本号校验、开发构建提示、日志文本框与操作按钮。
-  文件版本: 2.1.0
+  主要用途: “构建”标签页样式：程序名称/图标选择、版本号校验、开发环境毛玻璃遮罩、日志与操作按钮。
+  文件版本: 2.1.2
 */
 
 .content-host:has(> .tag-build) {
@@ -11,6 +12,7 @@
 }
 
 .tag-build {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -60,14 +62,30 @@
 
 .tag-build .build-form {
   display: grid;
-  grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
+  grid-template-columns: minmax(150px, 220px) minmax(200px, 1fr) minmax(260px, 300px);
+  grid-template-areas:
+    "version name icon"
+    "dev dev dev";
   align-items: end;
-  gap: 18px;
+  gap: 14px 18px;
+}
+
+.tag-build .build-version-field {
+  grid-area: version;
+}
+
+.tag-build .build-name-field {
+  grid-area: name;
+}
+
+.tag-build .build-icon-field {
+  grid-area: icon;
 }
 
 .tag-build .build-field {
   display: grid;
   gap: 6px;
+  min-width: 0;
 }
 
 .tag-build .build-field-label {
@@ -88,10 +106,80 @@
 }
 
 .tag-build .build-dev-row {
+  grid-area: dev;
   display: flex;
   align-items: center;
   gap: 10px;
   padding-bottom: 2px;
+}
+
+/* 程序图标选择器：预览块 + 选择/清除按钮。 */
+.tag-build .build-icon-picker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+}
+
+.tag-build .build-icon-preview {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  overflow: hidden;
+  border: 1px dashed #c9cce0;
+  border-radius: 10px;
+  background-color: #f7f8fc;
+  background-image:
+    linear-gradient(45deg, #e9ebf4 25%, transparent 25%),
+    linear-gradient(-45deg, #e9ebf4 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #e9ebf4 75%),
+    linear-gradient(-45deg, transparent 75%, #e9ebf4 75%);
+  background-size: 10px 10px;
+  background-position: 0 0, 0 5px, 5px -5px, -5px 0;
+}
+
+.tag-build .build-icon-preview.has-icon {
+  border-style: solid;
+  border-color: var(--panel-border);
+  background: #ffffff;
+}
+
+.tag-build .build-icon-fallback {
+  color: #9aa0b5;
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.tag-build .build-icon-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.tag-build .build-icon-actions {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.tag-build .build-icon-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.tag-build .build-icon-name {
+  max-width: 220px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tag-build .build-check {
@@ -195,6 +283,160 @@
   gap: 10px;
 }
 
+/* ---------------------------------------------------------------- 开发构建遮罩 */
+.build-dev-gate {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  border-radius: var(--radius-lg);
+  background: rgba(240, 242, 252, 0.55);
+  backdrop-filter: blur(16px) saturate(1.1);
+  -webkit-backdrop-filter: blur(16px) saturate(1.1);
+  animation: build-gate-in 0.26s ease-out;
+}
+
+.build-dev-panel {
+  position: relative;
+  isolation: isolate;
+  width: min(540px, 100%);
+  padding: 32px 30px 26px;
+  overflow: hidden;
+  border: 1px solid rgba(91, 75, 255, 0.22);
+  border-radius: 20px;
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.97), rgba(246, 247, 253, 0.95));
+  box-shadow: 0 32px 80px rgba(16, 18, 58, 0.24);
+}
+
+/* 淡蓝工程网格：开发构建的“图纸”质感。 */
+.build-dev-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-image:
+    linear-gradient(rgba(91, 75, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(91, 75, 255, 0.06) 1px, transparent 1px);
+  background-size: 22px 22px;
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.75), transparent 72%);
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.75), transparent 72%);
+  pointer-events: none;
+}
+
+.build-dev-stamp {
+  position: absolute;
+  top: 18px;
+  right: 20px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 58px;
+  height: 58px;
+  transform: rotate(-9deg);
+  border: 1px dashed rgba(91, 75, 255, 0.48);
+  border-radius: 50%;
+  background: rgba(236, 233, 255, 0.62);
+  color: var(--accent-strong);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+}
+
+.build-dev-panel h2 {
+  position: relative;
+  z-index: 1;
+  margin: 0 64px 10px 0;
+  color: var(--ink);
+  font-size: 20px;
+  line-height: 1.35;
+}
+
+.build-dev-message {
+  position: relative;
+  z-index: 1;
+  margin: 0 0 20px;
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.build-dev-panel .btn {
+  position: relative;
+  z-index: 1;
+}
+
+.build-dev-error {
+  position: relative;
+  z-index: 1;
+  margin: 12px 0 0;
+  color: var(--bad);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.build-dev-path {
+  position: relative;
+  z-index: 1;
+  margin: 14px 0 0;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.build-dev-placeholder {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 30px;
+  text-align: center;
+  animation: build-gate-in 0.3s ease-out;
+}
+
+.build-dev-placeholder-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 28px;
+  line-height: 1;
+}
+
+.build-dev-placeholder h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 22px;
+  letter-spacing: 0.02em;
+}
+
+.tag-build.dev-ready .hero,
+.tag-build.dev-ready .build-card {
+  display: none;
+}
+
+@keyframes build-gate-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 @media (max-width: 1000px) {
   .tag-build .build-meta {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -202,6 +444,11 @@
 
   .tag-build .build-form {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "version"
+      "name"
+      "icon"
+      "dev";
     align-items: start;
   }
 }
@@ -213,5 +460,33 @@
 
   .tag-build .build-log {
     min-height: 140px;
+  }
+
+  .tag-build .build-icon-name {
+    max-width: 150px;
+  }
+
+  .build-dev-panel {
+    padding: 26px 20px 22px;
+  }
+
+  .build-dev-stamp {
+    top: 14px;
+    right: 14px;
+    width: 46px;
+    height: 46px;
+    font-size: 10px;
+  }
+
+  .build-dev-panel h2 {
+    margin-right: 50px;
+    font-size: 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .build-dev-gate,
+  .build-dev-placeholder {
+    animation: none;
   }
 }

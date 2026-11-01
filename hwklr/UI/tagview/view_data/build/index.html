@@ -1,9 +1,10 @@
 <!--
   作者: Gary
   编写日期: 2026-11-01 12:40
+  最后更新: 2026-11-01 12:38
   文件名: index.html
-  主要用途: “构建”标签页结构：工具版本、导出显示版本号、开发构建开关、构建日志与构建按钮。
-  文件版本: 2.1.0
+  主要用途: “构建”标签页结构：程序名称/图标、版本号、开发构建开关、构建日志、构建按钮与开发环境遮罩。
+  文件版本: 2.1.2
 -->
 <section class="tag-page tag-build" id="build-page">
   <div class="hero">
@@ -35,11 +36,34 @@
     </div>
 
     <div class="build-form">
-      <label class="build-field">
+      <label class="build-field build-version-field">
         <span class="build-field-label">导出显示版本号</span>
         <input id="build-version" class="mono" type="text" autocomplete="off" spellcheck="false" placeholder="x.y.z" aria-describedby="build-version-error">
         <span id="build-version-error" class="build-version-error hidden" role="alert">版本号不合法！</span>
       </label>
+
+      <label class="build-field build-name-field">
+        <span class="build-field-label">程序名称</span>
+        <input id="build-name" type="text" autocomplete="off" spellcheck="false" placeholder="HomeworkKiller4BJTU">
+      </label>
+
+      <div class="build-field build-icon-field">
+        <span class="build-field-label">程序图标</span>
+        <div class="build-icon-picker">
+          <div id="build-icon-preview" class="build-icon-preview" aria-hidden="true">
+            <span id="build-icon-fallback" class="build-icon-fallback">ICO</span>
+            <img id="build-icon-img" class="build-icon-img hidden" alt="">
+          </div>
+          <div class="build-icon-actions">
+            <div class="build-icon-buttons">
+              <button id="build-icon-choose" class="btn ghost small" type="button">选择图标</button>
+              <button id="build-icon-clear" class="btn ghost small hidden" type="button">清除</button>
+            </div>
+            <span id="build-icon-name" class="build-icon-name">支持 .ico / png / jpg</span>
+          </div>
+          <input id="build-icon-file" type="file" accept=".ico,image/png,image/jpeg,image/bmp,image/gif,image/webp" hidden>
+        </div>
+      </div>
 
       <div class="build-dev-row">
         <label class="build-check">
@@ -49,7 +73,7 @@
         <span class="build-info" tabindex="0" aria-label="开发构建说明">i
           <span class="build-info-box">
             不勾选（默认）：发布构建。排除标记为 dev 的功能、构建标签与参考文档，不显示终端，并启用字节码优化，尽可能精简包体。<br>
-            勾选：全局导出，包含全部功能与文档。格式为 zip 时使用 python-embed 作为运行时；格式为 executable 时使用 PyInstaller 打包并显示终端。
+            勾选：全局导出，包含全部功能与文档及源码归档。格式为 zip 时使用 python-embed 作为运行时；格式为 executable 时使用 PyInstaller 打包并显示终端。
           </span>
         </span>
       </div>
@@ -66,4 +90,21 @@
       <button id="build-start" class="btn primary" type="button">构建</button>
     </div>
   </section>
+
+  <div id="build-dev-gate" class="build-dev-gate hidden" role="dialog" aria-modal="true" aria-labelledby="build-dev-title">
+    <div class="build-dev-panel" tabindex="-1">
+      <div class="build-dev-stamp" aria-hidden="true">DEV</div>
+      <h2 id="build-dev-title">本程序为开发构建版本</h2>
+      <p id="build-dev-message" class="build-dev-message">在当前位置搭建开发环境？</p>
+      <button id="build-dev-setup" class="btn primary" type="button">好的，在这里为我搭建开发环境</button>
+      <p id="build-dev-error" class="build-dev-error hidden" role="alert"></p>
+      <p id="build-dev-path" class="build-dev-path"></p>
+    </div>
+  </div>
+
+  <div id="build-dev-placeholder" class="build-dev-placeholder hidden">
+    <div class="build-dev-placeholder-mark" aria-hidden="true">✓</div>
+    <h2>尽情期待...</h2>
+    <p id="build-dev-placeholder-path" class="hint"></p>
+  </div>
 </section>

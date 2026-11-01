@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
-# 最后更新: 2026-11-01 12:40
+# 最后更新: 2026-11-01 12:38
 # 文件名: __init__.py
-# 主要用途: hwklr 主包元数据与全局应用信息（V2.1.0，支持导出时注入显示版本号）。
-# 文件版本: 2.1.0
+# 主要用途: hwklr 主包元数据与全局应用信息（V2.1.2，支持导出时注入版本、名称、图标与开发标记）。
+# 文件版本: 2.1.2
 """HomeworkKiller4BJTU 主包。
 
 本包只声明项目级元数据，具体功能拆分为：
@@ -14,25 +14,44 @@
 """
 from __future__ import annotations
 
-# 导出构建会在打包前生成 _build_info.py，用于覆盖“导出显示版本号”；
-# 源码运行时该文件不存在，使用项目实际版本号。
+from pathlib import Path
+
+# 导出构建会在打包前生成 _build_info.py，用于覆盖版本、名称、图标与开发标记；
+# 源码运行时该文件不存在，使用项目默认值。
+__version__: str = "2.1.2"
+DEV_BUILD: bool = False
+_EXPORT_NAME: str = ""
+_ICON_RELATIVE: str = ""
 try:
-    from ._build_info import EXPORT_VERSION as __version__
+    from . import _build_info
 except ImportError:  # pragma: no cover - 源码运行分支
-    __version__ = "2.1.0"
+    pass
+else:
+    __version__ = str(getattr(_build_info, "EXPORT_VERSION", __version__))
+    _EXPORT_NAME = str(getattr(_build_info, "EXPORT_NAME", "") or "").strip()
+    DEV_BUILD = bool(getattr(_build_info, "DEV_BUILD", False))
+    _ICON_RELATIVE = str(getattr(_build_info, "ICON_PATH", "") or "").strip()
+
 __author__ = "Gary"
 __all__ = [
     "__version__",
     "__author__",
     "APP_NAME",
     "APP_TITLE",
+    "APP_ICON",
     "APP_AUTHORS",
     "APP_DESCRIPTION",
     "APP_DISCLAIMER",
+    "DEV_BUILD",
 ]
 
-APP_NAME: str = "HomeworkKiller4BJTU"
-APP_TITLE: str = "HomeworkKiller4BJTU · 作业助手"
+APP_NAME: str = _EXPORT_NAME or "HomeworkKiller4BJTU"
+APP_TITLE: str = _EXPORT_NAME or "HomeworkKiller4BJTU · 作业助手"
+APP_ICON: str = ""
+if _ICON_RELATIVE:
+    _icon_candidate: Path = Path(__file__).resolve().parent.parent / _ICON_RELATIVE
+    if _icon_candidate.is_file():
+        APP_ICON = str(_icon_candidate)
 APP_AUTHORS: tuple[str, ...] = ("Gary", "PhiloK (Remaster by Gary)（高铁纵横）")
 APP_DESCRIPTION: str = (
     "面向北京交通大学学生的辅助工具：提供高铁答题辅助与 C 语言程序设计学习支持，"

@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
-# 最后更新: 2026-11-01 00:01
+# 最后更新: 2026-11-01 12:38
 # 文件名: __init__.py
-# 主要用途: 封装 pywebview 核心窗口 WindowView、设置组注册与 JS 桥接对象 BridgeApi。
-# 文件版本: 2.0.0
+# 主要用途: 封装 pywebview 核心窗口 WindowView、设置组注册与 JS 桥接对象 BridgeApi（支持导出图标/名称）。
+# 文件版本: 2.1.2
 """UI 窗口层。
 
 入口只需::
@@ -28,6 +28,7 @@ from hwklr import (
     APP_AUTHORS,
     APP_DESCRIPTION,
     APP_DISCLAIMER,
+    APP_ICON,
     APP_NAME,
     APP_TITLE,
 )
@@ -39,7 +40,7 @@ from .server import UiHttpServer
 from .tagview import TagView
 from .tagview.view_data import ABOUT_NAME, SETTINGS_NAME, VIEW_PARAMS
 
-__version__ = "2.0.0"
+__version__ = "2.1.2"
 __author__ = "Gary"
 __all__ = ["BridgeApi", "WindowView"]
 
@@ -388,7 +389,12 @@ class WindowView:
             )
             # 页面加载完成后同步 Python 侧的活动标签，并触发一次 activate_tagview。
             self._window.events.loaded += self._on_window_loaded
-            webview.start(debug=bool(self._ui_config.get("debug", False)))
+            # 导出构建若带自定义图标，pywebview 会用它设置窗口/任务栏图标；
+            # 没有自定义图标时，Windows 后端会自动从 exe 资源中提取。
+            webview.start(
+                debug=bool(self._ui_config.get("debug", False)),
+                icon=APP_ICON or None,
+            )
         finally:
             self._window = None
             self.stop_server()
