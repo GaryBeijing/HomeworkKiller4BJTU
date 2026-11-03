@@ -1,0 +1,9 @@
+{
+  "author": "Gary",
+  "name": "__FEATURE_NAME__",
+  "package": "__PACKAGE_NAME__",
+  "version": "1.0.0.0",
+  "update_date": "2026-11-03",
+  "official": false,
+  "description": "由 HomeworkKiller4BJTU 插件工程模板创建的示例插件。"
+}

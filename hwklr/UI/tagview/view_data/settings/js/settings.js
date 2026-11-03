@@ -1,10 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-10-31 20:45
-  最后更新: 2026-11-01 13:05
+  最后更新: 2026-11-03 20:40
   文件名: settings.js
-  主要用途: “设置”页面逻辑：动态分组、Feature 开发标记表、失焦/开关自动保存、alert 字段二次确认、板块高亮与知识库信息。
-  文件版本: 2.1.3
+  主要用途: “设置”页面逻辑：动态分组、功能启用开关、第三方扩展加载/启停、自动保存、alert 字段二次确认与知识库信息。
+  文件版本: 3.0.0
 */
 
 (function () {
@@ -25,6 +25,10 @@
     autoSaving: false,
     // 字段首次渲染时的值：用于判断高级设置是否偏离初始值。
     baselines: new Map(),
+    extensionData: null,
+    extensionList: null,
+    extensionLocal: null,
+    extensionGit: null,
   };
 
   /**
@@ -404,12 +408,329 @@
   }
 
   /**
+   * 显示一个通用消息弹窗。
+   * @param {string} title 标题。
+   * @param {string} message 正文。
+   * @param {string} [confirmText] 确认按钮文本。
+   * @returns {void}
+   */
+  function showMessageModal(title, message, confirmText) {
+    const backdrop = node('div', 'modal-backdrop settings-message-backdrop');
+    const modal = node('div', 'modal settings-message-modal');
+    modal.appendChild(node('h3', '', title));
+    const body = node('p', 'settings-message-text', message);
+    modal.appendChild(body);
+    const actions = node('div', 'alert-confirm-actions');
+    const confirm = node('button', 'btn primary', confirmText || '知道了');
+    confirm.type = 'button';
+    confirm.addEventListener('click', () => backdrop.remove());
+    actions.appendChild(confirm);
+    modal.appendChild(actions);
+    backdrop.appendChild(modal);
+    backdrop.addEventListener('click', (event) => {
+      if (event.target === backdrop) {
+        backdrop.remove();
+      }
+    });
+    document.body.appendChild(backdrop);
+    confirm.focus();
+  }
+
+  /**
+   * 显示输入弹窗并返回用户输入。
+   * @param {string} title 标题。
+   * @param {string} label 输入框标签。
+   * @param {string} [placeholder] 占位文本。
+   * @returns {Promise<string>} 用户输入；取消时返回空字符串。
+   */
+  function showPromptModal(title, label, placeholder) {
+    return new Promise((resolve) => {
+      const backdrop = node('div', 'modal-backdrop settings-message-backdrop');
+      const modal = node('div', 'modal settings-message-modal');
+      modal.appendChild(node('h3', '', title));
+      modal.appendChild(node('p', 'settings-message-text', label));
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.placeholder = placeholder || '';
+      input.className = 'settings-prompt-input';
+      modal.appendChild(input);
+      const actions = node('div', 'alert-confirm-actions');
+      const cancel = node('button', 'btn ghost', '取消');
+      cancel.type = 'button';
+      const confirm = node('button', 'btn primary', '确定');
+      confirm.type = 'button';
+      const finish = (value) => {
+        backdrop.remove();
+        resolve(value);
+      };
+      cancel.addEventListener('click', () => finish(''));
+      confirm.addEventListener('click', () => finish(String(input.value || '').trim()));
+      input.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          finish(String(input.value || '').trim());
+        }
+      });
+      actions.appendChild(cancel);
+      actions.appendChild(confirm);
+      modal.appendChild(actions);
+      backdrop.appendChild(modal);
+      backdrop.addEventListener('click', (event) => {
+        if (event.target === backdrop) {
+          finish('');
+        }
+      });
+      document.body.appendChild(backdrop);
+      input.focus();
+    });
+  }
+
+  /**
+   * 切换某个功能板块的启用状态。
+   * @param {Object} group 设置分组。
+   * @param {HTMLInputElement} input 开关输入。
+   * @returns {Promise<void>} 完成时 resolve。
+   */
+  async function toggleGroupEnabled(group, input) {
+    const enabled = Boolean(input.checked);
+    input.disabled = true;
+    try {
+      const data = await App.callOk('set_group_enabled', {
+        group_id: group.group_id,
+        enabled,
+      });
+      updateGroupStatuses(data.groups || []);
+      await App.refreshTags();
+      const stillActive = App.tags.some((tag) => tag.name === App.active);
+      if (!stillActive && App.tags.length > 0) {
+        await App.activate(App.tags[0].name);
+      }
+      App.toast(enabled ? '功能已启用' : '功能已停用', 'success');
+    } catch (error) {
+      input.checked = !enabled;
+      App.toast(`切换失败: ${error.message}`, 'error');
+    } finally {
+      input.disabled = false;
+    }
+  }
+
+  /**
+   * 渲染第三方扩展列表。
+   * @param {Object} data 扩展数据。
+   * @returns {void}
+   */
+  function renderExtensionList(data) {
+    if (!state.extensionList) {
+      return;
+    }
+    const extensions = Array.isArray(data.extensions) ? data.extensions : [];
+    if (state.extensionGit) {
+      state.extensionGit.disabled = !data.git_available;
+      state.extensionGit.title = data.git_available
+        ? '从 Git 仓库加载扩展'
+        : '未检测到 git，无法从 Git 仓库加载';
+    }
+    state.extensionList.innerHTML = '';
+    if (extensions.length === 0) {
+      state.extensionList.appendChild(node('p', 'muted', '尚未导入第三方扩展。'));
+    }
+    extensions.forEach((extension) => {
+      const row = node('div', 'extension-row');
+      const info = node('div', 'extension-info');
+      const title = node('div', 'extension-title');
+      title.appendChild(node('strong', '', String(extension.name || '未命名扩展')));
+      title.appendChild(
+        node('span', 'extension-version mono', String(extension.version_display || extension.version || ''))
+      );
+      if (extension.official) {
+        title.appendChild(node('span', 'extension-official', '官方'));
+      }
+      info.appendChild(title);
+      info.appendChild(
+        node(
+          'span',
+          'extension-meta',
+          `包名 ${extension.package || '—'} · 作者 ${extension.author || '—'} · 更新 ${extension.update_date || '—'}`
+        )
+      );
+      row.appendChild(info);
+      const switchLabel = node('label', 'switch');
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.checked = Boolean(extension.enabled);
+      input.addEventListener('change', () => {
+        setExtensionEnabled(extension.name, input.checked, input).catch((error) =>
+          App.toast(`切换扩展失败: ${error.message}`, 'error')
+        );
+      });
+      switchLabel.appendChild(input);
+      switchLabel.appendChild(node('span', 'slider'));
+      row.appendChild(switchLabel);
+      state.extensionList.appendChild(row);
+    });
+    if (Array.isArray(data.errors) && data.errors.length > 0) {
+      state.extensionList.appendChild(
+        node('p', 'settings-field-help', `部分扩展加载失败：${data.errors.join('；')}`)
+      );
+    }
+  }
+
+  /**
+   * 启用或停用第三方扩展。
+   * @param {string} name 扩展标签名。
+   * @param {boolean} enabled 是否启用。
+   * @param {HTMLInputElement} input 开关输入。
+   * @returns {Promise<void>} 完成时 resolve。
+   */
+  async function setExtensionEnabled(name, enabled, input) {
+    input.disabled = true;
+    try {
+      const data = await App.callOk('set_extension_enabled', { name, enabled });
+      renderExtensionList(data);
+      await App.refreshTags();
+      const stillActive = App.tags.some((tag) => tag.name === App.active);
+      if (!stillActive && App.tags.length > 0) {
+        await App.activate(App.tags[0].name);
+      }
+      App.toast(enabled ? '扩展已启用' : '扩展已停用', 'success');
+    } catch (error) {
+      input.checked = !enabled;
+      App.toast(`切换扩展失败: ${error.message}`, 'error');
+    } finally {
+      input.disabled = false;
+    }
+  }
+
+  /**
+   * 读取扩展列表。
+   * @returns {Promise<void>} 完成时 resolve。
+   */
+  async function loadExtensions() {
+    if (!state.extensionList) {
+      return;
+    }
+    try {
+      const data = await App.callOk('get_extensions');
+      state.extensionData = data;
+      renderExtensionList(data);
+    } catch (error) {
+      App.toast(`读取扩展列表失败: ${error.message}`, 'error');
+    }
+  }
+
+  /**
+   * 从本地 zip 导入扩展。
+   * @returns {Promise<void>} 完成时 resolve。
+   */
+  async function loadLocalExtension() {
+    try {
+      const picked = await App.callOk('pick_extension_zip');
+      const path = String((picked && picked.path) || '');
+      if (!path) {
+        return;
+      }
+      App.setLoading(true, '正在导入扩展…');
+      const result = await App.callOk('load_extension_zip', { path });
+      await App.refreshTags();
+      await loadExtensions();
+      const extension = (result && result.extension) || {};
+      showMessageModal(
+        '导入成功',
+        `已导入扩展「${extension.name || result.tab || '未知扩展'}」。可在下方列表中启用或停用。`,
+        '好的'
+      );
+    } catch (error) {
+      showMessageModal('导入失败', String(error.message || '未知错误'));
+    } finally {
+      App.setLoading(false);
+    }
+  }
+
+  /**
+   * 从 Git 仓库导入扩展。
+   * @returns {Promise<void>} 完成时 resolve。
+   */
+  async function loadGitExtension() {
+    const url = await showPromptModal(
+      '从 Git 仓库加载',
+      '请输入包含扩展结构的 Git 仓库地址：',
+      'https://github.com/user/extension.git'
+    );
+    if (!url) {
+      return;
+    }
+    try {
+      App.setLoading(true, '正在克隆并导入扩展…');
+      const result = await App.callOk('load_extension_git', { url });
+      await App.refreshTags();
+      await loadExtensions();
+      const extension = (result && result.extension) || {};
+      showMessageModal(
+        '导入成功',
+        `已从 Git 仓库导入扩展「${extension.name || result.tab || '未知扩展'}」。`,
+        '好的'
+      );
+    } catch (error) {
+      showMessageModal('导入失败', String(error.message || '未知错误'));
+    } finally {
+      App.setLoading(false);
+    }
+  }
+
+  /**
+   * 构建第三方扩展加载器字段。
+   * @param {Object} group 设置分组。
+   * @param {Object} field 字段定义。
+   * @returns {HTMLElement} 字段容器。
+   */
+  function buildExtensionField(group, field) {
+    const wrapper = node('div', 'settings-field extension-field');
+    wrapper.appendChild(node('span', 'settings-field-label', field.label || '加载扩展'));
+    const panel = node('div', 'extension-panel');
+    const buttons = node('div', 'extension-buttons');
+    const local = node('button', 'btn extension-local', '从本地加载');
+    local.type = 'button';
+    local.addEventListener('click', () => {
+      loadLocalExtension().catch((error) =>
+        App.toast(`导入扩展失败: ${error.message}`, 'error')
+      );
+    });
+    const git = node('button', 'btn extension-git');
+    git.type = 'button';
+    git.innerHTML =
+      '<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">' +
+      '<path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>' +
+      '<span>从 Git 仓库加载</span>';
+    git.addEventListener('click', () => {
+      loadGitExtension().catch((error) =>
+        App.toast(`导入扩展失败: ${error.message}`, 'error')
+      );
+    });
+    buttons.appendChild(local);
+    buttons.appendChild(git);
+    const list = node('div', 'extension-list');
+    panel.appendChild(buttons);
+    panel.appendChild(list);
+    wrapper.appendChild(panel);
+    if (field.help) {
+      wrapper.appendChild(node('p', 'settings-field-help', field.help));
+    }
+    state.extensionLocal = local;
+    state.extensionGit = git;
+    state.extensionList = list;
+    state.extensionData = null;
+    return wrapper;
+  }
+
+  /**
    * 构建一个设置字段。
    * @param {Object} group 设置分组。
    * @param {Object} field 字段定义。
    * @returns {HTMLElement} 字段容器。
    */
   function buildField(group, field) {
+    if (field.kind === 'extensions') {
+      return buildExtensionField(group, field);
+    }
     // 可选填字段以灰字 + 左上角灰色星号标记；alert 字段标签使用深黄色。
     const classes = ['settings-field'];
     if (field.is_necessary === false) {
@@ -541,7 +862,28 @@
     }
     input.addEventListener('blur', () => scheduleAutoSave(group.group_id, input));
 
-    if (field.secret && field.kind !== 'select') {
+    if (field.kind === 'file') {
+      const fileWrap = node('div', 'file-picker-wrap');
+      fileWrap.appendChild(input);
+      const browse = node('button', 'btn ghost small', '选择');
+      browse.type = 'button';
+      browse.addEventListener('click', () => {
+        App.callOk('pick_plugin_template')
+          .then((data) => {
+            const path = String((data && data.path) || '');
+            if (!path) {
+              return;
+            }
+            input.value = path;
+            scheduleAutoSave(group.group_id, input);
+          })
+          .catch((error) =>
+            App.toast(`选择模板失败: ${error.message}`, 'error')
+          );
+      });
+      fileWrap.appendChild(browse);
+      wrapper.appendChild(fileWrap);
+    } else if (field.secret && field.kind !== 'select') {
       const secretWrap = node('div', 'secret-wrap');
       secretWrap.appendChild(input);
       const toggle = node('button', 'btn ghost small', '显示');
@@ -573,12 +915,30 @@
     card.dataset.group = group.group_id;
     const head = node('div', 'settings-group-head');
     head.appendChild(node('h3', 'settings-group-title', group.title || group.group_id));
+    const actions = node('div', 'settings-group-head-actions');
+    // #每个功能板块右上角的启用开关（设置/关于板块不会注册到这里）。
+    if (group.enabled_editable) {
+      const switchLabel = node('label', 'switch group-switch');
+      switchLabel.title = group.enabled ? '点击停用该功能' : '点击启用该功能';
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.checked = group.enabled !== false;
+      input.addEventListener('change', () => {
+        toggleGroupEnabled(group, input).catch((error) =>
+          App.toast(`切换失败: ${error.message}`, 'error')
+        );
+      });
+      switchLabel.appendChild(input);
+      switchLabel.appendChild(node('span', 'slider'));
+      actions.appendChild(switchLabel);
+    }
     const status = node(
       'span',
       'group-status ' + (group.complete ? 'ok' : 'missing'),
       group.complete ? '已完整' : '缺少设置'
     );
-    head.appendChild(status);
+    actions.appendChild(status);
+    head.appendChild(actions);
     card.appendChild(head);
     if (group.description) {
       card.appendChild(node('p', 'settings-group-desc', group.description));
@@ -599,6 +959,9 @@
       return;
     }
     state.groups = Array.isArray(groups) ? groups : [];
+    state.extensionList = null;
+    state.extensionLocal = null;
+    state.extensionGit = null;
     els.groups.innerHTML = '';
     if (state.groups.length === 0) {
       els.groups.appendChild(node('p', 'muted', '暂无可配置项。'));
@@ -629,6 +992,7 @@
     const data = await App.callOk('get_settings');
     renderRuntime(data);
     renderGroups(data.groups || []);
+    await loadExtensions();
   }
 
   /**
@@ -700,6 +1064,7 @@
       const data = await App.callOk('save_settings', { groups: collectGroups() });
       renderRuntime(data);
       renderGroups(data.groups || []);
+      await loadExtensions();
       setStatus('设置已保存。', 'success');
       App.toast('设置已保存', 'success');
       await App.refreshTags();

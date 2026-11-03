@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
-# 最后更新: 2026-11-01 12:40
+# 最后更新: 2026-11-03 18:00
 # 文件名: settings.py
-# 主要用途: 设置分组框架（FeatureSettingsGroup）与“设置”标签页功能实现，支持构建功能的 Feature 开发标记表。
-# 文件版本: 2.1.0
+# 主要用途: 设置分组框架（FeatureSettingsGroup）、“设置”标签页功能实现与第三方扩展加载/启用管理。
+# 文件版本: 3.0.0
 """设置分组与设置页功能。
 
 V2 起，每个功能通过 :class:`FeatureSettingsGroup` 注册自己的设置板块：
@@ -27,7 +27,7 @@ from hwklr import runtime_data
 from hwklr.config import load_config, update_config
 from hwklr.features.base import ApiResult, Feature, failure, success
 
-__version__ = "2.1.0"
+__version__ = "3.0.0"
 __author__ = "Gary"
 __all__ = ["FeatureSettingsGroup", "SettingsFeature", "SettingsFieldSpec"]
 
@@ -77,6 +77,9 @@ class FeatureSettingsGroup:
         exporter: Callable[[dict[str, Any]], dict[str, Any]],
         complete_checker: Callable[[], bool],
         missing_getter: Callable[[], list[str]],
+        enabled_getter: Callable[[], bool] | None = None,
+        enabled_setter: Callable[[bool], None] | None = None,
+        enabled_editable: bool = False,
     ) -> None:
         """初始化设置板块。
 
@@ -89,6 +92,9 @@ class FeatureSettingsGroup:
             exporter: 把规范化后的值转换为配置补丁的回调。
             complete_checker: 判断该功能必要设置是否完成的回调。
             missing_getter: 返回缺失设置名称列表的回调。
+            enabled_getter: 读取功能是否启用的回调；``None`` 表示不显示开关。
+            enabled_setter: 设置功能启用状态的回调。
+            enabled_editable: 是否允许在板块右上角切换启用状态。
         """
         self.group_id: str = group_id
         self.title: str = title
@@ -98,6 +104,57 @@ class FeatureSettingsGroup:
         self._exporter: Callable[[dict[str, Any]], dict[str, Any]] = exporter
         self._complete_checker: Callable[[], bool] = complete_checker
         self._missing_getter: Callable[[], list[str]] = missing_getter
+        self._enabled_getter: Callable[[], bool] | None = enabled_getter
+        self._enabled_setter: Callable[[bool], None] | None = enabled_setter
+        self._enabled_editable: bool = bool(enabled_editable)
+
+    def bind_enabled(
+        self,
+        getter: Callable[[], bool],
+        setter: Callable[[bool], None],
+        editable: bool = True,
+    ) -> None:
+        """为板块绑定功能启用开关。
+
+        Args:
+            getter: 读取启用状态。
+            setter: 设置启用状态。
+            editable: 是否允许用户切换。
+        """
+        self._enabled_getter = getter
+        self._enabled_setter = setter
+        self._enabled_editable = bool(editable)
+
+    @property
+    def enabled_editable(self) -> bool:
+        """返回板块是否显示启用开关。
+
+        Returns:
+            显示返回 ``True``。
+        """
+        return self._enabled_editable and self._enabled_getter is not None
+
+    def is_enabled(self) -> bool:
+        """读取板块对应功能的启用状态。
+
+        Returns:
+            启用返回 ``True``；未绑定开关时返回 ``True``。
+        """
+        if self._enabled_getter is None:
+            return True
+        try:
+            return bool(self._enabled_getter())
+        except Exception:  # 配置损坏时不影响设置页渲染。
+            return True
+
+    def set_enabled(self, enabled: bool) -> None:
+        """设置板块对应功能的启用状态。
+
+        Args:
+            enabled: 是否启用。
+        """
+        if self._enabled_setter is not None:
+            self._enabled_setter(bool(enabled))
 
     @property
     def field_specs(self) -> tuple[SettingsFieldSpec, ...]:
@@ -174,6 +231,9 @@ class FeatureSettingsGroup:
         normalized: dict[str, Any] = dict(current)
         for spec in self._field_specs:
             if spec.key not in raw_values:
+                continue
+            # #扩展加载器是纯交互控件，不参与配置值收集。
+            if spec.kind == "extensions":
                 continue
             raw: Any = raw_values.get(spec.key)
             if spec.kind == "switch":
@@ -262,6 +322,8 @@ class FeatureSettingsGroup:
             "fields": self.fields(),
             "complete": self.is_complete(),
             "missing": self.missing_labels(),
+            "enabled": self.is_enabled(),
+            "enabled_editable": self.enabled_editable,
         }
 
 
@@ -358,6 +420,16 @@ class SettingsFeature(Feature):
                     placeholder="请输入学号或账号",
                     help="高铁纵横与 C 程序设计共用该用户名。",
                 ),
+                SettingsFieldSpec(
+                    key="extensions",
+                    label="加载扩展",
+                    kind="extensions",
+                    is_necessary=False,
+                    help=(
+                        "从本地 zip 或 Git 仓库导入第三方功能扩展。导入成功后会显示"
+                        "在下方列表中，可随时启用或停用。"
+                    ),
+                ),
             ),
             values_getter=values_getter,
             exporter=exporter,
@@ -374,6 +446,26 @@ class SettingsFeature(Feature):
         """
         return self._groups[0]
 
+    @property
+    def about_meta(self) -> Any:
+        """返回设置功能自身的元信息（不展示在关于页列表中）。
+
+        Returns:
+            设置功能元信息组。
+        """
+        from hwklr.features.about import AboutMetadataGroup
+
+        return AboutMetadataGroup(
+            name="设置",
+            package="SETTINGS",
+            author="Gary",
+            version=APP_VERSION,
+            update_date="2026-11-03",
+            official=True,
+            feature_key="设置",
+            is_software=False,
+        )
+
     def register_group(self, group: FeatureSettingsGroup) -> None:
         """注册一个功能的设置板块。
 
@@ -383,6 +475,18 @@ class SettingsFeature(Feature):
         if any(item.group_id == group.group_id for item in self._groups):
             return
         self._groups.append(group)
+
+    def unregister_group(self, group_id: str) -> None:
+        """移除一个设置板块（用于测试插件热替换）。
+
+        Args:
+            group_id: 板块 ID；通用板块不可移除。
+        """
+        if group_id == "general":
+            return
+        self._groups = [
+            item for item in self._groups if item.group_id != group_id
+        ]
 
     @property
     def groups(self) -> list[FeatureSettingsGroup]:
@@ -422,6 +526,20 @@ class SettingsFeature(Feature):
             return self._save_settings(params)
         if action == "get_bank_info":
             return self._get_bank_info(params)
+        if action == "get_extensions":
+            return self._get_extensions(params)
+        if action == "pick_extension_zip":
+            return self._pick_extension_zip(params)
+        if action == "load_extension_zip":
+            return self._load_extension_zip(params)
+        if action == "load_extension_git":
+            return self._load_extension_git(params)
+        if action == "set_extension_enabled":
+            return self._set_extension_enabled(params)
+        if action == "set_group_enabled":
+            return self._set_group_enabled(params)
+        if action == "pick_plugin_template":
+            return self._pick_plugin_template(params)
         return failure("未知动作: %s" % action)
 
     def _save_settings(self, params: dict[str, Any]) -> ApiResult:
@@ -456,6 +574,198 @@ class SettingsFeature(Feature):
         except OSError as exc:
             return failure("保存设置失败: %s" % exc)
         return success(self._payload())
+
+    # ---------------------------------------------------------------- 扩展
+    def _dialogs(self) -> dict[str, Any]:
+        """返回窗口层注入的对话框回调。
+
+        Returns:
+            回调字典。
+        """
+        value: Any = self._universal_param.get("dialogs")
+        return value if isinstance(value, dict) else {}
+
+    def _register_extension_callback(self) -> Any:
+        """返回窗口层注入的扩展注册回调。
+
+        Returns:
+            可调用对象；未注入时返回 ``None``。
+        """
+        value: Any = self._universal_param.get("extensions")
+        if not isinstance(value, dict):
+            return None
+        callback: Any = value.get("register_dir")
+        return callback if callable(callback) else None
+
+    def _register_loaded_extension(self, path: str) -> dict[str, Any]:
+        """把刚导入的扩展注册为运行期标签。
+
+        Args:
+            path: 扩展目录。
+
+        Returns:
+            注册结果；回调不存在时返回空字典。
+        """
+        callback: Any = self._register_extension_callback()
+        if not callable(callback):
+            return {}
+        result: Any = callback(path, False)
+        return result if isinstance(result, dict) else {}
+
+    def _get_extensions(self, params: dict[str, Any]) -> ApiResult:
+        """返回已导入扩展列表。
+
+        Args:
+            params: 未使用的动作参数。
+
+        Returns:
+            扩展列表、错误、git 可用性与模板路径。
+        """
+        from hwklr.features.extensions import get_extensions_payload
+
+        return success(get_extensions_payload())
+
+    def _pick_extension_zip(self, params: dict[str, Any]) -> ApiResult:
+        """弹出文件选择框选择扩展 zip。
+
+        Args:
+            params: 未使用的动作参数。
+
+        Returns:
+            ``{"path": str}``；用户取消时 path 为空。
+        """
+        picker: Any = self._dialogs().get("pick_file")
+        if not callable(picker):
+            return failure("当前环境不支持文件选择")
+        try:
+            path: Any = picker(
+                "选择扩展压缩包",
+                "",
+                ("Zip 压缩包 (*.zip)",),
+            )
+        except Exception as exc:
+            return failure("打开文件选择框失败：%s" % exc)
+        return success({"path": str(path or "")})
+
+    def _load_extension_zip(self, params: dict[str, Any]) -> ApiResult:
+        """导入本地扩展 zip 并立即加载。
+
+        Args:
+            params: 必须包含 ``path``。
+
+        Returns:
+            导入后的扩展信息与标签名。
+        """
+        from hwklr.features.extensions import ExtensionError, install_extension_zip
+
+        path: str = str(params.get("path") or "").strip()
+        if not path:
+            return failure("未选择扩展压缩包")
+        try:
+            info = install_extension_zip(path)
+        except ExtensionError as exc:
+            return failure(str(exc))
+        try:
+            register_result: dict[str, Any] = self._register_loaded_extension(
+                str(info.path)
+            )
+        except Exception as exc:
+            return failure("扩展已解压，但运行期加载失败：%s" % exc)
+        return success({
+            "extension": info.payload(True),
+            "tab": register_result.get("tab", info.tab_name),
+        })
+
+    def _load_extension_git(self, params: dict[str, Any]) -> ApiResult:
+        """从 Git 仓库导入扩展并立即加载。
+
+        Args:
+            params: 必须包含 ``url``。
+
+        Returns:
+            导入后的扩展信息与标签名。
+        """
+        from hwklr.features.extensions import ExtensionError, install_extension_git
+
+        url: str = str(params.get("url") or "").strip()
+        if not url:
+            return failure("请输入 Git 仓库地址")
+        try:
+            info = install_extension_git(url)
+        except ExtensionError as exc:
+            return failure(str(exc))
+        try:
+            register_result: dict[str, Any] = self._register_loaded_extension(
+                str(info.path)
+            )
+        except Exception as exc:
+            return failure("扩展已解压，但运行期加载失败：%s" % exc)
+        return success({
+            "extension": info.payload(True),
+            "tab": register_result.get("tab", info.tab_name),
+        })
+
+    def _set_extension_enabled(self, params: dict[str, Any]) -> ApiResult:
+        """启用或停用一个第三方扩展。
+
+        Args:
+            params: 必须包含 ``name`` 与 ``enabled``。
+
+        Returns:
+            最新的扩展列表数据。
+        """
+        from hwklr.features.extensions import (
+            get_extensions_payload,
+            set_extension_enabled,
+        )
+
+        name: str = str(params.get("name") or "").strip()
+        if not name:
+            return failure("缺少扩展名")
+        set_extension_enabled(name, _as_bool(params.get("enabled")))
+        return success(get_extensions_payload())
+
+    def _set_group_enabled(self, params: dict[str, Any]) -> ApiResult:
+        """切换某个功能设置板块右上角的启用开关。
+
+        Args:
+            params: 必须包含 ``group_id`` 与 ``enabled``。
+
+        Returns:
+            保存后的完整设置数据。
+        """
+        group_id: str = str(params.get("group_id") or "").strip()
+        target: FeatureSettingsGroup | None = next(
+            (item for item in self._groups if item.group_id == group_id), None
+        )
+        if target is None:
+            return failure("未知设置板块: %s" % group_id)
+        if not target.enabled_editable:
+            return failure("该设置板块不支持启用开关")
+        target.set_enabled(_as_bool(params.get("enabled")))
+        return success(self._payload())
+
+    def _pick_plugin_template(self, params: dict[str, Any]) -> ApiResult:
+        """选择插件工程模板 zip。
+
+        Args:
+            params: 未使用的动作参数。
+
+        Returns:
+            ``{"path": str}``；用户取消时 path 为空。
+        """
+        picker: Any = self._dialogs().get("pick_file")
+        if not callable(picker):
+            return failure("当前环境不支持文件选择")
+        try:
+            path: Any = picker(
+                "选择插件工程模板",
+                "",
+                ("Zip 压缩包 (*.zip)",),
+            )
+        except Exception as exc:
+            return failure("打开文件选择框失败：%s" % exc)
+        return success({"path": str(path or "")})
 
     def _get_bank_info(self, params: dict[str, Any]) -> ApiResult:
         """列出所有功能知识库及题量。

@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-01 12:40
+# 最后更新: 2026-11-03 22:10
 # 文件名: manifest.py
 # 主要用途: 登记官方功能模块与标签资源目录，供 UI 注册、构建导出与开发标记共同使用。
-# 文件版本: 2.1.0
+# 文件版本: 3.0.0
 """官方功能清单。
 
 ``OFFICIAL_FEATURES`` 是新增功能时必须同步维护的唯一清单：
@@ -15,7 +16,7 @@ from __future__ import annotations
 import importlib
 from typing import Any, Final, NamedTuple
 
-__version__ = "2.1.0"
+__version__ = "3.0.0"
 __author__ = "Gary"
 __all__ = [
     "FEATURE_BY_NAME",
@@ -65,7 +66,7 @@ OFFICIAL_FEATURES: Final[tuple[FeatureSpec, ...]] = (
         module="hwklr.features.build",
         class_name="BuildFeature",
         view_dir="build",
-        description="将当前程序导出为可直接运行的目录、zip 或可执行文件。",
+        description="将当前程序导出为可直接运行的分发包，或从模板创建、测试并打包第三方插件。",
     ),
 )
 

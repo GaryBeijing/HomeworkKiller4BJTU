@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
-# 最后更新: 2026-11-01 20:02
+# 最后更新: 2026-11-03 18:10
 # 文件名: config.py
-# 主要用途: 统一读写 config.json；V2 起按设置分组存放账号、密码、AI 与构建配置，并兼容打包后的可执行文件。
-# 文件版本: 2.3.0
+# 主要用途: 统一读写 config.json；按设置分组存放账号、密码、AI、构建与第三方扩展配置，并兼容打包后的可执行文件。
+# 文件版本: 3.0.0
 """项目配置读写。
 
 配置文件固定位于**项目根目录**（``main.py`` 同级）的 ``config.json``。
@@ -20,7 +20,7 @@ import threading
 from pathlib import Path
 from typing import Any, Final
 
-__version__ = "2.3.0"
+__version__ = "3.0.0"
 __all__ = [
     "DEFAULT_CONFIG",
     "config_path",
@@ -38,6 +38,7 @@ DEFAULT_CONFIG: Final[dict[str, Any]] = {
     "username": "",
     "hsr": {
         "password": "",
+        "enabled": True,
     },
     "c_programming": {
         "provider": "deepseek",
@@ -48,16 +49,22 @@ DEFAULT_CONFIG: Final[dict[str, Any]] = {
         "max_concurrency": 1,
         "enable_solution_mode": False,
         "last_course_id": None,
+        "enabled": True,
     },
     "build": {
         "output_dir": "",
         "dev_format": "executable",
+        "plugin_template": "",
+        "plugin_project": "",
+        "enabled": True,
         "features": {
             "高铁纵横": "release",
             "C程序设计": "release",
             "构建": "dev",
         },
     },
+    # 已启用的第三方扩展标签名（例如 ["我的插件"]）。
+    "third-party": [],
     "ui": {
         "width": 1100,
         "height": 720,
@@ -86,8 +93,13 @@ def config_path() -> Path:
     if getattr(sys, "frozen", False):
         # 打包后 __file__ 位于 _internal 内，配置应放在 exe 旁边。
         return Path(sys.executable).resolve().parent / "config.json"
-    # hwklr/config.py -> hwklr -> 项目根目录
-    return Path(__file__).resolve().parent.parent / "config.json"
+    # hwklr/config.py -> hwklr -> 项目根目录；V3 的 HwklrVenv 中 hwklr 位于 Lib/，
+    # 此时继续向上找到含 pyvenv.cfg 的虚拟环境根目录。
+    root: Path = Path(__file__).resolve().parent.parent
+    for candidate in (root, root.parent):
+        if (candidate / "pyvenv.cfg").is_file():
+            return candidate / "config.json"
+    return root / "config.json"
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -155,6 +167,7 @@ def _migrate_config(config: dict[str, Any]) -> dict[str, Any]:
     if not hsr.get("password") and legacy_password:
         hsr["password"] = str(legacy_password)
     hsr.setdefault("password", "")
+    hsr.setdefault("enabled", True)
     config["hsr"] = hsr
 
     # 步骤 2：补齐 C 程序设计分组的缺失字段。
@@ -185,6 +198,17 @@ def _migrate_config(config: dict[str, Any]) -> dict[str, Any]:
         features.setdefault(name, state)
     build["features"] = features
     config["build"] = build
+
+    # 步骤 4：第三方扩展启用列表必须是字符串列表。
+    third_party: Any = config.get("third-party")
+    if isinstance(third_party, dict):
+        config["third-party"] = [
+            str(name) for name, state in third_party.items() if bool(state)
+        ]
+    elif isinstance(third_party, list):
+        config["third-party"] = [str(item) for item in third_party if str(item).strip()]
+    else:
+        config["third-party"] = []
     return config
 
 

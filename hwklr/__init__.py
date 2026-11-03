@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
-# 最后更新: 2026-11-01 20:26
+# 最后更新: 2026-11-03 20:25
 # 文件名: __init__.py
-# 主要用途: hwklr 主包元数据与全局应用信息（V2.3.1，支持导出时注入版本、名称、图标与开发标记）。
-# 文件版本: 2.3.1
+# 主要用途: hwklr 主包元数据与全局应用信息（V3.0.0，支持导出时注入版本、名称、图标与开发标记）。
+# 文件版本: 3.0.0
 """HomeworkKiller4BJTU 主包。
 
 本包只声明项目级元数据，具体功能拆分为：
@@ -18,7 +18,7 @@ from pathlib import Path
 
 # 导出构建会在打包前生成 _build_info.py，用于覆盖版本、名称、图标与开发标记；
 # 源码运行时该文件不存在，使用项目默认值。
-__version__: str = "2.3.1"
+__version__: str = "3.0.0"
 DEV_BUILD: bool = False
 _EXPORT_NAME: str = ""
 _ICON_RELATIVE: str = ""
@@ -52,7 +52,7 @@ if _ICON_RELATIVE:
     _icon_candidate: Path = Path(__file__).resolve().parent.parent / _ICON_RELATIVE
     if _icon_candidate.is_file():
         APP_ICON = str(_icon_candidate)
-APP_AUTHORS: tuple[str, ...] = ("Gary", "PhiloK (Remaster by Gary)（高铁纵横）")
+APP_AUTHORS: tuple[str, ...] = ("Gary", "PhiloK (Gary remastered)（高铁纵横）")
 APP_DESCRIPTION: str = (
     "面向北京交通大学学生的辅助工具：提供高铁答题辅助与 C 语言程序设计学习支持，"
     "在同学做题需要帮助时协助理解题目、梳理思路，以减轻学习压力。"

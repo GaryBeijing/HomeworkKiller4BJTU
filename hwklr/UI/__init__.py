@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
-# 最后更新: 2026-11-01 12:38
+# 最后更新: 2026-11-03 20:05
 # 文件名: __init__.py
-# 主要用途: 封装 pywebview 核心窗口 WindowView、设置组注册与 JS 桥接对象 BridgeApi（支持导出图标/名称）。
-# 文件版本: 2.1.2
+# 主要用途: 封装 pywebview 核心窗口 WindowView、运行期扩展注册、关于元信息注册与 JS 桥接对象 BridgeApi。
+# 文件版本: 3.0.0
 """UI 窗口层。
 
 入口只需::
@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import logging
+import urllib.parse
 from pathlib import Path
 from typing import Any, Final
 
@@ -34,13 +35,21 @@ from hwklr import (
 )
 from hwklr import __version__ as APP_VERSION
 from hwklr.config import load_config
+from hwklr.features import extensions as extension_api
 from hwklr.features import failure
 
 from .server import UiHttpServer
 from .tagview import TagView
-from .tagview.view_data import ABOUT_NAME, SETTINGS_NAME, VIEW_PARAMS
+from .tagview.view_data import (
+    ABOUT_NAME,
+    SETTINGS_NAME,
+    ViewParam,
+    all_view_params,
+    register_extension_param,
+    unregister_extension_param,
+)
 
-__version__ = "2.1.2"
+__version__ = "3.0.0"
 __author__ = "Gary"
 __all__ = ["BridgeApi", "WindowView"]
 
@@ -134,33 +143,52 @@ class WindowView:
         self._active_name: str | None = None
         self._server: UiHttpServer | None = None
         self._window: webview.Window | None = None
-
-        # 步骤 1：按注册表创建标签（功能实例在此注入通用参数）。
-        universal_param: dict[str, Any] = {
+        self._temporary_extensions: set[str] = set()
+        self._extension_names: set[str] = set()
+        self._extension_dirs: dict[str, Path] = {}
+        self._extension_errors: list[str] = []
+        self._universal_param: dict[str, Any] = {
             "context": self._context,
             "app_meta": self._meta,
+            "dialogs": {
+                "pick_directory": self._pick_directory,
+                "pick_file": self._pick_file,
+            },
+            "extensions": {
+                "register_dir": self.register_extension_dir,
+            },
         }
-        for name in VIEW_PARAMS:
-            self._tags[name] = TagView.load(name, universal_param)
+
+        # 步骤 0：扫描 extension/ 并把可用扩展登记为运行期标签参数。
+        self._load_installed_extensions()
+
+        # 步骤 1：按合并后的注册表创建标签（功能实例在此注入通用参数）。
+        for name in list(all_view_params()):
+            try:
+                self._tags[name] = TagView.load(name, self._universal_param)
+            except Exception:  # 单个扩展/功能异常不应阻止整个程序启动。
+                _LOGGER.exception("标签加载失败: %s", name)
+                if name in self._extension_names:
+                    self._extension_names.discard(name)
+                    unregister_extension_param(name)
+                    self._extension_errors.append("%s：标签加载失败" % name)
+        for required in (SETTINGS_NAME, ABOUT_NAME):
+            if required not in self._tags:
+                raise RuntimeError("缺少必需标签: %s" % required)
 
         # 步骤 2：强制“设置倒数第二、关于最后”的标签顺序。
-        self._order = self._resolve_order()
+        self._refresh_order()
 
         # 步骤 3：把各标签的只读设置组注册到设置标签。
         settings_tag: TagView | None = self._tags.get(SETTINGS_NAME)
         if settings_tag is not None:
-            for name in self._order:
+            for name in list(self._tags):
                 if name in (SETTINGS_NAME, ABOUT_NAME):
                     continue
-                group = self._tags[name].settings_group
-                if group.field_specs:
-                    settings_tag.register_settings_field(group)
+                self._register_settings_group(name, self._tags[name])
 
-        self._meta["features"] = [
-            {"name": name, "description": self._tags[name].description}
-            for name in self._order
-            if name not in (SETTINGS_NAME, ABOUT_NAME)
-        ]
+        # 步骤 4：把各功能的关于元信息注册到“关于”页。
+        self._register_about_metas()
 
     def _build_meta(self) -> dict[str, Any]:
         """构建应用元信息。
@@ -179,8 +207,8 @@ class WindowView:
             "port": 0,
         }
 
-    def _resolve_order(self) -> list[str]:
-        """计算并校验标签顺序。
+    def _refresh_order(self) -> list[str]:
+        """按功能启用状态重新计算并校验标签顺序。
 
         Returns:
             最终标签名称列表。
@@ -188,20 +216,265 @@ class WindowView:
         Raises:
             RuntimeError: 缺少设置/关于标签或顺序不合法时抛出。
         """
-        names: list[str] = list(VIEW_PARAMS.keys())
         missing: list[str] = [
-            name for name in (SETTINGS_NAME, ABOUT_NAME) if name not in names
+            name
+            for name in (SETTINGS_NAME, ABOUT_NAME)
+            if name not in self._tags
         ]
         if missing:
             raise RuntimeError("缺少必需标签: %s" % ", ".join(missing))
         feature_names: list[str] = [
-            name for name in names if name not in (SETTINGS_NAME, ABOUT_NAME)
+            name
+            for name in self._tags
+            if name not in (SETTINGS_NAME, ABOUT_NAME)
+            and self._is_feature_enabled(name)
         ]
         order: list[str] = feature_names + [SETTINGS_NAME, ABOUT_NAME]
         # 双重校验：无论注册表如何调整，最后两个标签的位置必须固定。
         if order[-1] != ABOUT_NAME or order[-2] != SETTINGS_NAME:
             raise RuntimeError("标签顺序不合法：设置必须倒数第二、关于必须最后")
+        self._order = order
+        self._meta["features"] = [
+            {"name": name, "description": self._tags[name].description}
+            for name in feature_names
+        ]
         return order
+
+    def _is_feature_enabled(self, name: str) -> bool:
+        """判断功能当前是否应显示在标签栏。
+
+        Args:
+            name: 功能标签名。
+
+        Returns:
+            启用返回 ``True``；本次运行临时加载的扩展恒为启用。
+        """
+        if name in self._temporary_extensions:
+            return True
+        return extension_api.is_feature_enabled(name)
+
+    def _resolve_extension_dir(self, extension_id: str) -> Path | None:
+        """按扩展 ID 返回前端资源根目录。
+
+        Args:
+            extension_id: 扩展目录名（已 URL 解码）。
+
+        Returns:
+            扩展根目录；未注册时返回 ``None``。
+        """
+        path: Path | None = self._extension_dirs.get(str(extension_id or ""))
+        return path if path is not None else None
+
+    def _load_installed_extensions(self) -> None:
+        """扫描 extension/ 并登记可用扩展的标签参数。"""
+        infos, errors = extension_api.scan_installed_extensions()
+        self._extension_errors = list(errors)
+        for info in infos:
+            if info.tab_name in all_view_params() or info.tab_name in self._extension_names:
+                self._extension_errors.append(
+                    "%s：扩展标签名与现有功能重复" % info.tab_name
+                )
+                continue
+            self._extension_names.add(info.tab_name)
+            self._extension_dirs[info.id] = info.path
+            register_extension_param(self._extension_view_param(info))
+
+    @staticmethod
+    def _extension_view_param(info: Any) -> ViewParam:
+        """把扩展信息转换为标签参数。
+
+        Args:
+            info: :class:`hwklr.features.extensions.ExtensionInfo`。
+
+        Returns:
+            扩展标签参数。
+        """
+        return ViewParam(
+            function_name=info.tab_name,
+            title=info.tab_name,
+            html="UI/index.html",
+            css=tuple(info.css_files),
+            js=tuple(info.js_files),
+            feature_cls=info.feature_cls,
+            description=info.description or "第三方扩展",
+            base_url="/extensions/%s/" % urllib.parse.quote(info.id),
+            resource_root=str(info.path),
+        )
+
+    def _register_settings_group(self, name: str, tag: TagView) -> None:
+        """把一个标签的设置组绑定启用开关并注册到设置页。
+
+        Args:
+            name: 标签名。
+            tag: 标签页实例。
+        """
+        settings_tag: TagView | None = self._tags.get(SETTINGS_NAME)
+        if settings_tag is None:
+            return
+        try:
+            group = tag.settings_group
+        except Exception:  # 第三方扩展的设置组异常不应拖垮设置页。
+            _LOGGER.exception("读取设置组失败: %s", name)
+            return
+        if not group.enabled_editable:
+            group.bind_enabled(
+                lambda: self._is_feature_enabled(name),
+                lambda enabled: self._set_feature_enabled(name, enabled),
+                editable=True,
+            )
+        if group.field_specs or group.enabled_editable:
+            settings_tag.register_settings_field(group)
+
+    def _set_feature_enabled(self, name: str, enabled: bool) -> None:
+        """设置功能启用状态并刷新标签顺序。
+
+        Args:
+            name: 功能标签名。
+            enabled: 是否启用。
+        """
+        extension_api.set_feature_enabled(name, enabled)
+        self._temporary_extensions.discard(name)
+        self._refresh_order()
+
+    def _register_about_metas(self) -> None:
+        """把所有功能的元信息注册到“关于”页。"""
+        about_tag: TagView | None = self._tags.get(ABOUT_NAME)
+        if about_tag is None:
+            return
+        register: Any = getattr(about_tag.feature, "register_meta", None)
+        if not callable(register):
+            return
+        for name, tag in self._tags.items():
+            if name in (SETTINGS_NAME, ABOUT_NAME):
+                continue
+            try:
+                register(tag.feature.about_meta)
+            except Exception:  # 第三方扩展缺少元信息时不影响其它功能。
+                _LOGGER.exception("注册关于元信息失败: %s", name)
+
+    def register_extension_dir(
+        self,
+        path: str,
+        temporary: bool = False,
+    ) -> dict[str, Any]:
+        """在运行期加载一个扩展目录并注册为标签。
+
+        Args:
+            path: 扩展目录。
+            temporary: 是否为“测试插件”临时加载（不写入启用配置）。
+
+        Returns:
+            含 ``tab`` 与 ``extension`` 的字典。
+
+        Raises:
+            RuntimeError: 扩展非法或与现有功能重名时抛出。
+        """
+        info = extension_api.load_extension_dir(Path(path))
+        if info.tab_name in (SETTINGS_NAME, ABOUT_NAME):
+            raise RuntimeError("扩展标签名不能使用保留名称")
+        existing: TagView | None = self._tags.get(info.tab_name)
+        if existing is not None:
+            # 只允许覆盖已有扩展（调试热替换），绝不覆盖官方功能。
+            if info.tab_name not in self._extension_names:
+                raise RuntimeError("标签名已存在：%s" % info.tab_name)
+            settings_tag: TagView | None = self._tags.get(SETTINGS_NAME)
+            remove = getattr(settings_tag.feature, "unregister_group", None) if settings_tag else None
+            if callable(remove):
+                remove(existing.settings_group.group_id)
+            self._tags.pop(info.tab_name, None)
+            unregister_extension_param(info.tab_name)
+        self._extension_names.add(info.tab_name)
+        self._extension_dirs[info.id] = info.path
+        register_extension_param(self._extension_view_param(info))
+        tag: TagView = TagView.load(info.tab_name, self._universal_param)
+        self._tags[info.tab_name] = tag
+        if temporary:
+            self._temporary_extensions.add(info.tab_name)
+        else:
+            self._temporary_extensions.discard(info.tab_name)
+        self._register_settings_group(info.tab_name, tag)
+        about_tag: TagView | None = self._tags.get(ABOUT_NAME)
+        register_meta: Any = (
+            getattr(about_tag.feature, "register_meta", None)
+            if about_tag is not None
+            else None
+        )
+        if callable(register_meta):
+            try:
+                register_meta(tag.feature.about_meta)
+            except Exception:
+                _LOGGER.exception("注册扩展关于元信息失败: %s", info.tab_name)
+        self._refresh_order()
+        return {"tab": info.tab_name, "extension": info.payload(True)}
+
+    def _current_window(self) -> webview.Window | None:
+        """返回当前 pywebview 窗口。
+
+        Returns:
+            窗口对象；尚未创建时返回 ``None``。
+        """
+        if self._window is not None:
+            return self._window
+        return webview.windows[0] if webview.windows else None
+
+    def _pick_directory(self, title: str, initial: str = "") -> str:
+        """弹出原生目录选择框。
+
+        Args:
+            title: 对话框标题（pywebview 当前不展示，但保留语义）。
+            initial: 初始目录。
+
+        Returns:
+            选中的目录；取消时为空字符串。
+        """
+        window: webview.Window | None = self._current_window()
+        if window is None:
+            return ""
+        try:
+            result: Any = window.create_file_dialog(
+                webview.FOLDER_DIALOG,
+                directory=initial or "",
+                allow_multiple=False,
+            )
+        except Exception:
+            _LOGGER.exception("目录选择失败: %s", title)
+            return ""
+        if not result:
+            return ""
+        return str(result[0] if isinstance(result, (list, tuple)) else result)
+
+    def _pick_file(
+        self,
+        title: str,
+        initial: str = "",
+        file_types: tuple[str, ...] = (),
+    ) -> str:
+        """弹出原生文件选择框。
+
+        Args:
+            title: 对话框标题。
+            initial: 初始目录。
+            file_types: 允许的文件类型。
+
+        Returns:
+            选中的文件；取消时为空字符串。
+        """
+        window: webview.Window | None = self._current_window()
+        if window is None:
+            return ""
+        try:
+            result: Any = window.create_file_dialog(
+                webview.OPEN_DIALOG,
+                directory=initial or "",
+                allow_multiple=False,
+                file_types=file_types,
+            )
+        except Exception:
+            _LOGGER.exception("文件选择失败: %s", title)
+            return ""
+        if not result:
+            return ""
+        return str(result[0] if isinstance(result, (list, tuple)) else result)
 
     @property
     def order(self) -> list[str]:
@@ -238,6 +511,7 @@ class WindowView:
         Returns:
             按最终顺序排列的标签描述。
         """
+        self._refresh_order()
         payload: list[dict[str, Any]] = []
         for name in self._order:
             tag: TagView = self._tags[name]
@@ -317,6 +591,7 @@ class WindowView:
             preferred_port=preferred_port,
             tags_provider=self.tags_payload,
             meta_provider=self.meta_payload,
+            extension_resolver=self._resolve_extension_dir,
         )
         port: int = server.start()
         self._server = server

@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
-# 最后更新: 2026-11-01 00:01
+# 最后更新: 2026-11-03 19:40
 # 文件名: __init__.py
-# 主要用途: 定义标签页抽象 TagView，统一管理功能实例、设置组、HTML/CSS/JS 资源与桥接调用。
-# 文件版本: 2.0.0
+# 主要用途: 定义标签页抽象 TagView，统一管理功能实例、设置组、官方/扩展 HTML/CSS/JS 资源与桥接调用。
+# 文件版本: 3.0.0
 """标签页抽象。
 
 每个标签页 = 一套前端资源（HTML/CSS/JS）+ 一个 :class:`Feature` 实例。
@@ -19,12 +19,12 @@ from typing import TYPE_CHECKING, Any, Final
 
 from hwklr.features import Feature
 
-from .view_data import SETTINGS_NAME, VIEW_PARAMS, ViewParam
+from .view_data import SETTINGS_NAME, ViewParam, get_view_param
 
 if TYPE_CHECKING:
     from hwklr.features.settings import FeatureSettingsGroup
 
-__version__ = "2.0.0"
+__version__ = "3.0.0"
 __author__ = "Gary"
 __all__ = ["SettingsTagView", "TagView", "TagViewBase", "ViewParam", "VIEW_DATA_DIR"]
 
@@ -67,12 +67,16 @@ class TagView(TagViewBase):
         """
         self._param: ViewParam = param
         self._feature: Feature = feature
-        self._html_path: Path = VIEW_DATA_DIR / param.html
+        # 扩展资源位于 extension/<id>/，官方标签使用 view_data/。
+        self._resource_root: Path = (
+            Path(param.resource_root) if param.resource_root else VIEW_DATA_DIR
+        )
+        self._html_path: Path = self._resource_root / param.html
         self._css_paths: tuple[Path, ...] = tuple(
-            VIEW_DATA_DIR / item for item in param.css
+            self._resource_root / item for item in param.css
         )
         self._js_paths: tuple[Path, ...] = tuple(
-            VIEW_DATA_DIR / item for item in param.js
+            self._resource_root / item for item in param.js
         )
         missing: list[Path] = [
             path for path in (self._html_path, *self._css_paths, *self._js_paths)
@@ -103,11 +107,9 @@ class TagView(TagViewBase):
             KeyError: 名称不存在时抛出。
             FileNotFoundError: 标签资源缺失时抛出。
         """
-        param: ViewParam | None = VIEW_PARAMS.get(name)
+        param: ViewParam | None = get_view_param(name)
         if param is None:
-            raise KeyError(
-                "未知功能: %s；可用功能: %s" % (name, ", ".join(VIEW_PARAMS))
-            )
+            raise KeyError("未知功能: %s" % name)
         feature: Feature = param.feature_cls(universal_param or {})
         if cls is TagView and name == SETTINGS_NAME:
             return SettingsTagView(param, feature)
@@ -176,13 +178,14 @@ class TagView(TagViewBase):
         Returns:
             含名称、标题、HTML/CSS/JS URL 的字典。
         """
+        base: str = self._param.base_url or "/view_data/"
         return {
             "name": self.name,
             "title": self.title,
             "description": self.description,
-            "html_url": "/view_data/" + self._param.html,
-            "css_urls": ["/view_data/" + item for item in self._param.css],
-            "js_urls": ["/view_data/" + item for item in self._param.js],
+            "html_url": base + self._param.html,
+            "css_urls": [base + item for item in self._param.css],
+            "js_urls": [base + item for item in self._param.js],
         }
 
     def start(self) -> None:

@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
+# 最后更新: 2026-11-03 19:50
 # 文件名: server.py
-# 主要用途: 提供本地静态资源 / API 服务，监听 49152 或其后第一个空闲端口。
-# 文件版本: 1.0.0
+# 主要用途: 提供本地静态资源 / API 服务，支持官方 view_data 与第三方扩展资源目录。
+# 文件版本: 3.0.0
 """本地 UI 服务。
 
 pywebview 通过 ``http://127.0.0.1:<port>/`` 加载页面。使用自有 HTTP 服务
@@ -23,7 +24,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Final
 
-__version__ = "1.0.0"
+__version__ = "3.0.0"
 __all__ = ["UiHttpServer"]
 
 _LOGGER: Final[logging.Logger] = logging.getLogger(__name__)
@@ -43,6 +44,7 @@ class _UiHttpServer(ThreadingHTTPServer):
     # 类 Unix 系统允许复用处于 TIME_WAIT 的端口，便于快速重启。
     allow_reuse_address: bool = sys.platform != "win32"
     allow_reuse_port: bool = False
+    extension_resolver: Callable[[str], Path | None]
 
 
 class _UiRequestHandler(BaseHTTPRequestHandler):
@@ -102,21 +104,47 @@ class _UiRequestHandler(BaseHTTPRequestHandler):
             relative = request_path[len("/view_data/"):]
             self._send_file(server.view_data_dir / relative, send_body)
             return
+        if request_path.startswith("/extensions/"):
+            relative = request_path[len("/extensions/"):]
+            parts: list[str] = relative.split("/", 1)
+            extension_id: str = parts[0] if parts else ""
+            rest: str = parts[1] if len(parts) > 1 else ""
+            if not extension_id or not rest:
+                self._send_status(404, send_body)
+                return
+            resolver: Callable[[str], Path | None] = server.extension_resolver
+            extension_root: Path | None = resolver(extension_id)
+            if extension_root is None:
+                self._send_status(404, send_body)
+                return
+            self._send_file(
+                extension_root / rest,
+                send_body,
+                root=extension_root,
+            )
+            return
         self._send_status(404, send_body)
 
-    def _send_file(self, path: Path, send_body: bool) -> None:
+    def _send_file(
+        self,
+        path: Path,
+        send_body: bool,
+        root: Path | None = None,
+    ) -> None:
         """安全地发送静态文件。
 
         Args:
             path: 目标文件路径。
             send_body: 是否发送响应体。
+            root: 允许访问的根目录；``None`` 时按官方资源目录推断。
         """
         server: _UiHttpServer = self.server  # type: ignore[assignment]
-        root: Path = (
-            server.view_data_dir
-            if server.view_data_dir in path.parents
-            else server.page_dir
-        )
+        if root is None:
+            root = (
+                server.view_data_dir
+                if server.view_data_dir in path.parents
+                else server.page_dir
+            )
         resolved_root: Path = root.resolve()
         try:
             resolved_path: Path = path.resolve()
@@ -212,6 +240,7 @@ class UiHttpServer:
         preferred_port: int = _DEFAULT_PORT,
         tags_provider: Callable[[], list[dict[str, Any]]] | None = None,
         meta_provider: Callable[[], dict[str, Any]] | None = None,
+        extension_resolver: Callable[[str], Path | None] | None = None,
     ) -> None:
         """初始化服务。
 
@@ -221,6 +250,7 @@ class UiHttpServer:
             preferred_port: 首选端口，默认 49152。
             tags_provider: 返回标签列表的回调。
             meta_provider: 返回应用元信息的回调。
+            extension_resolver: 按扩展 ID 返回资源根目录的回调。
         """
         self._page_dir: Path = page_dir
         self._view_data_dir: Path = view_data_dir
@@ -229,6 +259,9 @@ class UiHttpServer:
         )
         self._tags_provider: Callable[[], list[dict[str, Any]]] = tags_provider or (lambda: [])
         self._meta_provider: Callable[[], dict[str, Any]] = meta_provider or (lambda: {})
+        self._extension_resolver: Callable[[str], Path | None] = (
+            extension_resolver or (lambda extension_id: None)
+        )
         self._httpd: _UiHttpServer | None = None
         self._thread: threading.Thread | None = None
         self._port: int = 0
@@ -266,6 +299,7 @@ class UiHttpServer:
             httpd.view_data_dir = self._view_data_dir  # type: ignore[attr-defined]
             httpd.tags_provider = self._tags_provider  # type: ignore[attr-defined]
             httpd.meta_provider = self._meta_provider  # type: ignore[attr-defined]
+            httpd.extension_resolver = self._extension_resolver  # type: ignore[attr-defined]
             self._httpd = httpd
             self._port = port
             self._thread = threading.Thread(

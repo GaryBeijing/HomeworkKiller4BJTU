@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-01 12:40
-# 最后更新: 2026-11-01 13:05
+# 最后更新: 2026-11-03 19:00
 # 文件名: packager.py
-# 主要用途: 构建功能的打包实现：图标/名称/四段版本资源、源码裁剪、源码归档、PyInstaller 与 python-embed zip。
-# 文件版本: 2.1.3
+# 主要用途: 构建功能的打包实现：图标/名称/四段版本资源、源码裁剪、V3 源码归档、插件模板分发、PyInstaller 与 python-embed zip。
+# 文件版本: 3.0.0
 """构建打包实现。
 
 构建过程不依赖 UI，可独立调用 :func:`build_package`：
@@ -37,7 +37,7 @@ from typing import Any, Callable, Final, NamedTuple
 
 from hwklr.features.manifest import OFFICIAL_FEATURES, FeatureSpec
 
-__version__ = "2.1.3"
+__version__ = "3.0.0"
 __author__ = "Gary"
 __all__ = [
     "APP_EXE_NAME",
@@ -66,11 +66,45 @@ _RESERVED_NAMES: Final[frozenset[str]] = frozenset(
 )
 _ICON_MAX_BYTES: Final[int] = 8 * 1024 * 1024
 
-_PROJECT_ROOT: Final[Path] = Path(__file__).resolve().parents[3]
+def _resolve_project_root() -> Path:
+    """定位含 ``main.py`` 的项目根目录。
+
+    V3 的 HwklrVenv 把 ``hwklr`` 放在 ``Lib/``，此时 ``parents[3]`` 是 ``Lib``，
+    需要继续向上找到虚拟环境根目录。
+
+    Returns:
+        项目根目录。
+    """
+    current: Path = Path(__file__).resolve()
+    for candidate in (current.parents[3], current.parents[4]):
+        if (candidate / "main.py").is_file():
+            return candidate
+    return current.parents[3]
+
+
+_PROJECT_ROOT: Final[Path] = _resolve_project_root()
+
+
+def _package_dir() -> Path:
+    """返回 ``hwklr`` 包目录。
+
+    V3 的 HwklrVenv 中包位于 ``Lib/hwklr``，源码仓库中位于 ``hwklr``。
+
+    Returns:
+        包目录路径。
+    """
+    direct: Path = _PROJECT_ROOT / "hwklr"
+    if (direct / "__init__.py").is_file():
+        return direct
+    nested: Path = _PROJECT_ROOT / "Lib" / "hwklr"
+    if (nested / "__init__.py").is_file():
+        return nested
+    return direct
 _VENDOR_DIR: Final[Path] = Path(__file__).resolve().parent / "vendor"
 _SITE_PACKAGES: Final[Path] = Path(sysconfig.get_paths()["purelib"])
-_DEV_EXTRA_DIRS: Final[tuple[str, ...]] = ("SoftwareIntro", "B1.0", "B_CHelper")
-_DEV_EXTRA_FILES: Final[tuple[str, ...]] = ("requirements.txt", "README.md")
+# V3 起开发构建的源码归档固定为 legacy/、Reference/、hwklr/、main.py、requirements.txt。
+_DEV_EXTRA_DIRS: Final[tuple[str, ...]] = ("legacy", "Reference")
+_DEV_EXTRA_FILES: Final[tuple[str, ...]] = ("requirements.txt",)
 
 LogFn = Callable[[str], None]
 PhaseFn = Callable[[str, str, int], None]
@@ -567,6 +601,7 @@ def _copy_app_tree(dest: Path, included: list[FeatureSpec], *, log: LogFn) -> No
         raise BuildError("未找到入口文件: %s" % main_src)
     shutil.copy2(main_src, dest / "main.py")
 
+    package_src: Path = _package_dir()
     included_names: set[str] = {spec.name for spec in included}
     excluded_prefixes: list[str] = []
     # 形如 hsr_bank_v1.0.json 的知识库按模块包名归属到对应功能。
@@ -582,8 +617,7 @@ def _copy_app_tree(dest: Path, included: list[FeatureSpec], *, log: LogFn) -> No
         excluded_file_prefixes.append(
             "hwklr/runtime_data/%s_bank_" % package_name
         )
-    # vendor 中是按需下载的 python-embed 缓存，不进入导出包。
-    excluded_prefixes.append("hwklr/features/build/vendor")
+    # vendor 中 python-embed 下载缓存不进入导出包，但插件工程模板必须随开发产物分发。
 
     def ignore(directory: str, names: list[str]) -> set[str]:
         """返回需要忽略的文件/目录名。
@@ -599,11 +633,17 @@ def _copy_app_tree(dest: Path, included: list[FeatureSpec], *, log: LogFn) -> No
         for name in names:
             path: Path = Path(directory) / name
             try:
-                relative: str = path.relative_to(_PROJECT_ROOT).as_posix()
+                relative: str = "hwklr/" + path.relative_to(package_src).as_posix()
             except ValueError:
                 continue
             if name == "__pycache__" or name.endswith((".pyc", ".pyo")):
                 ignored.add(name)
+                continue
+            # #插件工程模板随开发产物分发；python-embed 等下载缓存仍然排除。
+            if relative.startswith("hwklr/features/build/vendor"):
+                # 目录本身必须保留，只过滤其中的 python-embed 下载缓存。
+                if path.is_file() and name != "plugin-template.zip":
+                    ignored.add(name)
                 continue
             if any(
                 relative == prefix or relative.startswith(prefix + "/")
@@ -615,7 +655,7 @@ def _copy_app_tree(dest: Path, included: list[FeatureSpec], *, log: LogFn) -> No
                 ignored.add(name)
         return ignored
 
-    shutil.copytree(_PROJECT_ROOT / "hwklr", dest / "hwklr", ignore=ignore)
+    shutil.copytree(package_src, dest / "hwklr", ignore=ignore)
     log("已按功能清单裁剪源码（保留 %d 个功能）。" % len(included))
 
 
@@ -823,7 +863,10 @@ def _write_version_file(
 
 
 def _archive_sources(dest: Path, version: str, *, log: LogFn) -> Path:
-    """把当前源代码（不含测试）与 requirements.txt 归档到产物目录。
+    """把开发源码归档到产物目录。
+
+    V3 起归档只包含 ``legacy/``、``Reference/``、``hwklr/``、``main.py`` 与
+    ``requirements.txt``；插件工程模板随归档保留，python-embed 等下载缓存排除。
 
     Args:
         dest: 产物根目录。
@@ -835,41 +878,64 @@ def _archive_sources(dest: Path, version: str, *, log: LogFn) -> Path:
     """
     archive_path: Path = dest / ("source-v%s.zip" % version)
     included: list[Path] = []
-    main_file: Path = _PROJECT_ROOT / "main.py"
-    requirements: Path = _PROJECT_ROOT / "requirements.txt"
-    for file_path in (main_file, requirements):
+    for name in ("main.py", "requirements.txt"):
+        file_path: Path = _PROJECT_ROOT / name
         if file_path.is_file():
             included.append(file_path)
-    for file_path in (_PROJECT_ROOT / "hwklr").rglob("*"):
-        if not file_path.is_file():
+    archive_entries: list[tuple[Path, str]] = [
+        (file_path, file_path.relative_to(_PROJECT_ROOT).as_posix())
+        for file_path in included
+    ]
+    for root_name in ("legacy", "Reference"):
+        root: Path = _PROJECT_ROOT / root_name
+        if not root.is_dir():
             continue
-        relative: Path = file_path.relative_to(_PROJECT_ROOT)
-        parts: tuple[str, ...] = relative.parts
-        if "__pycache__" in parts:
-            continue
-        if file_path.suffix in {".pyc", ".pyo"}:
-            continue
-        if "tests" in parts or "test" in parts:
-            continue
-        if file_path.name.startswith("test_") or file_path.name.endswith("_test.py"):
-            continue
-        if relative.as_posix().startswith("hwklr/features/build/vendor/"):
-            continue
-        included.append(file_path)
+        for file_path in root.rglob("*"):
+            if not file_path.is_file():
+                continue
+            relative: Path = file_path.relative_to(_PROJECT_ROOT)
+            parts: tuple[str, ...] = relative.parts
+            if "__pycache__" in parts:
+                continue
+            if file_path.suffix.lower() in {".pyc", ".pyo"}:
+                continue
+            if "tests" in parts or "test" in parts:
+                continue
+            if file_path.name.startswith("test_") or file_path.name.endswith("_test.py"):
+                continue
+            archive_entries.append((file_path, relative.as_posix()))
+    package_src: Path = _package_dir()
+    if package_src.is_dir():
+        for file_path in package_src.rglob("*"):
+            if not file_path.is_file():
+                continue
+            relative: Path = file_path.relative_to(package_src)
+            parts: tuple[str, ...] = relative.parts
+            if "__pycache__" in parts:
+                continue
+            if file_path.suffix.lower() in {".pyc", ".pyo"}:
+                continue
+            if "tests" in parts or "test" in parts:
+                continue
+            if file_path.name.startswith("test_") or file_path.name.endswith("_test.py"):
+                continue
+            posix: str = "hwklr/" + relative.as_posix()
+            if posix.startswith("hwklr/features/build/vendor/") and (
+                file_path.name != "plugin-template.zip"
+            ):
+                continue
+            archive_entries.append((file_path, posix))
 
     with zipfile.ZipFile(
         archive_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6
     ) as archive:
-        for file_path in included:
-            archive.write(
-                file_path,
-                arcname=file_path.relative_to(_PROJECT_ROOT).as_posix(),
-            )
+        for file_path, arcname in archive_entries:
+            archive.write(file_path, arcname=arcname)
     log(
         "源码归档：%s（%d 个文件，%.1f MB）"
         % (
             archive_path.name,
-            len(included),
+            len(archive_entries),
             archive_path.stat().st_size / 1024 / 1024,
         )
     )
@@ -1032,6 +1098,17 @@ def _copy_dev_extras(dest: Path, *, log: LogFn) -> None:
         source = _PROJECT_ROOT / name
         if source.is_file():
             shutil.copy2(source, dest / name)
+    # #插件工程模板：放到产物 vendor/，供开发环境与构建页“新建插件工程”使用。
+    template: Path = (
+        _package_dir() / "features" / "build" / "vendor" / "plugin-template.zip"
+    )
+    if not template.is_file():
+        template = _PROJECT_ROOT / "vendor" / "plugin-template.zip"
+    if template.is_file():
+        vendor: Path = dest / "vendor"
+        vendor.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(template, vendor / "plugin-template.zip")
+        log("附带插件工程模板：vendor/plugin-template.zip")
 
 
 def _reset_artifact(artifact: Path, output_root: Path) -> None:

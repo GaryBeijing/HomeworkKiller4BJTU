@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-01 12:40
-# 最后更新: 2026-11-01 13:05
+# 最后更新: 2026-11-03 18:45
 # 文件名: __init__.py
-# 主要用途: 实现“构建”功能：程序名称/图标、四段导出默认版本、开发环境迁移、导出参数与后台构建任务。
-# 文件版本: 2.1.3
+# 主要用途: 实现“构建”功能：程序构建/插件构建切换、插件工程管理、开发环境迁移、导出参数与后台构建任务。
+# 文件版本: 3.0.0
 """构建功能。
 
 - 页面收集“导出显示版本号”“程序名称”“程序图标”和“是否开发构建”；
@@ -15,16 +15,20 @@
 from __future__ import annotations
 
 import logging
+import shutil
 import sys
 import threading
 import traceback
 import uuid
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Final
 
 from hwklr import APP_NAME, DEV_BUILD, __version__ as APP_VERSION
-from hwklr.config import load_config
+from hwklr.config import load_config, update_config
+from hwklr.features.about import AboutMetadataGroup
 from hwklr.features.base import ApiResult, Feature, failure, success
+from hwklr.features.extensions import is_feature_enabled, set_feature_enabled
 from hwklr.features.manifest import OFFICIAL_FEATURES, FeatureSpec, feature_version
 from hwklr.features.settings import FeatureSettingsGroup, SettingsFieldSpec
 
@@ -45,7 +49,7 @@ from .packager import (
     resolve_output_dir,
 )
 
-__version__ = "2.1.3"
+__version__ = "3.0.0"
 __author__ = "Gary"
 __all__ = ["BuildFeature"]
 
@@ -127,6 +131,24 @@ class BuildFeature(Feature):
         """
         return self._settings_group
 
+    @property
+    def about_meta(self) -> AboutMetadataGroup:
+        """返回构建功能在“关于”页的元信息。
+
+        Returns:
+            插件名、包名、作者与版本。
+        """
+        return AboutMetadataGroup(
+            name="构建",
+            package="BUILD",
+            author="Gary",
+            version=__version__,
+            update_date="2026-11-03",
+            official=True,
+            feature_key="构建",
+            description="将当前程序导出为可直接运行的目录、zip 或可执行文件，并构建插件发布包。",
+        )
+
     def _official_rows(self) -> list[dict[str, Any]]:
         """返回官方功能及其版本。
 
@@ -174,6 +196,8 @@ class BuildFeature(Feature):
             return {
                 "output_dir": str(setting.get("output_dir") or ""),
                 "dev_format": str(setting.get("dev_format") or "executable"),
+                "plugin_template": str(setting.get("plugin_template") or ""),
+                "plugin_project": str(setting.get("plugin_project") or ""),
                 "features": features,
             }
 
@@ -190,6 +214,12 @@ class BuildFeature(Feature):
                 "build": {
                     "output_dir": str(values.get("output_dir") or ""),
                     "dev_format": str(values.get("dev_format") or "executable"),
+                    "plugin_template": str(
+                        values.get("plugin_template") or ""
+                    ).strip(),
+                    "plugin_project": str(
+                        values.get("plugin_project") or ""
+                    ).strip(),
                     "features": feature_map,
                 }
             }
@@ -219,6 +249,17 @@ class BuildFeature(Feature):
                     help="仅在构建页勾选“开发构建”时生效。",
                 ),
                 SettingsFieldSpec(
+                    key="plugin_template",
+                    label="选择插件工程模板",
+                    kind="file",
+                    placeholder="留空使用随程序分发的模板",
+                    is_necessary=False,
+                    help=(
+                        "选择“新建插件工程”时使用的 zip 模板；留空时使用 "
+                        "hwklr/features/build/vendor/plugin-template.zip。"
+                    ),
+                ),
+                SettingsFieldSpec(
                     key="features",
                     label="Feature 开发标记",
                     kind="features",
@@ -233,6 +274,9 @@ class BuildFeature(Feature):
             exporter=exporter,
             complete_checker=lambda: True,
             missing_getter=lambda: [],
+            enabled_getter=lambda: is_feature_enabled("构建"),
+            enabled_setter=lambda enabled: set_feature_enabled("构建", enabled),
+            enabled_editable=True,
         )
 
     # ------------------------------------------------------------------ 分发
@@ -255,6 +299,14 @@ class BuildFeature(Feature):
                 return self._get_job(params)
             if action == "setup_dev_venv":
                 return self._setup_dev_venv(params)
+            if action == "choose_plugin_project":
+                return self._choose_plugin_project(params)
+            if action == "create_plugin_project":
+                return self._create_plugin_project(params)
+            if action == "test_plugin":
+                return self._test_plugin(params)
+            if action == "start_plugin_build":
+                return self._start_plugin_build(params)
             return failure("未知动作: %s" % action)
         except Exception as exc:  # 兜底，保证错误回传到 UI。
             _LOGGER.exception("构建功能未预期异常")
@@ -279,7 +331,10 @@ class BuildFeature(Feature):
             "version": APP_VERSION,
             "default_version": _default_export_version(),
             "default_name": APP_NAME,
-            "buildable": not bool(getattr(sys, "frozen", False)),
+            # 开发构建产物中只允许构建插件，程序构建被屏蔽。
+            "buildable": (
+                not bool(getattr(sys, "frozen", False)) and not bool(DEV_BUILD)
+            ),
             "dev_build": bool(DEV_BUILD),
             "dev_env_ready": dev_env_ready(),
             "dev_env_path": str(venv_path()),
@@ -289,6 +344,14 @@ class BuildFeature(Feature):
             "output_dir": output_value,
             "output_path": str(resolve_output_dir(output_value)),
             "dev_format": str(setting.get("dev_format") or "executable"),
+            "modes": {
+                "program": (
+                    not bool(getattr(sys, "frozen", False)) and not bool(DEV_BUILD)
+                ),
+                "plugin": True,
+            },
+            "default_mode": "plugin" if DEV_BUILD else "program",
+            "plugin": self._plugin_state(setting),
             "features": self._official_rows(),
             "tool": {
                 "builder": __version__,
@@ -303,6 +366,56 @@ class BuildFeature(Feature):
                 "embed_url": python_embed_url(),
             },
             "job": self._job_snapshot(),
+        }
+
+    def _plugin_state(self, setting: dict[str, Any]) -> dict[str, Any]:
+        """生成插件构建面板状态。
+
+        Args:
+            setting: config.json 的 build 分组。
+
+        Returns:
+            插件工程、模板、Git 与开发环境状态。
+        """
+        from pathlib import Path
+
+        from hwklr.features.extensions import (
+            ExtensionError,
+            bundled_template_zip,
+            project_extension_root,
+            read_project_metadata,
+        )
+
+        configured_template: str = str(setting.get("plugin_template") or "").strip()
+        template: Path | None = (
+            Path(configured_template).expanduser()
+            if configured_template
+            else bundled_template_zip()
+        )
+        project: str = str(setting.get("plugin_project") or "").strip()
+        project_valid: bool = False
+        project_name: str = ""
+        project_error: str = ""
+        if project:
+            try:
+                metadata: dict[str, Any] = read_project_metadata(Path(project))
+                project_valid = True
+                project_name = str(metadata.get("name") or "")
+            except ExtensionError as exc:
+                project_error = str(exc)
+        venv_python: Path = venv_path() / "Scripts" / "python.exe"
+        return {
+            "project": project,
+            "project_valid": project_valid,
+            "project_name": project_name,
+            "project_error": project_error,
+            "template": str(template) if template is not None else "",
+            "template_available": bool(
+                template is not None and template.is_file()
+            ),
+            "git_available": bool(shutil.which("git")),
+            "venv_ready": venv_python.is_file(),
+            "extension_root": str(project_extension_root()),
         }
 
     @staticmethod
@@ -377,6 +490,8 @@ class BuildFeature(Feature):
         """
         if getattr(sys, "frozen", False):
             return failure("已打包的应用不能再次构建，请从源码运行本程序")
+        if DEV_BUILD:
+            return failure("开发构建产物中仅支持构建插件")
         version: str = str(
             params.get("version") or _default_export_version()
         ).strip()
@@ -504,6 +619,251 @@ class BuildFeature(Feature):
                     "phase": "error",
                     "message": "构建失败",
                     "error": "构建异常: %s" % exc,
+                })
+
+    # ------------------------------------------------------------------ 插件
+    def _dialogs(self) -> dict[str, Any]:
+        """返回窗口层注入的对话框回调。
+
+        Returns:
+            回调字典。
+        """
+        value: Any = self._universal_param.get("dialogs")
+        return value if isinstance(value, dict) else {}
+
+    def _extension_callbacks(self) -> dict[str, Any]:
+        """返回窗口层注入的扩展回调。
+
+        Returns:
+            回调字典。
+        """
+        value: Any = self._universal_param.get("extensions")
+        return value if isinstance(value, dict) else {}
+
+    def _save_plugin_project(self, path: str) -> None:
+        """记住最近选择的插件工程。
+
+        Args:
+            path: 工程目录。
+        """
+        update_config({"build": {"plugin_project": str(path or "")}})
+
+    def _current_plugin_project(self, params: dict[str, Any] | None = None) -> str:
+        """读取本次动作或配置中的插件工程路径。
+
+        Args:
+            params: 动作参数；可覆盖配置。
+
+        Returns:
+            工程目录字符串。
+        """
+        value: str = str((params or {}).get("project") or "").strip()
+        if value:
+            return value
+        config: dict[str, Any] = load_config()
+        setting: dict[str, Any] = (
+            config.get("build") if isinstance(config.get("build"), dict) else {}
+        )
+        return str(setting.get("plugin_project") or "").strip()
+
+    def _choose_plugin_project(self, params: dict[str, Any]) -> ApiResult:
+        """弹出目录选择框选择插件工程。
+
+        Args:
+            params: 未使用的动作参数。
+
+        Returns:
+            选择结果与工程元信息。
+        """
+        picker: Any = self._dialogs().get("pick_directory")
+        if not callable(picker):
+            return failure("当前环境不支持目录选择")
+        from hwklr.features.extensions import (
+            ExtensionError,
+            project_extension_root,
+            read_project_metadata,
+        )
+
+        initial: str = str(project_extension_root())
+        try:
+            path: Any = picker("选择插件工程", initial)
+        except TypeError:
+            path = picker("选择插件工程")
+        except Exception as exc:
+            return failure("打开目录选择框失败：%s" % exc)
+        selected: str = str(path or "").strip()
+        if not selected:
+            return success({"path": "", "cancelled": True})
+        try:
+            metadata: dict[str, Any] = read_project_metadata(Path(selected))
+        except ExtensionError as exc:
+            return failure("所选目录不是有效的插件工程：%s" % exc)
+        self._save_plugin_project(selected)
+        return success({
+            "path": selected,
+            "name": str(metadata.get("name") or ""),
+            "package": str(metadata.get("package") or ""),
+            "cancelled": False,
+        })
+
+    def _create_plugin_project(self, params: dict[str, Any]) -> ApiResult:
+        """从模板新建插件工程。
+
+        Args:
+            params: 必须包含 ``name``，可选 ``package``。
+
+        Returns:
+            新建工程路径与元信息。
+        """
+        from hwklr.features.extensions import (
+            ExtensionError,
+            create_plugin_project,
+            read_project_metadata,
+        )
+
+        name: str = str(params.get("name") or "").strip()
+        package: str = str(params.get("package") or "").strip()
+        config: dict[str, Any] = load_config()
+        setting: dict[str, Any] = (
+            config.get("build") if isinstance(config.get("build"), dict) else {}
+        )
+        template: str = str(setting.get("plugin_template") or "").strip()
+        try:
+            target: Path = create_plugin_project(
+                name,
+                package,
+                template_zip=template or None,
+            )
+            metadata: dict[str, Any] = read_project_metadata(target)
+        except ExtensionError as exc:
+            return failure(str(exc))
+        self._save_plugin_project(str(target))
+        return success({
+            "path": str(target),
+            "name": str(metadata.get("name") or name),
+            "package": str(metadata.get("package") or package),
+        })
+
+    def _test_plugin(self, params: dict[str, Any]) -> ApiResult:
+        """从工程目录临时加载插件（不写入配置，不随下次启动加载）。
+
+        Args:
+            params: 可选 ``project`` 覆盖当前工程。
+
+        Returns:
+            加载后的标签名与扩展信息。
+        """
+        from hwklr.features.extensions import ExtensionError, load_extension_dir
+
+        project: str = self._current_plugin_project(params)
+        if not project:
+            return failure("请先选择插件工程")
+        callback: Any = self._extension_callbacks().get("register_dir")
+        if not callable(callback):
+            return failure("当前环境不支持测试插件")
+        try:
+            info = load_extension_dir(Path(project))
+            result: Any = callback(str(info.path), True)
+        except Exception as exc:
+            return failure(str(exc))
+        payload: dict[str, Any] = (
+            result if isinstance(result, dict) else {}
+        )
+        return success({
+            "tab": str(payload.get("tab") or info.tab_name),
+            "extension": info.payload(True),
+        })
+
+    def _start_plugin_build(self, params: dict[str, Any]) -> ApiResult:
+        """在后台线程构建插件发布包。
+
+        Args:
+            params: 可选 ``project``。
+
+        Returns:
+            新任务的 ``job_id``。
+        """
+        from hwklr.features.extensions import ExtensionError, read_project_metadata
+
+        project: str = self._current_plugin_project(params)
+        if not project:
+            return failure("请先选择插件工程")
+        try:
+            read_project_metadata(Path(project))
+        except ExtensionError as exc:
+            return failure("插件工程不合法：%s" % exc)
+        with self._job_lock:
+            if self._job.get("running"):
+                return failure("已有构建任务正在运行，请等待完成")
+            job_id: str = uuid.uuid4().hex[:12]
+            self._job = {
+                "job_id": job_id,
+                "running": True,
+                "done": False,
+                "phase": "starting",
+                "message": "准备构建插件…",
+                "progress": 0,
+                "log": [],
+                "result": None,
+                "error": "",
+            }
+        config: dict[str, Any] = load_config()
+        setting: dict[str, Any] = (
+            config.get("build") if isinstance(config.get("build"), dict) else {}
+        )
+        output_dir: str = str(setting.get("output_dir") or "")
+        self._thread = threading.Thread(
+            target=self._run_plugin_job,
+            args=(job_id, project, output_dir),
+            name="PluginBuildJob-%s" % job_id,
+            daemon=True,
+        )
+        self._thread.start()
+        return success({"job_id": job_id})
+
+    def _run_plugin_job(
+        self,
+        job_id: str,
+        project: str,
+        output_dir: str,
+    ) -> None:
+        """后台线程：构建插件发布包并写入任务状态。
+
+        Args:
+            job_id: 任务 ID。
+            project: 插件工程目录。
+            output_dir: 输出目录配置。
+        """
+        try:
+            from hwklr.features.extensions import build_plugin_package
+
+            self._append_log("开始插件构建任务 %s" % job_id)
+            result: dict[str, Any] = build_plugin_package(
+                project,
+                output_dir=output_dir,
+                log=self._append_log,
+                set_phase=self._set_phase,
+            )
+            with self._job_lock:
+                self._job.update({
+                    "running": False,
+                    "done": True,
+                    "phase": "done",
+                    "message": "插件构建完成",
+                    "progress": 100,
+                    "result": result,
+                })
+            self._append_log("插件发布包：%s" % result.get("path"))
+        except Exception as exc:  # 记录完整堆栈，便于排查。
+            _LOGGER.exception("插件构建任务异常")
+            self._append_log(traceback.format_exc())
+            with self._job_lock:
+                self._job.update({
+                    "running": False,
+                    "done": True,
+                    "phase": "error",
+                    "message": "插件构建失败",
+                    "error": "插件构建失败: %s" % exc,
                 })
 
     def _setup_dev_venv(self, params: dict[str, Any]) -> ApiResult:

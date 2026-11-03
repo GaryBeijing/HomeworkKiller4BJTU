@@ -5,6 +5,8 @@
 /Scripts/
 /SoftwareIntro/
 /pyvenv.cfg
+.vscode/
+/legacy/
 
 # 运行期生成的缓存与本地凭据
 __pycache__/
@@ -15,3 +17,9 @@ __pycache__/
 # 构建产物与 python-embed 下载缓存（仅项目根目录的 build/，不要忽略功能源码目录）
 /build/
 hwklr/features/build/vendor/*.zip
+# 插件工程模板属于程序资产，必须提交。
+!hwklr/features/build/vendor/plugin-template.zip
+
+# 运行期生成的扩展目录与开发虚拟环境
+/extension/
+/HwklrVenv/

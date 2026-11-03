@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
-# 最后更新: 2026-11-01 12:40
+# 最后更新: 2026-11-03 19:30
 # 文件名: __init__.py
-# 主要用途: 集中登记每个标签页的启动参数；按官方功能清单动态加载，支持裁剪后的导出包。
-# 文件版本: 2.1.0
+# 主要用途: 集中登记每个标签页的启动参数；支持官方功能裁剪与运行期第三方扩展注册。
+# 文件版本: 3.0.0
 """标签页启动参数。
 
 ``VIEW_PARAMS`` 是标签页的注册表：新增官方功能时，在
@@ -24,13 +24,17 @@ from hwklr.features.about import AboutFeature
 from hwklr.features.manifest import OFFICIAL_FEATURES, FeatureSpec, load_feature_class
 from hwklr.features.settings import SettingsFeature
 
-__version__ = "2.1.0"
+__version__ = "3.0.0"
 __author__ = "Gary"
 __all__ = [
     "ABOUT_NAME",
     "SETTINGS_NAME",
     "VIEW_PARAMS",
     "ViewParam",
+    "all_view_params",
+    "get_view_param",
+    "register_extension_param",
+    "unregister_extension_param",
 ]
 
 SETTINGS_NAME: Final[str] = "设置"
@@ -60,6 +64,12 @@ class ViewParam(NamedTuple):
 
     description: str
     """标签功能说明，用于关于页与标签栏提示。"""
+
+    base_url: str = "/view_data/"
+    """前端资源 URL 前缀；第三方扩展为 ``/extensions/<id>/``。"""
+
+    resource_root: str = ""
+    """本地资源根目录；空字符串表示官方 ``view_data`` 目录。"""
 
 
 def _feature_param(spec: FeatureSpec) -> ViewParam | None:
@@ -117,4 +127,50 @@ def _build_view_params() -> dict[str, ViewParam]:
     return params
 
 
-VIEW_PARAMS: Final[dict[str, ViewParam]] = _build_view_params()
+VIEW_PARAMS: dict[str, ViewParam] = _build_view_params()
+# 运行期注册的第三方扩展开关；官方清单仍以 VIEW_PARAMS 为唯一静态真相。
+_EXTENSION_PARAMS: dict[str, ViewParam] = {}
+
+
+def register_extension_param(param: ViewParam) -> None:
+    """注册一个第三方扩展标签参数。
+
+    Args:
+        param: 扩展标签参数。
+    """
+    _EXTENSION_PARAMS[param.function_name] = param
+
+
+def unregister_extension_param(name: str) -> None:
+    """移除一个运行期扩展标签参数。
+
+    Args:
+        name: 标签名称。
+    """
+    _EXTENSION_PARAMS.pop(str(name or ""), None)
+
+
+def all_view_params() -> dict[str, ViewParam]:
+    """返回官方与扩展合并后的标签参数。
+
+    Returns:
+        名称到标签参数的字典。
+    """
+    merged: dict[str, ViewParam] = dict(VIEW_PARAMS)
+    merged.update(_EXTENSION_PARAMS)
+    return merged
+
+
+def get_view_param(name: str) -> ViewParam | None:
+    """按名称读取标签参数。
+
+    Args:
+        name: 标签名称。
+
+    Returns:
+        标签参数；不存在时返回 ``None``。
+    """
+    param: ViewParam | None = VIEW_PARAMS.get(name)
+    if param is not None:
+        return param
+    return _EXTENSION_PARAMS.get(name)

@@ -1,0 +1,51 @@
+/*
+  作者: Gary
+  编写日期: 2026-11-03 20:15
+  文件名: plugin.css
+  主要用途: 插件工程模板页面样式：居中的欢迎卡片与主按钮。
+  文件版本: 1.0.0
+*/
+
+.tag-plugin-template {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+}
+
+.tag-plugin-template .plugin-welcome {
+  width: min(620px, 100%);
+  padding: 38px 34px;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+
+.tag-plugin-template .plugin-welcome-mark {
+  font-size: 42px;
+  line-height: 1;
+}
+
+.tag-plugin-template h1 {
+  margin: 14px 0 10px;
+  font-size: 26px;
+  color: var(--ink);
+}
+
+.tag-plugin-template p {
+  margin: 0 0 24px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.tag-plugin-template code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--panel-soft);
+  color: var(--ink-soft);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+}

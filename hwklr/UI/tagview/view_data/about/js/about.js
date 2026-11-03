@@ -1,9 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-10-31 20:45
+  最后更新: 2026-11-03 21:50
   文件名: about.js
-  主要用途: “关于”页面逻辑：填充应用名称、版本、作者、描述、功能列表与声明。
-  文件版本: 1.0.0
+  主要用途: “关于”页面逻辑：填充软件信息、插件元信息表、功能列表与声明。
+  文件版本: 3.0.0
 */
 
 (function () {
@@ -26,6 +27,59 @@
     els.authors = document.getElementById('about-authors');
     els.features = document.getElementById('about-features');
     els.disclaimer = document.getElementById('about-disclaimer');
+    els.plugins = document.getElementById('about-plugins');
+  }
+
+  /**
+   * 创建表格单元格。
+   * @param {string} text 文本。
+   * @param {string} [className] 类名。
+   * @returns {HTMLTableCellElement} 单元格。
+   */
+  function cell(text, className) {
+    const node = document.createElement('td');
+    if (className) {
+      node.className = className;
+    }
+    node.textContent = String(text === undefined || text === null ? '—' : text);
+    return node;
+  }
+
+  /**
+   * 渲染插件元信息表。
+   * @param {Array<Object>} plugins 插件元信息。
+   * @returns {void}
+   */
+  function renderPlugins(plugins) {
+    if (!els.plugins) {
+      return;
+    }
+    els.plugins.innerHTML = '';
+    if (!Array.isArray(plugins) || plugins.length === 0) {
+      const row = document.createElement('tr');
+      const empty = document.createElement('td');
+      empty.colSpan = 6;
+      empty.className = 'table-empty';
+      empty.textContent = '暂无插件信息。';
+      row.appendChild(empty);
+      els.plugins.appendChild(row);
+      return;
+    }
+    plugins.forEach((plugin) => {
+      const row = document.createElement('tr');
+      row.appendChild(cell(plugin.name, 'plugin-name'));
+      row.appendChild(cell(plugin.package_display, 'mono'));
+      row.appendChild(cell(plugin.author));
+      row.appendChild(cell(plugin.version_display, 'mono'));
+      row.appendChild(cell(plugin.update_date));
+      const stateCell = document.createElement('td');
+      const badge = document.createElement('span');
+      badge.className = 'plugin-state ' + (plugin.enabled ? 'on' : 'off');
+      badge.textContent = plugin.enabled ? '已启用' : '已停用';
+      stateCell.appendChild(badge);
+      row.appendChild(stateCell);
+      els.plugins.appendChild(row);
+    });
   }
 
   /**
@@ -66,7 +120,7 @@
    * @returns {void}
    */
   function renderMeta(meta) {
-    const version = String(meta.version || '—');
+    const version = String(meta.version_display || meta.version || '—');
     const authors = Array.isArray(meta.authors) ? meta.authors : [];
     if (els.name) {
       els.name.textContent = String(meta.name || 'HomeworkKiller4BJTU');
@@ -81,12 +135,18 @@
       els.versionBadge.textContent = `Version ${version}`;
     }
     if (els.authors) {
-      els.authors.textContent = authors.length > 0 ? authors.join('、') : '—';
+      const software = meta.software && typeof meta.software === 'object' ? meta.software : {};
+      els.authors.textContent = software.author
+        ? String(software.author)
+        : authors.length > 0
+          ? authors.join('、')
+          : '—';
     }
     if (els.disclaimer) {
       els.disclaimer.textContent = String(meta.disclaimer || '');
     }
     renderFeatures(meta.features || []);
+    renderPlugins(meta.plugins || []);
     document.title = `${meta.name || 'HomeworkKiller4BJTU'} ${version}`;
   }
 

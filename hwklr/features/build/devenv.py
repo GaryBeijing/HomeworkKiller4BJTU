@@ -1,18 +1,19 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-01 12:38
-# 最后更新: 2026-11-01 13:05
+# 最后更新: 2026-11-03 19:15
 # 文件名: devenv.py
-# 主要用途: 开发构建包内的开发环境检测、HwklrVenv 创建与源码迁移。
-# 文件版本: 2.1.3
+# 主要用途: 开发构建包内的开发环境检测、HwklrVenv 创建、V3 源码布局迁移、依赖安装与插件模板分发。
+# 文件版本: 3.0.0
 """开发构建辅助环境。
 
 导出的开发构建会在“构建”标签页提示用户搭建开发环境：
 - 自动寻找本机系统 Python（不会使用包内自带的 python-embed）；
 - 在程序目录外侧创建 ``HwklrVenv``；
-- 创建后把开发源码（``source-v<版本>.zip`` 或本地源码）抽取到
-  ``HwklrVenv/HwklrSource``，使代码位于虚拟环境内部；
-- 已存在可用环境时直接返回。
+- 把 ``legacy/``、``Reference/``、``main.py``、``requirements.txt`` 解压到
+  虚拟环境根目录，把 ``hwklr/`` 解压到 ``HwklrVenv/Lib/``；
+- 用虚拟环境的 pip 从清华源安装 ``requirements.txt``；
+- 生成 ``启动程序.bat`` / ``调试程序.bat``，并把插件工程模板放到 ``vendor/``。
 """
 from __future__ import annotations
 
@@ -25,7 +26,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Final
 
-__version__ = "2.1.3"
+__version__ = "3.0.0"
 __author__ = "Gary"
 __all__ = [
     "app_home",
@@ -39,9 +40,31 @@ __all__ = [
 ]
 
 _LOGGER: Final[logging.Logger] = logging.getLogger(__name__)
-_PROJECT_ROOT: Final[Path] = Path(__file__).resolve().parents[3]
+
+
+def _resolve_project_root() -> Path:
+    """定位含 ``main.py`` 的项目根目录（兼容 HwklrVenv 的 ``Lib/`` 布局）。
+
+    Returns:
+        项目根目录。
+    """
+    current: Path = Path(__file__).resolve()
+    for candidate in (current.parents[3], current.parents[4]):
+        if (candidate / "main.py").is_file():
+            return candidate
+    return current.parents[3]
+
+
+_PROJECT_ROOT: Final[Path] = _resolve_project_root()
 _VENV_NAME: Final[str] = "HwklrVenv"
-_SOURCE_DIR_NAME: Final[str] = "HwklrSource"
+_PIP_MIRROR: Final[str] = "https://pypi.tuna.tsinghua.edu.cn/simple"
+_TEMPLATE_NAME: Final[str] = "plugin-template.zip"
+_ROOT_ITEMS: Final[tuple[str, ...]] = (
+    "main.py",
+    "requirements.txt",
+    "legacy",
+    "Reference",
+)
 
 
 def app_home() -> Path:
@@ -55,31 +78,50 @@ def app_home() -> Path:
     """
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent
-    parent: Path = _PROJECT_ROOT.parent
-    if (
-        (parent / "start.bat").is_file()
-        or (parent / "BUILD_INFO.json").is_file()
+    # 源码仓库 / HwklrVenv：含 pyvenv.cfg 与 main.py 的目录。
+    for candidate in (_PROJECT_ROOT, _PROJECT_ROOT.parent):
+        if (candidate / "pyvenv.cfg").is_file() and (
+            candidate / "main.py"
+        ).is_file():
+            return candidate
+    # 开发包：start.bat / BUILD_INFO.json 所在目录。
+    for candidate in (
+        _PROJECT_ROOT,
+        _PROJECT_ROOT.parent,
+        _PROJECT_ROOT.parent.parent,
     ):
-        return parent
+        if (candidate / "start.bat").is_file() or (
+            candidate / "BUILD_INFO.json"
+        ).is_file():
+            return candidate
     return _PROJECT_ROOT
 
 
 def venv_path() -> Path:
-    """返回 HwklrVenv 的目标路径。
+    """返回开发虚拟环境路径。
+
+    源码运行时项目根目录本身是虚拟环境，直接复用；开发产物中使用
+    ``HwklrVenv``。
 
     Returns:
         虚拟环境目录路径。
     """
-    return app_home() / _VENV_NAME
+    home: Path = app_home()
+    if (home / "pyvenv.cfg").is_file():
+        return home
+    return home / _VENV_NAME
 
 
 def source_path() -> Path:
-    """返回迁移到虚拟环境内部的源码目录。
+    """返回开发源码所在的虚拟环境根目录。
+
+    V3 起源码不再集中放在 ``HwklrSource``：``main.py`` 等位于虚拟环境根目录，
+    ``hwklr/`` 位于 ``Lib/``。
 
     Returns:
-        ``HwklrVenv/HwklrSource`` 路径。
+        ``HwklrVenv`` 路径。
     """
-    return venv_path() / _SOURCE_DIR_NAME
+    return venv_path()
 
 
 def _venv_python() -> Path:
@@ -104,13 +146,15 @@ def venv_ready() -> bool:
 
 
 def source_ready() -> bool:
-    """判断源码是否已迁移到虚拟环境内部。
+    """判断源码是否已按 V3 布局迁移到虚拟环境。
 
     Returns:
-        ``HwklrSource/main.py`` 与 ``HwklrSource/hwklr`` 均存在时返回 ``True``。
+        根目录存在 ``main.py`` 且 ``Lib/hwklr/__init__.py`` 存在时返回 ``True``。
     """
     root: Path = source_path()
-    return (root / "main.py").is_file() and (root / "hwklr").is_dir()
+    return (root / "main.py").is_file() and (
+        root / "Lib" / "hwklr" / "__init__.py"
+    ).is_file()
 
 
 def dev_env_ready() -> bool:
@@ -188,7 +232,12 @@ def _find_source_archive() -> Path | None:
     """
     candidates: list[Path] = []
     seen: set[Path] = set()
-    for directory in (app_home(), _PROJECT_ROOT):
+    for directory in (
+        app_home(),
+        app_home().parent,
+        _PROJECT_ROOT,
+        _PROJECT_ROOT.parent,
+    ):
         try:
             resolved: Path = directory.resolve()
         except OSError:
@@ -204,12 +253,35 @@ def _find_source_archive() -> Path | None:
     return max(candidates, key=lambda item: item.stat().st_mtime)
 
 
+def _archive_destination(root: Path, member_name: str) -> Path | None:
+    """计算源码归档成员在虚拟环境中的目标路径。
+
+    Args:
+        root: 虚拟环境根目录。
+        member_name: zip 内成员名。
+
+    Returns:
+        目标路径；不属于开发源码时返回 ``None``。
+    """
+    normalized: str = member_name.replace("\\", "/")
+    parts: list[str] = [part for part in normalized.split("/") if part not in ("", ".")]
+    if not parts or ".." in parts:
+        return None
+    if parts[0] == "hwklr":
+        return root / "Lib" / Path(*parts)
+    if parts[0] in ("legacy", "Reference"):
+        return root / Path(*parts)
+    if len(parts) == 1 and parts[0] in ("main.py", "requirements.txt"):
+        return root / parts[0]
+    return None
+
+
 def _extract_source_archive(archive: Path, target: Path, emit: Callable[[str], None]) -> None:
-    """把源码归档解压到虚拟环境内部目录。
+    """把 V3 源码归档按新布局解压到虚拟环境。
 
     Args:
         archive: 源码 zip 路径。
-        target: 目标目录（``HwklrVenv/HwklrSource``）。
+        target: 虚拟环境根目录。
         emit: 日志回调。
 
     Raises:
@@ -220,19 +292,26 @@ def _extract_source_archive(archive: Path, target: Path, emit: Callable[[str], N
     try:
         with zipfile.ZipFile(archive) as bundle:
             for member in bundle.infolist():
-                destination: Path = (target / member.filename).resolve()
-                if not destination.is_relative_to(root):
+                if member.is_dir():
+                    continue
+                destination: Path | None = _archive_destination(target, member.filename)
+                if destination is None:
+                    continue
+                resolved: Path = destination.resolve()
+                if not resolved.is_relative_to(root):
                     raise RuntimeError("源码归档包含非法路径：%s" % member.filename)
-            bundle.extractall(target)
+                resolved.parent.mkdir(parents=True, exist_ok=True)
+                with bundle.open(member) as source, resolved.open("wb") as output:
+                    shutil.copyfileobj(source, output)
     except (OSError, zipfile.BadZipFile) as exc:
         raise RuntimeError("解压源码归档失败：%s" % exc) from exc
 
 
 def _copy_local_sources(target: Path, emit: Callable[[str], None]) -> bool:
-    """在没有源码归档时，从本地源码目录复制代码。
+    """在没有源码归档时，从本地源码目录按 V3 布局复制代码。
 
     Args:
-        target: 目标目录。
+        target: 虚拟环境根目录。
         emit: 日志回调。
 
     Returns:
@@ -240,6 +319,8 @@ def _copy_local_sources(target: Path, emit: Callable[[str], None]) -> bool:
     """
     main_file: Path = _PROJECT_ROOT / "main.py"
     package_dir: Path = _PROJECT_ROOT / "hwklr"
+    if not package_dir.is_dir():
+        package_dir = _PROJECT_ROOT / "Lib" / "hwklr"
     if not main_file.is_file() or not package_dir.is_dir():
         return False
     emit("未找到源码归档，改用本地源码：%s" % _PROJECT_ROOT)
@@ -247,6 +328,10 @@ def _copy_local_sources(target: Path, emit: Callable[[str], None]) -> bool:
     requirements: Path = _PROJECT_ROOT / "requirements.txt"
     if requirements.is_file():
         shutil.copy2(requirements, target / "requirements.txt")
+    for name in ("legacy", "Reference"):
+        source: Path = _PROJECT_ROOT / name
+        if source.is_dir():
+            shutil.copytree(source, target / name, dirs_exist_ok=True)
 
     def ignore(directory: str, names: list[str]) -> set[str]:
         """忽略缓存、测试与下载缓存。
@@ -261,30 +346,195 @@ def _copy_local_sources(target: Path, emit: Callable[[str], None]) -> bool:
         ignored: set[str] = set()
         for name in names:
             path: Path = Path(directory) / name
-            try:
-                relative: str = path.relative_to(_PROJECT_ROOT).as_posix()
-            except ValueError:
-                continue
             if name == "__pycache__" or name.endswith((".pyc", ".pyo")):
                 ignored.add(name)
-            elif relative.startswith("hwklr/features/build/vendor"):
+                continue
+            if name == "vendor" and path.parent.name == "build":
+                # 下载缓存与模板都不从本地源码目录复制；模板由 _copy_plugin_template 单独处理。
                 ignored.add(name)
-            elif "tests" in path.parts or name.startswith("test_"):
+                continue
+            if "tests" in path.parts or name.startswith("test_"):
                 ignored.add(name)
         return ignored
 
-    shutil.copytree(package_dir, target / "hwklr", ignore=ignore)
+    shutil.copytree(
+        package_dir, target / "Lib" / "hwklr", ignore=ignore, dirs_exist_ok=True
+    )
     return True
 
 
+def _site_packages(root: Path) -> Path:
+    """返回虚拟环境的 site-packages 目录。
+
+    Args:
+        root: 虚拟环境根目录。
+
+    Returns:
+        site-packages 路径。
+    """
+    if (root / "Lib").is_dir():
+        return root / "Lib" / "site-packages"
+    candidates: list[Path] = sorted((root / "lib").glob("python*/site-packages"))
+    return candidates[0] if candidates else root / "Lib" / "site-packages"
+
+
+def _write_dev_path(root: Path, emit: Callable[[str], None]) -> None:
+    """写入 .pth，使 ``Lib/hwklr`` 可以被虚拟环境导入。
+
+    Args:
+        root: 虚拟环境根目录。
+        emit: 日志回调。
+    """
+    site: Path = _site_packages(root)
+    site.mkdir(parents=True, exist_ok=True)
+    pth: Path = site / "_hwklr_dev.pth"
+    pth.write_text("..\n", encoding="ascii")
+    emit("已写入开发路径：%s" % pth)
+
+
+def _write_start_bats(root: Path, emit: Callable[[str], None]) -> None:
+    """生成启动与调试用的批处理文件。
+
+    Args:
+        root: 虚拟环境根目录。
+        emit: 日志回调。
+    """
+    if sys.platform == "win32":
+        pythonw: str = "%~dp0Scripts\\pythonw.exe"
+        python_exe: str = "%~dp0Scripts\\python.exe"
+    else:
+        pythonw = "%~dp0bin/python"
+        python_exe = pythonw
+    launch: str = (
+        "@echo off\r\n"
+        "setlocal\r\n"
+        "cd /d \"%~dp0\"\r\n"
+        "\"" + pythonw + "\" \"%~dp0main.py\"\r\n"
+    )
+    debug: str = (
+        "@echo off\r\n"
+        "setlocal\r\n"
+        "cd /d \"%~dp0\"\r\n"
+        "\"" + python_exe + "\" \"%~dp0main.py\"\r\n"
+        "echo.\r\n"
+        "pause\r\n"
+    )
+    # #newline="" 防止 Windows 文本模式把已有的 \r\n 再翻译一次。
+    with (root / "启动程序.bat").open("w", encoding="ascii", newline="") as handle:
+        handle.write(launch)
+    with (root / "调试程序.bat").open("w", encoding="ascii", newline="") as handle:
+        handle.write(debug)
+    emit("已生成启动程序.bat / 调试程序.bat")
+
+
+def _copy_plugin_template(root: Path, emit: Callable[[str], None]) -> Path | None:
+    """把插件工程模板复制到虚拟环境的 vendor/。
+
+    Args:
+        root: 虚拟环境根目录。
+        emit: 日志回调。
+
+    Returns:
+        模板 zip 路径；未找到时返回 ``None``。
+    """
+    candidates: tuple[Path, ...] = (
+        app_home() / "vendor" / _TEMPLATE_NAME,
+        _PROJECT_ROOT / "hwklr" / "features" / "build" / "vendor" / _TEMPLATE_NAME,
+        _PROJECT_ROOT
+        / "Lib"
+        / "hwklr"
+        / "features"
+        / "build"
+        / "vendor"
+        / _TEMPLATE_NAME,
+    )
+    for candidate in candidates:
+        if not candidate.is_file():
+            continue
+        vendor: Path = root / "vendor"
+        vendor.mkdir(parents=True, exist_ok=True)
+        target: Path = vendor / _TEMPLATE_NAME
+        try:
+            same_file: bool = candidate.resolve() == target.resolve()
+        except OSError:
+            same_file = False
+        if not same_file:
+            shutil.copy2(candidate, target)
+        emit("插件工程模板：%s" % target)
+        return target
+    return None
+
+
+def _pip_install(root: Path, emit: Callable[[str], None]) -> None:
+    """用虚拟环境的 pip 从清华源安装 requirements.txt。
+
+    Args:
+        root: 虚拟环境根目录。
+        emit: 日志回调。
+
+    Raises:
+        RuntimeError: pip 执行失败时抛出。
+    """
+    requirements: Path = root / "requirements.txt"
+    if not requirements.is_file():
+        emit("未找到 requirements.txt，跳过依赖安装。")
+        return
+    emit("正在从清华源安装依赖：%s" % requirements)
+    command: list[str] = [
+        str(_venv_python()),
+        "-m",
+        "pip",
+        "install",
+        "-r",
+        str(requirements),
+        "-i",
+        _PIP_MIRROR,
+        "--disable-pip-version-check",
+        "--no-input",
+    ]
+    try:
+        process: subprocess.Popen[str] = subprocess.Popen(
+            command,
+            cwd=str(root),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            creationflags=(
+                getattr(subprocess, "CREATE_NO_WINDOW", 0)
+                if sys.platform == "win32"
+                else 0
+            ),
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise RuntimeError("启动 pip 失败：%s" % exc) from exc
+    assert process.stdout is not None
+    tail: list[str] = []
+    for raw_line in process.stdout:
+        line: str = raw_line.rstrip()
+        if not line:
+            continue
+        tail.append(line)
+        if len(tail) > 40:
+            del tail[: len(tail) - 40]
+        emit(line)
+    code: int = process.wait()
+    if code != 0:
+        raise RuntimeError(
+            "安装依赖失败（退出码 %d）：%s" % (code, "\n".join(tail[-8:]))
+        )
+    emit("依赖安装完成。")
+
+
 def _prepare_sources(emit: Callable[[str], None]) -> tuple[Path, bool]:
-    """确保源码位于虚拟环境内部。
+    """确保源码按 V3 布局位于虚拟环境内部。
 
     Args:
         emit: 日志回调。
 
     Returns:
-        ``(源码目录, 是否本次新抽取)``。
+        ``(虚拟环境根目录, 是否本次新抽取)``。
 
     Raises:
         RuntimeError: 找不到可用源码时抛出。
@@ -292,9 +542,8 @@ def _prepare_sources(emit: Callable[[str], None]) -> tuple[Path, bool]:
     target: Path = source_path()
     if source_ready():
         emit("源码已在虚拟环境内：%s" % target)
+        _write_dev_path(target, emit)
         return target, False
-    if target.exists():
-        shutil.rmtree(target)
     target.mkdir(parents=True, exist_ok=True)
     archive: Path | None = _find_source_archive()
     if archive is not None:
@@ -302,7 +551,8 @@ def _prepare_sources(emit: Callable[[str], None]) -> tuple[Path, bool]:
     elif not _copy_local_sources(target, emit):
         raise RuntimeError("未找到开发源码归档，无法把代码迁移到 HwklrVenv")
     if not source_ready():
-        raise RuntimeError("源码迁移后未找到 main.py 或 hwklr 目录")
+        raise RuntimeError("源码迁移后未找到 main.py 或 Lib/hwklr 目录")
+    _write_dev_path(target, emit)
     emit("源码已迁移到虚拟环境：%s" % target)
     return target, True
 
@@ -366,6 +616,11 @@ def create_dev_venv(log: Callable[[str], None] | None = None) -> dict[str, objec
         emit("HwklrVenv 创建完成：%s" % target)
 
     source, code_extracted = _prepare_sources(emit)
+    # #V3：依赖安装、启动脚本与插件模板都放在虚拟环境内部。
+    _pip_install(target, emit)
+    template: Path | None = _copy_plugin_template(target, emit)
+    _write_start_bats(target, emit)
+    (target / "extension").mkdir(parents=True, exist_ok=True)
     return {
         "ready": dev_env_ready(),
         "path": str(target),
@@ -373,4 +628,5 @@ def create_dev_venv(log: Callable[[str], None] | None = None) -> dict[str, objec
         "python": str(_venv_python()),
         "created": created,
         "code_extracted": code_extracted,
+        "template": str(template) if template is not None else "",
     }

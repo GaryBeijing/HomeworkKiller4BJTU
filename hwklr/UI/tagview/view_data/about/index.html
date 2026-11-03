@@ -1,9 +1,10 @@
 <!--
   作者: Gary
   编写日期: 2026-10-31 20:45
+  最后更新: 2026-11-03 21:45
   文件名: index.html
-  主要用途: “关于”标签页结构：软件信息、作者、功能列表与使用声明。
-  文件版本: 1.0.0
+  主要用途: “关于”标签页结构：软件信息、插件元信息表、功能列表与使用声明。
+  文件版本: 3.0.0
 -->
 <section class="tag-page tag-about" id="about-page">
   <div class="hero">
@@ -37,6 +38,29 @@
       </ul>
     </section>
   </div>
+
+  <section class="card about-plugins-card">
+    <h2>插件与功能信息</h2>
+    <div class="table-wrap compact">
+      <table class="data-table about-plugin-table">
+        <thead>
+          <tr>
+            <th>插件名</th>
+            <th>包名</th>
+            <th>作者</th>
+            <th>版本</th>
+            <th>更新日期</th>
+            <th>状态</th>
+          </tr>
+        </thead>
+        <tbody id="about-plugins">
+          <tr>
+            <td colspan="6" class="table-empty">正在读取插件信息…</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
 
   <section class="card disclaimer-card">
     <h2>使用声明</h2>

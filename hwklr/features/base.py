@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
-# 最后更新: 2026-11-01 00:01
+# 最后更新: 2026-11-03 17:35
 # 文件名: base.py
-# 主要用途: 定义所有功能都必须继承的 Feature 抽象基类、统一调用协议与设置组只读属性。
-# 文件版本: 2.0.0
+# 主要用途: 定义所有功能都必须继承的 Feature 抽象基类、统一调用协议、设置组与关于元信息只读属性。
+# 文件版本: 3.0.0
 """功能抽象基类。
 
 约定：
@@ -18,10 +18,11 @@ from __future__ import annotations
 import abc
 from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:  # 避免 base 与 settings 相互导入。
+if TYPE_CHECKING:  # 避免 base 与 settings/about 相互导入。
+    from .about import AboutMetadataGroup
     from .settings import FeatureSettingsGroup
 
-__version__ = "2.0.0"
+__version__ = "3.0.0"
 __all__ = ["Feature", "success", "failure"]
 
 # 统一返回结构：ok 表示成功与否，data 放业务数据，error 放可读错误信息。
@@ -94,6 +95,16 @@ class Feature(abc.ABC):
 
         Returns:
             功能对应的 :class:`FeatureSettingsGroup`。
+        """
+        raise NotImplementedError
+
+    @property
+    @abc.abstractmethod
+    def about_meta(self) -> "AboutMetadataGroup":
+        """返回该功能注册到“关于”页的只读元信息组。
+
+        Returns:
+            功能对应的 :class:`AboutMetadataGroup`。
         """
         raise NotImplementedError
 

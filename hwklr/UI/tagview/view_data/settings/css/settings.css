@@ -1,10 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-10-31 20:45
-  最后更新: 2026-11-01 12:40
+  最后更新: 2026-11-03 20:55
   文件名: settings.css
-  主要用途: “设置”标签页样式：动态设置分组、Feature 开发标记表、高亮提醒、可选填/高级字段标记、高级设置确认弹窗、开关与运行信息。
-  文件版本: 2.1.0
+  主要用途: “设置”标签页样式：动态设置分组、功能启用开关、第三方扩展加载器、开发标记表、高亮与弹窗。
+  文件版本: 3.0.0
 */
 
 .tag-settings .settings-layout {
@@ -51,6 +51,26 @@
   font-size: 16px;
   color: var(--ink);
   transition: color 0.2s ease;
+}
+
+.tag-settings .settings-group-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tag-settings .group-switch {
+  width: 40px;
+  height: 22px;
+}
+
+.tag-settings .group-switch .slider::before {
+  width: 16px;
+  height: 16px;
+}
+
+.tag-settings .group-switch input:checked + .slider::before {
+  transform: translateX(18px);
 }
 
 .tag-settings .group-status {
@@ -206,9 +226,130 @@
   cursor: pointer;
 }
 
-.tag-settings .secret-wrap {
+/* 第三方扩展加载器。 */
+.tag-settings .extension-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+}
+
+.tag-settings .extension-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.tag-settings .extension-local {
+  background: #ffffff;
+  color: var(--ink);
+  border: 1px solid var(--panel-border);
+}
+
+.tag-settings .extension-git {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: #17171c;
+  color: #ffffff;
+  border: 1px solid #17171c;
+}
+
+.tag-settings .extension-git:hover:not(:disabled) {
+  background: #2b2b34;
+}
+
+.tag-settings .extension-git:disabled {
+  background: #b7b9c7;
+  border-color: #b7b9c7;
+  color: #f3f3f7;
+  cursor: not-allowed;
+}
+
+.tag-settings .extension-list {
+  display: grid;
+  gap: 8px;
+}
+
+.tag-settings .extension-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  background: var(--panel-soft);
+}
+
+.tag-settings .extension-info {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.tag-settings .extension-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tag-settings .extension-title strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.tag-settings .extension-version {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.tag-settings .extension-official {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 11px;
+}
+
+.tag-settings .extension-meta {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.settings-message-backdrop {
+  z-index: 90;
+}
+
+.settings-message-modal {
+  width: min(520px, 100%);
+}
+
+.settings-message-text {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.8;
+  word-break: break-word;
+}
+
+.settings-prompt-input {
+  width: 100%;
+  margin-top: 12px;
+}
+
+.tag-settings .secret-wrap,
+.tag-settings .file-picker-wrap {
   display: flex;
   gap: 8px;
+}
+
+.tag-settings .file-picker-wrap input {
+  flex: 1 1 auto;
 }
 
 .tag-settings .secret-wrap input {

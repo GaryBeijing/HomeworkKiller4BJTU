@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-01 00:01
-# 最后更新: 2026-11-01 20:26
+# 最后更新: 2026-11-03 18:25
 # 文件名: __init__.py
-# 主要用途: 实现“C程序设计”功能：课程/题目选择、启发模式、题解模式与设置板块（依赖延迟加载）。
-# 文件版本: 2.3.1
+# 主要用途: 实现“C程序设计”功能：课程/题目选择、启发模式、题解模式、启用开关与设置板块（依赖延迟加载）。
+# 文件版本: 3.0.0
 """C 程序设计功能。
 
 重制自 ``B_CHelper``，主要变化：
@@ -25,7 +25,9 @@ from datetime import datetime
 from typing import Any, Final
 
 from hwklr.config import load_config, update_config
+from hwklr.features.about import AboutMetadataGroup
 from hwklr.features.base import ApiResult, Feature, failure, success
+from hwklr.features.extensions import is_feature_enabled, set_feature_enabled
 from hwklr.features.settings import FeatureSettingsGroup, SettingsFieldSpec
 
 from .ai import (
@@ -50,7 +52,7 @@ from .models import (
 from .parsers import deterministic_structure
 from .site import MoodleError, MoodleSite, SubmitError
 
-__version__ = "2.3.1"
+__version__ = "3.0.0"
 __author__ = "Gary"
 __all__ = ["CProgrammingFeature"]
 
@@ -190,6 +192,24 @@ class CProgrammingFeature(Feature):
             AI 设置组。
         """
         return self._settings_group
+
+    @property
+    def about_meta(self) -> AboutMetadataGroup:
+        """返回 C 程序设计在“关于”页的元信息。
+
+        Returns:
+            插件名、包名、作者与版本。
+        """
+        return AboutMetadataGroup(
+            name="C程序设计",
+            package="CPROG",
+            author="Gary",
+            version=__version__,
+            update_date="2026-11-03",
+            official=True,
+            feature_key="C程序设计",
+            description="CITEL 课程题目辅助：启发模式逐步讲解，题解模式生成并提交参考实现。",
+        )
 
     def _build_settings_group(self) -> FeatureSettingsGroup:
         """构建 AI 设置板块。
@@ -352,6 +372,9 @@ class CProgrammingFeature(Feature):
             exporter=exporter,
             complete_checker=complete_checker,
             missing_getter=missing_getter,
+            enabled_getter=lambda: is_feature_enabled("C程序设计"),
+            enabled_setter=lambda enabled: set_feature_enabled("C程序设计", enabled),
+            enabled_editable=True,
         )
 
     # ------------------------------------------------------------------ 分发

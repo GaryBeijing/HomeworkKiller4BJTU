@@ -1,10 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-11-01 12:40
-  最后更新: 2026-11-01 13:05
+  最后更新: 2026-11-03 21:20
   文件名: build.js
-  主要用途: “构建”页面逻辑：程序名称/图标、四段版本号校验、开发环境遮罩与源码迁移、后台构建轮询。
-  文件版本: 2.1.3
+  主要用途: “构建”页面逻辑：程序/插件构建模式切换、插件工程新建/选择/测试/发布、开发环境遮罩与后台任务轮询。
+  文件版本: 3.0.0
 */
 
 (function () {
@@ -49,6 +49,12 @@
     devEnvPath: '',
     devSourcePath: '',
     settingUp: false,
+    mode: 'program',
+    modes: { program: true, plugin: true },
+    defaultMode: 'program',
+    plugin: {},
+    pluginBusy: false,
+    modeTouched: false,
   };
 
   /** 页面元素缓存。 */
@@ -87,6 +93,26 @@
     els.devPath = document.getElementById('build-dev-path');
     els.devPlaceholder = document.getElementById('build-dev-placeholder');
     els.devPlaceholderPath = document.getElementById('build-dev-placeholder-path');
+    els.modeSwitch = document.getElementById('build-mode-switch');
+    els.programCard = document.getElementById('build-program-card');
+    els.pluginCard = document.getElementById('build-plugin-card');
+    els.pluginProjectPath = document.getElementById('plugin-project-path');
+    els.pluginProjectName = document.getElementById('plugin-project-name');
+    els.pluginTemplatePath = document.getElementById('plugin-template-path');
+    els.pluginVenv = document.getElementById('plugin-venv-state');
+    els.pluginChoose = document.getElementById('plugin-choose');
+    els.pluginNew = document.getElementById('plugin-new');
+    els.pluginTest = document.getElementById('plugin-test');
+    els.pluginStatus = document.getElementById('plugin-status');
+    els.pluginLog = document.getElementById('plugin-log');
+    els.pluginBuildStart = document.getElementById('plugin-build-start');
+    els.pluginOpenSettings = document.getElementById('plugin-open-settings');
+    els.pluginNewModal = document.getElementById('plugin-new-modal');
+    els.pluginNewName = document.getElementById('plugin-new-name');
+    els.pluginNewPackage = document.getElementById('plugin-new-package');
+    els.pluginNewError = document.getElementById('plugin-new-error');
+    els.pluginNewCancel = document.getElementById('plugin-new-cancel');
+    els.pluginNewConfirm = document.getElementById('plugin-new-confirm');
   }
 
   /**
@@ -230,25 +256,22 @@
    * @returns {void}
    */
   function showDevPlaceholder(path) {
+    // #V3：开发环境就绪后直接展示插件构建面板，不再显示“尽情期待”占位页。
     if (els.page) {
-      els.page.classList.add('dev-ready');
+      els.page.classList.remove('dev-ready');
     }
     if (els.devGate) {
       els.devGate.classList.add('hidden');
     }
     if (els.devPlaceholder) {
-      els.devPlaceholder.classList.remove('hidden');
+      els.devPlaceholder.classList.add('hidden');
     }
-    if (els.devPlaceholderPath) {
-      const parts = [];
-      if (path) {
-        parts.push(`HwklrVenv：${path}`);
-      }
-      if (state.devSourcePath) {
-        parts.push(`源码：${state.devSourcePath}`);
-      }
-      els.devPlaceholderPath.textContent = parts.join(' · ');
+    if (els.pluginVenv) {
+      els.pluginVenv.textContent = path ? '已就绪' : '已就绪';
+      els.pluginVenv.title = path || state.devEnvPath || '';
     }
+    state.mode = 'plugin';
+    applyMode();
     setBackgroundInert(false);
   }
 
@@ -261,13 +284,285 @@
     if (!els.page) {
       return;
     }
-    els.page.querySelectorAll('.hero, .build-card').forEach((element) => {
+    els.page.querySelectorAll('.hero, #build-program-card, #build-plugin-card').forEach((element) => {
       if (active) {
         element.setAttribute('inert', '');
       } else {
         element.removeAttribute('inert');
       }
     });
+  }
+
+  /**
+   * 更新插件构建状态徽标。
+   * @param {string} text 状态文本。
+   * @param {'info'|'ok'|'warn'|'bad'} [kind] 徽标类型。
+   * @returns {void}
+   */
+  function setPluginStatus(text, kind) {
+    if (!els.pluginStatus) {
+      return;
+    }
+    els.pluginStatus.className = 'pill ' + (kind || 'info');
+    els.pluginStatus.textContent = text;
+  }
+
+  /**
+   * 根据模式显示程序或插件构建面板。
+   * @returns {void}
+   */
+  function applyMode() {
+    const modes = state.modes || { program: true, plugin: true };
+    if (!modes.plugin) {
+      state.mode = 'program';
+    }
+    if (!modes.program) {
+      state.mode = 'plugin';
+    }
+    const mode = state.mode;
+    if (els.programCard) {
+      els.programCard.classList.toggle('hidden', mode !== 'program');
+    }
+    if (els.pluginCard) {
+      els.pluginCard.classList.toggle('hidden', mode !== 'plugin');
+    }
+    if (els.modeSwitch) {
+      const count = [modes.program, modes.plugin].filter(Boolean).length;
+      els.modeSwitch.classList.toggle('hidden', count < 2);
+      els.modeSwitch.querySelectorAll('button').forEach((button) => {
+        const target = String(button.dataset.mode || '');
+        button.classList.toggle('active', target === mode);
+        button.disabled = !modes[target];
+      });
+    }
+    updatePluginButtons();
+  }
+
+  /**
+   * 根据插件工程状态刷新“测试插件/构建发布包”按钮。
+   * @returns {void}
+   */
+  function updatePluginButtons() {
+    const plugin = state.plugin || {};
+    const hasProject = Boolean(plugin.project) && plugin.project_valid !== false;
+    if (els.pluginTest) {
+      els.pluginTest.disabled = !hasProject || state.pluginBusy;
+    }
+    if (els.pluginBuildStart) {
+      els.pluginBuildStart.disabled =
+        !hasProject || state.running || state.pluginBusy;
+    }
+  }
+
+  /**
+   * 渲染插件工程状态。
+   * @param {Object} plugin 服务端插件状态。
+   * @returns {void}
+   */
+  function renderPlugin(plugin) {
+    state.plugin = plugin && typeof plugin === 'object' ? plugin : {};
+    const data = state.plugin;
+    if (els.pluginProjectPath) {
+      els.pluginProjectPath.textContent = data.project || '未选择';
+      els.pluginProjectPath.title = data.project || '';
+    }
+    if (els.pluginProjectName) {
+      els.pluginProjectName.textContent = data.project_name || '—';
+    }
+    if (els.pluginTemplatePath) {
+      els.pluginTemplatePath.textContent = data.template_available
+        ? data.template
+        : '模板不可用';
+      els.pluginTemplatePath.title = data.template || '';
+    }
+    if (els.pluginVenv) {
+      els.pluginVenv.textContent = data.venv_ready ? '已就绪' : '未搭建';
+    }
+    if (els.pluginNew) {
+      els.pluginNew.disabled = !data.venv_ready;
+      els.pluginNew.title = data.venv_ready
+        ? '从模板新建插件工程'
+        : '请先搭建开发环境';
+    }
+    if (els.pluginHint) {
+      if (data.project_error) {
+        els.pluginHint.textContent = `当前工程不可用：${data.project_error}`;
+        els.pluginHint.classList.add('error-text');
+      } else {
+        els.pluginHint.textContent =
+          '“测试插件”会从当前工程目录临时加载插件，不写入启用配置，也不会在下次启动时自动加载。';
+        els.pluginHint.classList.remove('error-text');
+      }
+    }
+    updatePluginButtons();
+  }
+
+  /**
+   * 切换构建模式。
+   * @param {string} mode 模式名（program/plugin）。
+   * @returns {void}
+   */
+  function switchMode(mode) {
+    if (!state.modes[mode]) {
+      return;
+    }
+    state.mode = mode;
+    applyMode();
+  }
+
+  /**
+   * 弹出新建插件工程窗口。
+   * @returns {void}
+   */
+  function openNewProjectModal() {
+    if (!els.pluginNewModal) {
+      return;
+    }
+    els.pluginNewModal.classList.remove('hidden');
+    if (els.pluginNewError) {
+      els.pluginNewError.classList.add('hidden');
+      els.pluginNewError.textContent = '';
+    }
+    if (els.pluginNewName) {
+      els.pluginNewName.value = '';
+      els.pluginNewName.focus();
+    }
+    if (els.pluginNewPackage) {
+      els.pluginNewPackage.value = '';
+    }
+  }
+
+  /**
+   * 关闭新建插件工程窗口。
+   * @returns {void}
+   */
+  function closeNewProjectModal() {
+    if (els.pluginNewModal) {
+      els.pluginNewModal.classList.add('hidden');
+    }
+  }
+
+  /**
+   * 选择已存在的插件工程。
+   * @returns {Promise<void>} 完成时 resolve。
+   */
+  async function choosePluginProject() {
+    const data = await App.callOk('choose_plugin_project');
+    if (!data || data.cancelled || !data.path) {
+      return;
+    }
+    state.plugin = Object.assign({}, state.plugin, {
+      project: data.path,
+      project_valid: true,
+      project_name: data.name || '',
+      project_error: '',
+    });
+    renderPlugin(state.plugin);
+    App.toast('已选择插件工程', 'success');
+  }
+
+  /**
+   * 从模板新建插件工程。
+   * @returns {Promise<void>} 完成时 resolve。
+   */
+  async function createPluginProject() {
+    const name = els.pluginNewName ? String(els.pluginNewName.value || '').trim() : '';
+    const packageName = els.pluginNewPackage
+      ? String(els.pluginNewPackage.value || '').trim()
+      : '';
+    if (!name || !packageName) {
+      if (els.pluginNewError) {
+        els.pluginNewError.textContent = '插件名和包体名都不能为空。';
+        els.pluginNewError.classList.remove('hidden');
+      }
+      return;
+    }
+    if (els.pluginNewConfirm) {
+      els.pluginNewConfirm.disabled = true;
+      els.pluginNewConfirm.textContent = '创建中…';
+    }
+    try {
+      const data = await App.callOk('create_plugin_project', {
+        name,
+        package: packageName,
+      });
+      state.plugin = Object.assign({}, state.plugin, {
+        project: data.path,
+        project_valid: true,
+        project_name: data.name || name,
+        project_error: '',
+      });
+      renderPlugin(state.plugin);
+      closeNewProjectModal();
+      App.toast('插件工程已创建', 'success');
+    } catch (error) {
+      if (els.pluginNewError) {
+        els.pluginNewError.textContent = error.message;
+        els.pluginNewError.classList.remove('hidden');
+      }
+    } finally {
+      if (els.pluginNewConfirm) {
+        els.pluginNewConfirm.disabled = false;
+        els.pluginNewConfirm.textContent = '创建';
+      }
+    }
+  }
+
+  /**
+   * 从工程目录临时加载并测试插件。
+   * @returns {Promise<void>} 完成时 resolve。
+   */
+  async function testPlugin() {
+    if (state.pluginBusy) {
+      return;
+    }
+    state.pluginBusy = true;
+    updatePluginButtons();
+    try {
+      const data = await App.callOk('test_plugin', {
+        project: state.plugin.project || '',
+      });
+      await App.refreshTags();
+      const tab = String((data && data.tab) || '');
+      if (tab) {
+        await App.activate(tab);
+      }
+      App.toast('插件已临时加载', 'success');
+    } catch (error) {
+      App.toast(`测试插件失败: ${error.message}`, 'error');
+    } finally {
+      state.pluginBusy = false;
+      updatePluginButtons();
+    }
+  }
+
+  /**
+   * 启动插件发布包构建。
+   * @returns {Promise<void>} 完成时 resolve。
+   */
+  async function startPluginBuild() {
+    if (state.running || state.pluginBusy) {
+      return;
+    }
+    state.running = true;
+    state.notifiedJobId = '';
+    updatePluginButtons();
+    if (els.pluginLog) {
+      els.pluginLog.value = '';
+    }
+    setPluginStatus('准备构建插件…', 'info');
+    try {
+      const data = await App.callOk('start_plugin_build', {
+        project: state.plugin.project || '',
+      });
+      state.jobId = String(data.job_id || '');
+      schedulePoll();
+    } catch (error) {
+      state.running = false;
+      updatePluginButtons();
+      setPluginStatus('启动失败', 'bad');
+      App.toast(`启动插件构建失败: ${error.message}`, 'error');
+    }
   }
 
   /**
@@ -354,6 +649,7 @@
         (result && result.source) || state.devSourcePath
       );
       showDevPlaceholder(String((result && result.path) || state.devEnvPath));
+      await loadState();
       App.toast('开发环境已就绪', 'success');
     } catch (error) {
       if (els.devError) {
@@ -380,6 +676,15 @@
     state.toolAvailable = Boolean(tool.available);
     state.devFormat = String(data.dev_format || 'executable');
     state.buildable = data.buildable !== false;
+    state.modes = Object.assign(
+      { program: true, plugin: true },
+      data.modes || {}
+    );
+    state.defaultMode = String(data.default_mode || 'program');
+    if (!state.modeTouched) {
+      state.mode = state.defaultMode;
+    }
+    renderPlugin(data.plugin || {});
 
     const builder = tool.builder ? `构建工具 ${tool.builder}` : '构建工具';
     if (els.toolBadge) {
@@ -441,6 +746,7 @@
       }
     }
     renderDevGate(data);
+    applyMode();
   }
 
   /**
@@ -467,14 +773,29 @@
       }
     }
 
+    if (els.pluginLog) {
+      const text = lines.join('\n');
+      if (els.pluginLog.value !== text) {
+        const atBottom =
+          els.pluginLog.scrollTop + els.pluginLog.clientHeight >=
+          els.pluginLog.scrollHeight - 12;
+        els.pluginLog.value = text;
+        if (atBottom) {
+          els.pluginLog.scrollTop = els.pluginLog.scrollHeight;
+        }
+      }
+    }
+
     state.running = Boolean(job.running);
     const phase = String(job.phase || 'idle');
     const kind =
       phase === 'error' ? 'bad' : phase === 'done' ? 'ok' : 'info';
     setStatus(PHASE_LABELS[phase] || '构建中', kind);
+    setPluginStatus(PHASE_LABELS[phase] || '构建中', kind);
     if (els.start) {
       els.start.disabled = state.running || !state.buildable;
     }
+    updatePluginButtons();
 
     if (job.done && job.job_id && state.notifiedJobId !== job.job_id) {
       state.notifiedJobId = String(job.job_id);
@@ -672,10 +993,69 @@
     if (els.openSettings) {
       els.openSettings.addEventListener('click', () => App.openSettings('build'));
     }
+    if (els.modeSwitch) {
+      els.modeSwitch.querySelectorAll('button').forEach((button) => {
+        button.addEventListener('click', () => {
+          state.modeTouched = true;
+          switchMode(String(button.dataset.mode || ''));
+        });
+      });
+    }
+    if (els.pluginChoose) {
+      els.pluginChoose.addEventListener('click', () => {
+        choosePluginProject().catch((error) =>
+          App.toast(`选择插件工程失败: ${error.message}`, 'error')
+        );
+      });
+    }
+    if (els.pluginNew) {
+      els.pluginNew.addEventListener('click', openNewProjectModal);
+    }
+    if (els.pluginNewCancel) {
+      els.pluginNewCancel.addEventListener('click', closeNewProjectModal);
+    }
+    if (els.pluginNewConfirm) {
+      els.pluginNewConfirm.addEventListener('click', () => {
+        createPluginProject().catch((error) =>
+          App.toast(`新建插件工程失败: ${error.message}`, 'error')
+        );
+      });
+    }
+    if (els.pluginNewModal) {
+      els.pluginNewModal.addEventListener('click', (event) => {
+        if (event.target === els.pluginNewModal) {
+          closeNewProjectModal();
+        }
+      });
+    }
+    if (els.pluginTest) {
+      els.pluginTest.addEventListener('click', () => {
+        testPlugin().catch((error) =>
+          App.toast(`测试插件失败: ${error.message}`, 'error')
+        );
+      });
+    }
+    if (els.pluginBuildStart) {
+      els.pluginBuildStart.addEventListener('click', () => {
+        startPluginBuild().catch((error) =>
+          App.toast(`插件构建失败: ${error.message}`, 'error')
+        );
+      });
+    }
+    if (els.pluginOpenSettings) {
+      els.pluginOpenSettings.addEventListener('click', () =>
+        App.openSettings('build')
+      );
+    }
     if (els.log) {
       els.log.value = '';
     }
+    if (els.pluginLog) {
+      els.pluginLog.value = '';
+    }
     setStatus('读取状态…', 'info');
+    setPluginStatus('读取状态…', 'info');
+    applyMode();
   }
 
   /**

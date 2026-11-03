@@ -1,21 +1,27 @@
 <!--
   作者: Gary
   编写日期: 2026-11-01 12:40
-  最后更新: 2026-11-01 13:05
+  最后更新: 2026-11-03 21:05
   文件名: index.html
-  主要用途: “构建”标签页结构：程序名称/图标、四段版本号、开发构建开关、构建日志与开发环境遮罩。
-  文件版本: 2.1.3
+  主要用途: “构建”标签页结构：构建程序/构建插件切换、程序构建表单、插件工程管理、构建日志与开发环境遮罩。
+  文件版本: 3.0.0
 -->
 <section class="tag-page tag-build" id="build-page">
   <div class="hero">
     <div>
       <h1>构建</h1>
-      <p>把当前程序导出为可直接运行的分发包。发布构建会裁剪开发功能与参考文档；开发构建保留完整内容。构建在后台执行，过程显示在下方文本框。</p>
+      <p>在源码环境中可在“构建程序”与“构建插件”之间切换；开发构建产物中只保留插件构建。构建在后台执行，过程显示在下方文本框。</p>
     </div>
-    <div class="hero-badge" id="build-tool-badge">构建工具 —</div>
+    <div class="build-hero-side">
+      <div class="hero-badge" id="build-tool-badge">构建工具 —</div>
+      <div class="build-mode-switch" id="build-mode-switch" role="tablist" aria-label="构建模式">
+        <button type="button" data-mode="program" role="tab">构建程序</button>
+        <button type="button" data-mode="plugin" role="tab">构建插件</button>
+      </div>
+    </div>
   </div>
 
-  <section class="card build-card">
+  <section class="card build-card" id="build-program-card">
     <div class="build-body">
     <div class="build-meta">
       <div class="build-meta-item">
@@ -92,6 +98,69 @@
       <button id="build-start" class="btn primary" type="button">构建</button>
     </div>
   </section>
+
+  <section class="card build-card hidden" id="build-plugin-card">
+    <div class="build-body">
+      <div class="build-meta">
+        <div class="build-meta-item">
+          <span>插件工程</span>
+          <strong id="plugin-project-path">未选择</strong>
+        </div>
+        <div class="build-meta-item">
+          <span>工程名称</span>
+          <strong id="plugin-project-name">—</strong>
+        </div>
+        <div class="build-meta-item">
+          <span>工程模板</span>
+          <strong id="plugin-template-path" class="mono">—</strong>
+        </div>
+        <div class="build-meta-item">
+          <span>开发环境</span>
+          <strong id="plugin-venv-state">—</strong>
+        </div>
+      </div>
+
+      <div class="plugin-actions-row">
+        <button id="plugin-choose" class="btn ghost" type="button">选择插件工程</button>
+        <button id="plugin-new" class="btn ghost" type="button">新建插件工程</button>
+        <button id="plugin-test" class="btn ghost" type="button" disabled>测试插件</button>
+      </div>
+      <p class="hint" id="plugin-hint">
+        “测试插件”会从当前工程目录临时加载插件，不写入启用配置，也不会在下次启动时自动加载。
+      </p>
+
+      <div class="build-log-head">
+        <h2>插件构建输出</h2>
+        <span id="plugin-status" class="pill info">空闲</span>
+      </div>
+      <textarea id="plugin-log" class="build-log mono" readonly spellcheck="false" placeholder="插件构建日志会显示在这里…"></textarea>
+    </div>
+
+    <div class="build-actions">
+      <button id="plugin-open-settings" class="btn ghost" type="button">构建设置</button>
+      <button id="plugin-build-start" class="btn primary" type="button" disabled>构建发布包</button>
+    </div>
+  </section>
+
+  <div id="plugin-new-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="plugin-new-title">
+    <div class="modal build-plugin-modal">
+      <h3 id="plugin-new-title">新建插件工程</h3>
+      <p class="hint">工程会创建在开发环境的 extension/&lt;包名&gt; 下。</p>
+      <label class="build-field">
+        <span class="build-field-label">插件名</span>
+        <input id="plugin-new-name" type="text" autocomplete="off" spellcheck="false" placeholder="例如：我的第一个插件">
+      </label>
+      <label class="build-field">
+        <span class="build-field-label">包体名</span>
+        <input id="plugin-new-package" type="text" autocomplete="off" spellcheck="false" placeholder="例如：MyFirstPlugin">
+      </label>
+      <p id="plugin-new-error" class="build-version-error hidden" role="alert"></p>
+      <div class="alert-confirm-actions">
+        <button id="plugin-new-cancel" class="btn ghost" type="button">取消</button>
+        <button id="plugin-new-confirm" class="btn primary" type="button">创建</button>
+      </div>
+    </div>
+  </div>
 
   <div id="build-dev-gate" class="build-dev-gate hidden" role="dialog" aria-modal="true" aria-labelledby="build-dev-title">
     <div class="build-dev-panel" tabindex="-1">

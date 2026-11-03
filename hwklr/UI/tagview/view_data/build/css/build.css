@@ -1,10 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-11-01 12:40
-  最后更新: 2026-11-01 13:05
+  最后更新: 2026-11-03 21:35
   文件名: build.css
-  主要用途: “构建”标签页样式：程序名称/图标选择、版本号校验、开发环境毛玻璃遮罩、日志与操作按钮。
-  文件版本: 2.1.3
+  主要用途: “构建”标签页样式：程序/插件模式切换、插件工程面板、图标选择、开发环境遮罩、日志与操作按钮。
+  文件版本: 3.0.0
 */
 
 .content-host:has(> .tag-build) {
@@ -30,6 +30,70 @@
   flex: 1 1 auto;
   min-height: 0;
   gap: 12px;
+}
+
+.tag-build .build-card.hidden {
+  display: none;
+}
+
+.tag-build .build-hero-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.tag-build .build-mode-switch {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  background: var(--panel-soft);
+}
+
+.tag-build .build-mode-switch button {
+  padding: 7px 16px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+
+.tag-build .build-mode-switch button.active {
+  background: var(--accent);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(91, 75, 255, 0.28);
+}
+
+.tag-build .build-mode-switch button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.tag-build .plugin-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.build-plugin-modal {
+  width: min(520px, 100%);
+}
+
+.build-plugin-modal .build-field {
+  margin-top: 12px;
+}
+
+.build-plugin-modal .build-field-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 600;
 }
 
 /* 表单/信息/日志区域可收缩并内部滚动，操作按钮固定在卡片底部。 */

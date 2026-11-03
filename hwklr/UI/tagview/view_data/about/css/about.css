@@ -1,9 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-10-31 20:45
+  最后更新: 2026-11-03 21:55
   文件名: about.css
-  主要用途: “关于”标签页专属样式：应用信息、功能列表与使用声明。
-  文件版本: 1.0.0
+  主要用途: “关于”标签页专属样式：软件信息、插件元信息表、功能列表与使用声明。
+  文件版本: 3.0.0
 */
 
 .tag-about .about-description {
@@ -58,6 +59,37 @@
   color: var(--muted);
   font-size: 12px;
   line-height: 1.7;
+}
+
+.tag-about .about-plugins-card {
+  margin-top: 18px;
+}
+
+.tag-about .about-plugin-table {
+  min-width: 720px;
+}
+
+.tag-about .about-plugin-table .plugin-name {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.tag-about .plugin-state {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.tag-about .plugin-state.on {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.tag-about .plugin-state.off {
+  background: var(--panel-soft);
+  color: var(--muted);
 }
 
 .tag-about .disclaimer-card {
