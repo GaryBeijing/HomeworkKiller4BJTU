@@ -7,12 +7,16 @@
 /pyvenv.cfg
 .vscode/
 /legacy/
+icon*.*
+
+!icon.ico
 
 # 运行期生成的缓存与本地凭据
 __pycache__/
 *.pyc
 /config.json
 /run.bat
+/docs
 
 # 构建产物与 python-embed 下载缓存（仅项目根目录的 build/，不要忽略功能源码目录）
 /build/
