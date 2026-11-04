@@ -408,9 +408,11 @@ WindowView._build_meta() → 前端"关于"页与标题栏
 
 | 形态 | 触发条件 | 产物 | 运行时 | 控制台 |
 |---|---|---|---|---|
-| 发布构建 | `dev_build=false` | `build/<slug>/`（PyInstaller onedir） | 内嵌 Python | 无（`--windowed`） |
-| 开发构建 · executable | `dev_build=true` 且 `dev_format=executable` | `build/<slug>/` + `SoftwareIntro/` + `source-v<ver>.zip` | 内嵌 Python | 有（`--console`） |
-| 开发构建 · zip | `dev_build=true` 且 `dev_format=zip` | `build/<slug>.zip` | 包内 `runtime/python.exe`（python-embed） | 由 `start.bat` 决定 |
+| 发布构建 | `dev_build=false` | `build/<slug>/`（PyInstaller onedir）+ `README.md` + `LICENSE` | 内嵌 Python | 无（`--windowed`） |
+| 开发构建 · executable | `dev_build=true` 且 `dev_format=executable` | `build/<slug>/` + `README.md` + `LICENSE` + `Reference/` + `source-v<ver>.zip` | 内嵌 Python | 有（`--console`） |
+| 开发构建 · zip | `dev_build=true` 且 `dev_format=zip` | `build/<slug>.zip`（根目录含 `README.md`、`LICENSE`、`Reference/`、`source-v<ver>.zip`） | 包内 `runtime/python.exe`（python-embed） | 由 `start.bat` 决定 |
+
+源码归档 `source-v<ver>.zip` 的固定内容：`legacy/`、`Reference/`、`hwklr/`、`main.py`、`requirements.txt`、`README.md`、`LICENSE`（3.0.1 起）。
 
 ---
 

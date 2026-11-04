@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-01 12:40
-# 最后更新: 2026-11-03 19:00
+# 最后更新: 2026-11-04 11:55
 # 文件名: packager.py
-# 主要用途: 构建功能的打包实现：图标/名称/四段版本资源、源码裁剪、V3 源码归档、插件模板分发、PyInstaller 与 python-embed zip。
-# 文件版本: 3.0.0
+# 主要用途: 构建功能的打包实现：图标/名称/四段版本资源、源码裁剪、V3 源码归档、说明文件分发、插件模板分发、PyInstaller 与 python-embed zip。
+# 文件版本: 3.0.1
 """构建打包实现。
 
 构建过程不依赖 UI，可独立调用 :func:`build_package`：
@@ -15,6 +15,8 @@
   site-packages，生成双击即可运行的 zip 分发包。
 
 所有输出默认位于项目根目录 ``build/``，不会包含用户 ``config.json``。
+产物根目录统一附带 ``README.md`` 与 ``LICENSE``；开发构建的源码归档同样
+包含两者以及 ``Reference/`` 参考文档。
 """
 from __future__ import annotations
 
@@ -37,7 +39,7 @@ from typing import Any, Callable, Final, NamedTuple
 
 from hwklr.features.manifest import OFFICIAL_FEATURES, FeatureSpec
 
-__version__ = "3.0.0"
+__version__ = "3.0.1"
 __author__ = "Gary"
 __all__ = [
     "APP_EXE_NAME",
@@ -102,7 +104,10 @@ def _package_dir() -> Path:
     return direct
 _VENDOR_DIR: Final[Path] = Path(__file__).resolve().parent / "vendor"
 _SITE_PACKAGES: Final[Path] = Path(sysconfig.get_paths()["purelib"])
-# V3 起开发构建的源码归档固定为 legacy/、Reference/、hwklr/、main.py、requirements.txt。
+# 所有产物根目录固定附带项目根目录的说明文件。
+_DISTRIBUTION_FILES: Final[tuple[str, ...]] = ("README.md", "LICENSE")
+# V3 起开发构建的源码归档固定为 legacy/、Reference/、hwklr/、main.py、requirements.txt；
+# 3.0.1 起追加 README.md 与 LICENSE。
 _DEV_EXTRA_DIRS: Final[tuple[str, ...]] = ("legacy", "Reference")
 _DEV_EXTRA_FILES: Final[tuple[str, ...]] = ("requirements.txt",)
 
@@ -464,6 +469,8 @@ def _build_executable(
     artifact: Path = output_root / slug
     _reset_artifact(artifact, output_root)
     shutil.copytree(built, artifact)
+    # #说明文件：README.md 与 LICENSE 放在可执行文件同级目录。
+    _copy_distribution_files(artifact, log=log)
     if dev_build:
         _copy_dev_extras(artifact, log=log)
         _archive_sources(artifact, version, log=log)
@@ -533,6 +540,8 @@ def _build_embedded_zip(
     if icon_path is not None:
         shutil.copy2(icon_path, app_dir / "icon.ico")
         shutil.copy2(icon_path, stage / "icon.ico")
+    # #说明文件：README.md 与 LICENSE 放在 zip 根目录。
+    _copy_distribution_files(stage, log=log)
     _copy_dev_extras(stage, log=log)
     _archive_sources(stage, version, log=log)
 
@@ -865,8 +874,9 @@ def _write_version_file(
 def _archive_sources(dest: Path, version: str, *, log: LogFn) -> Path:
     """把开发源码归档到产物目录。
 
-    V3 起归档只包含 ``legacy/``、``Reference/``、``hwklr/``、``main.py`` 与
-    ``requirements.txt``；插件工程模板随归档保留，python-embed 等下载缓存排除。
+    V3 起归档包含 ``legacy/``、``Reference/``、``hwklr/``、``main.py`` 与
+    ``requirements.txt``；3.0.1 起追加 ``README.md`` 与 ``LICENSE``。插件工程
+    模板随归档保留，python-embed 等下载缓存排除。
 
     Args:
         dest: 产物根目录。
@@ -878,7 +888,7 @@ def _archive_sources(dest: Path, version: str, *, log: LogFn) -> Path:
     """
     archive_path: Path = dest / ("source-v%s.zip" % version)
     included: list[Path] = []
-    for name in ("main.py", "requirements.txt"):
+    for name in ("main.py", "requirements.txt", *_DISTRIBUTION_FILES):
         file_path: Path = _PROJECT_ROOT / name
         if file_path.is_file():
             included.append(file_path)
@@ -1077,6 +1087,22 @@ def _zip_directory(
                     min(progress, 95),
                 )
                 log("压缩中：%d/%d" % (index, total))
+
+
+def _copy_distribution_files(dest: Path, *, log: LogFn) -> None:
+    """把 README.md 与 LICENSE 复制到产物根目录。
+
+    Args:
+        dest: 产物根目录。
+        log: 日志回调。
+    """
+    for name in _DISTRIBUTION_FILES:
+        source: Path = _PROJECT_ROOT / name
+        if not source.is_file():
+            log("未找到说明文件 %s，已跳过。" % name)
+            continue
+        shutil.copy2(source, dest / name)
+        log("附带说明文件：%s" % name)
 
 
 def _copy_dev_extras(dest: Path, *, log: LogFn) -> None:

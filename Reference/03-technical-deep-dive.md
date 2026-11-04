@@ -1354,9 +1354,10 @@ ICON_PATH = "icon.ico" / ""
 artifact = output_root / slug
 _reset_artifact(artifact, output_root)     # 只允许删 output_root 的直接子目录，否则 BuildError
 copytree(dist/<exe_name> → artifact)
+_copy_distribution_files(artifact)         # 3.0.1：README.md + LICENSE（发布/开发构建均复制）
 if dev_build:
     _copy_dev_extras(artifact)             # V3：legacy / Reference / requirements.txt + vendor/plugin-template.zip
-    _archive_sources(artifact, version)    # source-v<ver>.zip，只含 legacy/ Reference/ hwklr/ main.py requirements.txt
+    _archive_sources(artifact, version)    # source-v<ver>.zip：legacy/ Reference/ hwklr/ main.py requirements.txt README.md LICENSE
 _write_manifest(artifact/BUILD_INFO.json, ...)
 size = _tree_size(artifact)
 ```
@@ -1377,8 +1378,10 @@ size = _tree_size(artifact)
 stage/<slug>/
 ├── app/                 ← 裁剪后的源码（同 13.2）+ _build_info.py + icon.ico
 ├── runtime/             ← python-embed 解压 + Lib/site-packages（复制自当前 venv）
-├── SoftwareIntro/ ...   ← 开发资料
-├── source-v<ver>.zip    ← 源码归档
+├── Reference/ ...       ← 开发资料（legacy/ 同样附带）
+├── source-v<ver>.zip    ← 源码归档（含 README.md / LICENSE）
+├── README.md            ← 3.0.1 起随包分发
+├── LICENSE              ← 3.0.1 起随包分发
 ├── icon.ico
 ├── start.bat            ← ASCII，双击启动
 └── BUILD_INFO.json      ← format="zip"

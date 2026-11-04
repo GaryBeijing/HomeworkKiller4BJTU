@@ -1,17 +1,18 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-01 12:38
-# 最后更新: 2026-11-03 19:15
+# 最后更新: 2026-11-04 11:55
 # 文件名: devenv.py
 # 主要用途: 开发构建包内的开发环境检测、HwklrVenv 创建、V3 源码布局迁移、依赖安装与插件模板分发。
-# 文件版本: 3.0.0
+# 文件版本: 3.0.1
 """开发构建辅助环境。
 
 导出的开发构建会在“构建”标签页提示用户搭建开发环境：
 - 自动寻找本机系统 Python（不会使用包内自带的 python-embed）；
 - 在程序目录外侧创建 ``HwklrVenv``；
-- 把 ``legacy/``、``Reference/``、``main.py``、``requirements.txt`` 解压到
-  虚拟环境根目录，把 ``hwklr/`` 解压到 ``HwklrVenv/Lib/``；
+- 把 ``legacy/``、``Reference/``、``main.py``、``requirements.txt``、
+  ``README.md``、``LICENSE`` 解压到虚拟环境根目录，把 ``hwklr/`` 解压到
+  ``HwklrVenv/Lib/``；
 - 用虚拟环境的 pip 从清华源安装 ``requirements.txt``；
 - 生成 ``启动程序.bat`` / ``调试程序.bat``，并把插件工程模板放到 ``vendor/``。
 """
@@ -26,7 +27,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Final
 
-__version__ = "3.0.0"
+__version__ = "3.0.1"
 __author__ = "Gary"
 __all__ = [
     "app_home",
@@ -271,7 +272,12 @@ def _archive_destination(root: Path, member_name: str) -> Path | None:
         return root / "Lib" / Path(*parts)
     if parts[0] in ("legacy", "Reference"):
         return root / Path(*parts)
-    if len(parts) == 1 and parts[0] in ("main.py", "requirements.txt"):
+    if len(parts) == 1 and parts[0] in (
+        "main.py",
+        "requirements.txt",
+        "README.md",
+        "LICENSE",
+    ):
         return root / parts[0]
     return None
 
@@ -325,9 +331,10 @@ def _copy_local_sources(target: Path, emit: Callable[[str], None]) -> bool:
         return False
     emit("未找到源码归档，改用本地源码：%s" % _PROJECT_ROOT)
     shutil.copy2(main_file, target / "main.py")
-    requirements: Path = _PROJECT_ROOT / "requirements.txt"
-    if requirements.is_file():
-        shutil.copy2(requirements, target / "requirements.txt")
+    for name in ("requirements.txt", "README.md", "LICENSE"):
+        source_file: Path = _PROJECT_ROOT / name
+        if source_file.is_file():
+            shutil.copy2(source_file, target / name)
     for name in ("legacy", "Reference"):
         source: Path = _PROJECT_ROOT / name
         if source.is_dir():

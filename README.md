@@ -62,6 +62,7 @@ HomeworkKiller4BJTU（简称 HWKLR）是一个基于 **pywebview + 本地 HTTP �
 - 源码环境支持“构建程序 / 构建插件”切换；开发构建产物只保留插件构建。
 - 支持程序名称、图标、四段导出默认版本号（`x.y.z + 时间戳 % 9973`）。
 - 发布构建使用 PyInstaller `--onedir --windowed --optimize 2` 并裁剪开发功能；开发构建保留源码归档与开发资料。
+- 所有产物根目录附带 `README.md` 与 `LICENSE`；开发构建的源码归档同样包含这两个文件与 `Reference/`。
 - 开发产物可一键搭建 `HwklrVenv`，按新布局解压源码、安装依赖并生成启动/调试脚本。
 - 插件工程支持从模板新建、选择已有工程、临时测试、构建发布 zip。
 
@@ -272,9 +273,9 @@ __all__ = ["MyPluginFeature"]
 
 - 支持 `executable` 与 `zip` 两种格式。
 - `zip` 格式使用阿里云镜像下载的 64 位 python-embed 作为运行时。
-- 产物附带源码归档（仅 `legacy/ Reference/ hwklr/ main.py requirements.txt`）与开发资料。
+- 产物根目录附带 `README.md` 与 `LICENSE`；源码归档包含 `legacy/ Reference/ hwklr/ main.py requirements.txt README.md LICENSE`，同时附开发资料。
 - 首次运行开发产物时，构建页会提示搭建 `HwklrVenv`：
-  - `legacy/`、`Reference/`、`main.py`、`requirements.txt` 解压到虚拟环境根目录；
+  - `legacy/`、`Reference/`、`main.py`、`requirements.txt`、`README.md`、`LICENSE` 解压到虚拟环境根目录；
   - `hwklr/` 解压到 `HwklrVenv/Lib/`；
   - 使用虚拟环境 pip 从清华源安装依赖；
   - 生成 `启动程序.bat`（pythonw）与 `调试程序.bat`（python）。
@@ -440,9 +441,7 @@ HomeworkKiller4BJTU/
 
 ## 📄 许可证
 
-本仓库目前**未附带开源许可证（LICENSE）**。在作者明确授权前，请勿将代码用于商业分发、二次发布或其他未经许可的用途。
-
-如果你希望以开源方式使用本项目，建议维护者在仓库根目录添加 `LICENSE` 文件（例如 MIT 或 Apache-2.0），并在本段同步许可证名称。
+本项目以 **Apache License 2.0** 开源，完整条款见仓库根目录的 [`LICENSE`](LICENSE)。
 
 ---
 
