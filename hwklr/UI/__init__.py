@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
-# 最后更新: 2026-11-03 20:05
+# 最后更新: 2026-11-08 13:26
 # 文件名: __init__.py
-# 主要用途: 封装 pywebview 核心窗口 WindowView、运行期扩展注册、关于元信息注册与 JS 桥接对象 BridgeApi。
-# 文件版本: 3.0.0
+# 主要用途: 封装 pywebview 核心窗口 WindowView、运行期扩展注册、数据库管理器初始化、关于元信息注册与 JS 桥接对象 BridgeApi。
+# 文件版本: 3.1.0
 """UI 窗口层。
 
 入口只需::
@@ -25,6 +25,7 @@ from typing import Any, Final
 
 import webview
 
+from hwklr import db
 from hwklr import (
     APP_AUTHORS,
     APP_DESCRIPTION,
@@ -147,6 +148,12 @@ class WindowView:
         self._extension_names: set[str] = set()
         self._extension_dirs: dict[str, Path] = {}
         self._extension_errors: list[str] = []
+        # #数据库：只实例化并注册 provider，不创建目录，失败也不阻止启动。
+        try:
+            self._db_manager: db.DbManager = db.init_db_manager()
+        except Exception:
+            _LOGGER.exception("数据库管理器初始化失败，继续启动")
+            self._db_manager = db.get_db_manager()
         self._universal_param: dict[str, Any] = {
             "context": self._context,
             "app_meta": self._meta,

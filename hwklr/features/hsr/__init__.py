@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: PhiloK (Remaster by Gary)
 # 编写日期: 2026-10-31 20:45
-# 最后更新: 2026-11-03 18:20
+# 最后更新: 2026-11-08 13:26
 # 文件名: __init__.py
-# 主要用途: 实现“高铁纵横”功能：登录、考试列表、自动答题与提交，并注册密码与启用设置（题库延迟加载）。
-# 文件版本: 3.0.0
+# 主要用途: 实现“高铁纵横”功能：登录、考试列表、自动答题与提交，并注册密码与启用设置（题库通过 db 模块延迟加载）。
+# 文件版本: 3.1.0
 """高铁纵横功能实现。
 
 原作者 PhiloK（``B1.0/``）；本文件是 Gary 的 Remaster 实现。
@@ -20,7 +20,7 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any, Final
 
-from hwklr import runtime_data
+from hwklr import db
 from hwklr.config import load_config, update_config
 from hwklr.features.about import AboutMetadataGroup
 from hwklr.features.base import ApiResult, Feature, failure, success
@@ -30,13 +30,14 @@ from hwklr.features.settings import FeatureSettingsGroup, SettingsFieldSpec
 from .bank import Bank
 from .client import HsrApiError, HsrClient
 
-__version__ = "3.0.0"
+__version__ = "3.1.0"
 __author__ = "PhiloK (Remaster by Gary)"
 __all__ = ["HSRFeature"]
 
 _LOGGER: Final[logging.Logger] = logging.getLogger(__name__)
 _DATE_FORMATS: Final[tuple[str, ...]] = ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S")
 _BANK_FEATURE_KEY: Final[str] = "hsr"
+_BANK_DB_ID: Final[int] = 1
 
 
 class HSRFeature(Feature):
@@ -54,8 +55,10 @@ class HSRFeature(Feature):
             universal_param: 窗口层注入的通用参数。
         """
         super().__init__(universal_param)
-        # 内置知识库在首次使用时才读取并构建索引，避免拖慢程序启动。
+        # 题库通过 db 模块延迟加载：首次使用时读取外部缓存或从内置源重建。
+        self._db_base_name = _BANK_FEATURE_KEY
         self._bank_cache: Bank | None = None
+        self._bank_payload: dict[str, Any] = {}
         self._client: HsrClient | None = None
         self._records: list[dict[str, Any]] = []
         self._last_exam: dict[str, Any] | None = None
@@ -64,16 +67,34 @@ class HSRFeature(Feature):
 
     @property
     def _bank(self) -> Bank:
-        """返回内置题库，首次访问时从 ``runtime_data`` 读取。
+        """返回内置题库，首次访问时通过 db 模块读取。
 
         Returns:
             已完成索引构建的题库对象。
+
+        Raises:
+            db.DbError: 数据库不可用或题库结构不合法。
+        """
+        return self._ensure_bank()[0]
+
+    def _ensure_bank(self) -> tuple[Bank, dict[str, Any]]:
+        """确保题库与数据库元信息已加载。
+
+        Returns:
+            ``(题库对象, 数据库 payload)``。
+
+        Raises:
+            db.DbError: 数据库不可用。
+            db.DbFormatError: payload 缺少合法的 ``items`` 数组。
         """
         if self._bank_cache is None:
-            self._bank_cache = Bank(
-                list(runtime_data.load_bank(_BANK_FEATURE_KEY))
-            )
-        return self._bank_cache
+            payload: dict[str, Any] = self._load_db(_BANK_DB_ID) or {}
+            items: Any = payload.get("items")
+            if not isinstance(items, list):
+                raise db.DbFormatError("高铁数据库缺少 items 数组")
+            self._bank_payload = payload
+            self._bank_cache = Bank(list(items))
+        return self._bank_cache, self._bank_payload
 
     @property
     def settings_group(self) -> FeatureSettingsGroup:
@@ -96,7 +117,7 @@ class HSRFeature(Feature):
             package="HSR",
             author="PhiloK (Gary remastered)",
             version=__version__,
-            update_date="2026-11-03",
+            update_date="2026-11-08",
             official=True,
             feature_key="高铁纵横",
             description="登录高铁答题系统，按题库自动匹配答案并提交考试。",
@@ -194,6 +215,9 @@ class HSRFeature(Feature):
                 return failure("未知动作: %s" % action)
             try:
                 return handler(params)
+            except db.DbError as exc:
+                _LOGGER.warning("高铁数据库不可用: %s", exc)
+                return failure(str(exc))
             except HsrApiError as exc:
                 _LOGGER.warning("高铁接口调用失败: %s", exc)
                 return failure(str(exc))
@@ -605,10 +629,17 @@ class HSRFeature(Feature):
         Returns:
             题库题量、章节、版本等信息。
         """
-        versions: list[str] = runtime_data.list_versions(_BANK_FEATURE_KEY)
-        latest: str = runtime_data.latest_version(_BANK_FEATURE_KEY)
+        bank, payload = self._ensure_bank()
+        versions: list[str] = [
+            str(version)
+            for version in (payload.get("versions") or [])
+            if str(version)
+        ]
+        latest: str = str(
+            payload.get("latest_version") or payload.get("version") or ""
+        )
         chapters: list[str] = []
-        for item in self._bank.items:
+        for item in bank.items:
             chapter = str(item.get("chapter") or "")
             if chapter and chapter not in chapters:
                 chapters.append(chapter)
@@ -616,6 +647,6 @@ class HSRFeature(Feature):
             "feature": _BANK_FEATURE_KEY,
             "versions": versions,
             "latest_version": latest,
-            "count": self._bank.count,
+            "count": bank.count,
             "chapters": chapters,
         })

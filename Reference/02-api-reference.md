@@ -14,6 +14,7 @@
   - 3.1 `hwklr`（包元数据）
   - 3.2 `hwklr.config`
   - 3.3 `hwklr.runtime_data`
+  - 3.3.1 `hwklr.db`（数据库层，3.1.0）
   - 3.4 `hwklr.features.base`
   - 3.5 `hwklr.features.settings`
   - 3.6 `hwklr.features.manifest`
@@ -138,12 +139,13 @@ from hwklr import __version__, __author__
 唯一的配置读写口。**任何模块都不得自己拼 `config.json` 路径。**
 
 ```python
-from hwklr.config import config_path, load_config, save_config, update_config, DEFAULT_CONFIG
+from hwklr.config import app_root, config_path, load_config, save_config, update_config, DEFAULT_CONFIG
 ```
 
 | 符号 | 签名 | 行为 |
 |---|---|---|
-| `config_path` | `() -> Path` | 源码运行 → `<仓库根>/config.json`；`sys.frozen` → `Path(sys.executable).parent/config.json` |
+| `app_root` | `() -> Path` | 源码运行 → 仓库根；V3 `HwklrVenv` → 虚拟环境根；`sys.frozen` → `Path(sys.executable).parent`。`db/` 与 `config.json` 都以它为根 |
+| `config_path` | `() -> Path` | `app_root()/config.json` |
 | `load_config` | `() -> dict` | 文件不存在 → 写入默认值并返回；文件损坏/非对象 → 记 warning 并返回默认值（**不覆盖损坏文件**）；成功后 `_deep_merge(DEFAULT_CONFIG, loaded)` 再 `_migrate_config` |
 | `save_config` | `(config: dict) -> None` | 原子写：先写 `config.json.tmp` 再 `replace`；全程持 `_CONFIG_LOCK`。可能抛 `OSError` |
 | `update_config` | `(patch: dict) -> dict` | `load → _deep_merge(current, patch) → save`，返回更新后的完整配置 |
@@ -181,6 +183,34 @@ hwklr/runtime_data/hsr_bank_v1.0.json     → feature="hsr", version="1.0"
 
 不合规的文件会被**静默忽略**（不报错）。
 
+> 3.1.0 起，HSR 不再直接调用本模块：`runtime_data/hsr_bank_v1.0.json` 仅作为 db 层的内置源文件，运行期读写走 `hwklr.db`。
+
+---
+
+### 3.3.1 `hwklr.db`（数据库层，3.1.0 新增）
+
+```python
+from hwklr import db
+```
+
+| 符号 | 签名 | 行为 |
+|---|---|---|
+| `db_dir` | `() -> Path` | 外部数据库目录 `app_root()/db`；源码=项目根，打包后=exe 同级 |
+| `DB_TIMEOUT` | `Final[int]` | `15`；同一 provider 并发加载的等待上限 |
+| `DbProvider` | `ABC` | 子类实现 `fetch(id)`；提供 `base_name`、`load`、`exist`、`_dump`、`bank_info` |
+| `DbManager` | `class` | 按名称注册/查找 provider；`load(base_name, id)`、`bank_info()`、`base_names` |
+| `get_db_manager` | `() -> DbManager` | 进程级单例（懒创建） |
+| `init_db_manager` | `() -> DbManager` | 窗口启动时重建单例；只导入 provider，不创建目录 |
+| `DbError` 及子类 | `Exception` | `DbDisabledError` / `DbProviderNotFoundError` / `DbSourceNotFoundError` / `DbFormatError` / `DbStorageError` / `DbTimeoutError` |
+
+**文件命名与流程**
+
+- 记录文件：`{app_root}/db/{base_name}{id}.json`（JSON 对象）。
+- 可选源描述：`hwklr/db/{base_name}_sources.json`，`sources` 数组中的条目按 `id` 匹配，`path` 相对 `hwklr/` 包根。
+- `DbProvider.load(id)`：`exist` → 读取 → 不存在则 `fetch(id)` → 子类 `_dump` → 重新读取；损坏缓存会自动删除并重建。
+- `fetch(id)` 的基类实现读取 `*_sources.json`（推荐）；子类也可以完全忽略 `super().fetch(id)`，自行实现网络/动态抓取后 `_dump`。
+- 当前注册表 `hwklr/db/manager.py::PROVIDER_SPECS` 只有 `("hwklr.db.hsrdb", "HSRDb")`；新增功能时在此追加。
+
 ---
 
 ### 3.4 `hwklr.features.base`
@@ -199,6 +229,8 @@ from hwklr.features.base import ApiResult, Feature, failure, success
 | `settings_group` | `@property @abstractmethod -> FeatureSettingsGroup` | **子类必须实现** |
 | `start` | `() -> None` | 默认 `self._started = True` |
 | `stop` | `() -> None` | 默认 `self._started = False` |
+| `_db_base_name` | `str` | 功能使用的数据库名称；默认 `""` 表示不启用数据库 |
+| `_load_db` | `@final (id: int) -> dict \| None` | 通过 `DbManager` 读取记录；空名称抛 `DbDisabledError`，只在动作路径调用 |
 | `handle` | `@abstractmethod (action: str, params: dict) -> ApiResult` | 业务入口；未知动作应返回 `failure("未知动作: %s" % action)` |
 
 `universal_param` 的实际内容（由 `WindowView.__init__` 注入）：
@@ -1071,6 +1103,8 @@ App.registerPage('<标签名>', { init, onActivate, onDeactivate, highlightGroup
 ### 6.6 知识库文件格式
 
 **命名**：`hwklr/runtime_data/<feature>_bank_v<major>.<minor>.json`，`feature` 只允许 `[a-z0-9_]`。
+
+3.1.0 起该文件是**内置源**，由 `hwklr/db/hsrdb.py` 经 `hsr_sources.json` 读取，首次加载后缓存为 `app_root()/db/hsr1.json`（JSON 对象：`version/versions/latest_version/count/items`）。
 
 当前唯一知识库 `hsr_bank_v1.0.json`：**JSON 数组**，263 条，每条：
 

@@ -77,7 +77,7 @@
 | UI | 原生 HTML + CSS + 原生 JS（无框架、无构建步骤） | 前端资源即文件，`TagView` 按路径下发，改完刷新即可；无 npm 工具链 |
 | 静态资源服务 | 自建 `ThreadingHTTPServer`（`hwklr/UI/server.py`） | 需要"固定起始端口 + 端口顺延"、需要同时暴露 `page_data` 与 `view_data` 两个资源根、需要两个只读 API。pywebview 内置服务做不到这些 |
 | 配置 | 单个 `config.json`，集中由 `hwklr/config.py` 读写 | 禁止各模块自己拼路径；支持默认值深合并与旧版迁移 |
-| 知识库 | `hwklr/runtime_data/*.json`，按 `<feature>_bank_v<major>.<minor>.json` 命名 | 版本可并存，运行期选最新版 |
+| 知识库 | `hwklr/runtime_data/*.json`（内置源）→ 外部 `db/{base}{id}.json`（运行期缓存） | HSR 经 `DbProvider` 首次加载生成缓存；`runtime_data` 仅作为源文件 |
 | 网络 | `urllib`（高铁）、`requests`（CITEL）、`openai` SDK（AI） | 三种来源协议差异大，各用最合适的 |
 | HTML 解析 | `beautifulsoup4` + **`html.parser`**（非 lxml） | 有意去掉 lxml：省 ~7MB 二进制、避免打包体积；已对全部页面快照验证两种后端输出一致 |
 | 打包 | `PyInstaller --onedir` + 自研 python-embed zip 组装 | 目录版启动快、体积小；zip 版免安装、可迁移 |
@@ -107,6 +107,7 @@ HomeworkKiller4BJTU/
 ├── run.bat                  ← 用项目 venv 启动（git 忽略）
 ├── .gitignore
 ├── hwklr/                   ← 全部实现（详见 3.2）
+├── db/                      ← 运行期数据库缓存（git 忽略；打包后位于 exe 同级）
 ├── Reference/               ← 本文档
 ├── build/                   ← 历史构建产物（git 忽略）
 ├── SoftwareIntro/           ← 需求与设计资料（git 忽略）
@@ -123,6 +124,7 @@ HomeworkKiller4BJTU/
 | `hwklr/` | 是 | 全部实现 | 主战场 |
 | `Reference/` | 是 | 本文档 | 可改（见 `README.md` §5 维护约定） |
 | `config.json` | 否 | 运行期配置 | **不要提交**、不要把真实值写进文档/日志 |
+| `db/` | 否 | 运行期数据库缓存（`{base}{id}.json`），首次使用时自动生成 | **不要提交**；删除后可自动重建 |
 | `run.bat` | 否 | 开发启动脚本（设置 `PYTHONUTF8=1`、`chcp 65001`、异常时 `pause`） | 可改，但不入库 |
 | `requirements.txt` | 是 | 依赖锁定 | 加依赖时同步；注意"延迟导入"约束 |
 | `build/` | 否 | 历史产物 + `build/.work/` 临时目录 | 不要改；可整目录删除 |
@@ -139,7 +141,14 @@ HomeworkKiller4BJTU/
 ```
 hwklr/
 ├── __init__.py                     64 行    包元数据：版本、APP_*、DEV_BUILD；可选读取 _build_info.py
-├── config.py                      223 行    config.json 唯一读写口：DEFAULT_CONFIG / load / save / update / 迁移
+├── config.py                      235 行    config.json 唯一读写口 + app_root：DEFAULT_CONFIG / load / save / update / 迁移
+│
+├── db/                                      ── 数据库层（3.1.0）──
+│   ├── __init__.py                          公共出口：db_dir / DbProvider / DbManager / 异常
+│   ├── provider.py                          DbProvider、DB_TIMEOUT、外部 db/ 路径与原子写入
+│   ├── manager.py                           DbManager、PROVIDER_SPECS、进程级单例
+│   ├── hsrdb.py                             HSRDb：高铁题库 provider
+│   └── hsr_sources.json                     高铁内置题库源描述
 │
 ├── features/                                ── 功能层 ──
 │   ├── __init__.py                 66 行    统一导出 + PEP 562 惰性 __getattr__（按需加载可选功能）
@@ -167,9 +176,9 @@ hwklr/
 │       ├── devenv.py              376 行    HwklrVenv 创建 + 源码迁移到虚拟环境内部
 │       └── vendor/                          python-embed 下载缓存（不入库）
 │
-├── runtime_data/                            ── 知识库 ──
+├── runtime_data/                            ── 内置题库源 ──
 │   ├── __init__.py                 92 行    BANK_DIR / list_banks / list_versions / latest_version / load_bank
-│   └── hsr_bank_v1.0.json       3985 行    高铁题库，263 条，list[dict]，字段见 02 §6.6
+│   └── hsr_bank_v1.0.json       3985 行    高铁题库，263 条，list[dict]；3.1.0 起由 hwklr/db/hsrdb.py 读取并缓存到外部 db/
 │
 └── UI/                                      ── UI 层 ──
     ├── __init__.py                400 行    ★ WindowView + BridgeApi
@@ -251,7 +260,7 @@ hwklr/
 ┌────────────────────────────────────────────────────────────────────┐
 │ ⑤ 功能层 Feature（业务实现）                                       │
 │    hsr / cprog / build / settings / about                          │
-│    向下可用：config.py · runtime_data · 各自子模块                 │
+│    向下可用：config.py · db · runtime_data · 各自子模块            │
 └────────────────────────────────────────────────────────────────────┘
 ```
 

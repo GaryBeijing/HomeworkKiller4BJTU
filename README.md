@@ -45,7 +45,7 @@ HomeworkKiller4BJTU（简称 HWKLR）是一个基于 **pywebview + 本地 HTTP �
 ### 高铁纵横
 
 - 自动完成验证码滑块识别、登录、考试列表、开考与交卷。
-- 内置题库（`hwklr/runtime_data/hsr_bank_v1.0.json`）支持精确/模糊匹配与答案选项解析。
+- 内置题库（`hwklr/runtime_data/hsr_bank_v1.0.json`）支持精确/模糊匹配与答案选项解析；首次使用时由 db 模块缓存到程序同级的 `db/hsr1.json`。
 - 子窗口展示答题结果，避免撑长页面。
 
 ### C程序设计
@@ -307,7 +307,8 @@ HomeworkKiller4BJTU/
 ├── docs/assets/                # README 截图
 ├── hwklr/                      # 主包
 │   ├── __init__.py             # 版本、APP_*、DEV_BUILD
-│   ├── config.py               # config.json 唯一读写口
+│   ├── config.py               # config.json 唯一读写口与程序根解析
+│   ├── db/                     # 数据库机制（DbManager/DbProvider/HSRDb）
 │   ├── features/
 │   │   ├── base.py             # Feature 抽象、success/failure
 │   │   ├── manifest.py         # OFFICIAL_FEATURES 官方功能清单
@@ -318,18 +319,19 @@ HomeworkKiller4BJTU/
 │   │   ├── hsr/                # 高铁纵横
 │   │   ├── cprog/              # C 程序设计
 │   │   └── build/              # 构建与插件打包
-│   ├── runtime_data/           # 按功能分版本的知识库
+│   ├── runtime_data/           # 随包分发的知识库源文件
 │   └── UI/
 │       ├── __init__.py         # WindowView + BridgeApi
 │       ├── server.py           # 本地 HTTP 服务
 │       ├── page_data/          # 全局页面骨架与公共资源
 │       └── tagview/            # 标签抽象与各标签前端资源
+├── db/                         # 运行期数据库缓存（自动生成，git 忽略）
 ├── SoftwareIntro/              # 需求与方向文档
 ├── Reference/                  # 详细参考文档（架构/API/技术）
 └── legacy/                     # 原版实现，仅作参考
 ```
 
-> `SoftwareIntro/` 与 `legacy/` 是本地需求文档/原型目录，按 `.gitignore` 默认不纳入版本控制，也不进入发布包；`config.json`、`run.bat`、`build/`、虚拟环境目录同样是本地文件。
+> `SoftwareIntro/` 与 `legacy/` 是本地需求文档/原型目录，按 `.gitignore` 默认不纳入版本控制，也不进入发布包；`config.json`、`db/`、`run.bat`、`build/`、虚拟环境目录同样是本地文件。
 
 更完整的架构、API 与技术细节见 [`Reference/README.md`](Reference/README.md)。
 

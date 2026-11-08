@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
-# 最后更新: 2026-11-03 18:10
+# 最后更新: 2026-11-08 13:26
 # 文件名: config.py
-# 主要用途: 统一读写 config.json；按设置分组存放账号、密码、AI、构建与第三方扩展配置，并兼容打包后的可执行文件。
-# 文件版本: 3.0.0
+# 主要用途: 统一读写 config.json；按设置分组存放账号、密码、AI、构建与第三方扩展配置，并解析源码/虚拟环境/打包后的程序根目录。
+# 文件版本: 3.1.0
 """项目配置读写。
 
 配置文件固定位于**项目根目录**（``main.py`` 同级）的 ``config.json``。
@@ -20,9 +20,10 @@ import threading
 from pathlib import Path
 from typing import Any, Final
 
-__version__ = "3.0.0"
+__version__ = "3.1.0"
 __all__ = [
     "DEFAULT_CONFIG",
+    "app_root",
     "config_path",
     "load_config",
     "save_config",
@@ -81,25 +82,37 @@ DEFAULT_CONFIG: Final[dict[str, Any]] = {
 }
 
 
-def config_path() -> Path:
-    """返回配置文件路径。
+def app_root() -> Path:
+    """返回程序根目录。
 
-    源码运行时位于项目根目录；PyInstaller 打包后位于可执行文件同级目录，
-    避免用户配置被写进程序内部目录。
+    源码运行时是项目根目录；PyInstaller 打包后是可执行文件所在目录；
+    V3 ``HwklrVenv`` 中通过 ``pyvenv.cfg`` 定位虚拟环境根目录。
 
     Returns:
-        ``config.json`` 的绝对路径。
+        程序根目录的绝对路径。
     """
     if getattr(sys, "frozen", False):
-        # 打包后 __file__ 位于 _internal 内，配置应放在 exe 旁边。
-        return Path(sys.executable).resolve().parent / "config.json"
+        # 打包后 __file__ 位于 _internal 内，用户数据应放在 exe 旁边。
+        return Path(sys.executable).resolve().parent
     # hwklr/config.py -> hwklr -> 项目根目录；V3 的 HwklrVenv 中 hwklr 位于 Lib/，
     # 此时继续向上找到含 pyvenv.cfg 的虚拟环境根目录。
     root: Path = Path(__file__).resolve().parent.parent
     for candidate in (root, root.parent):
         if (candidate / "pyvenv.cfg").is_file():
-            return candidate / "config.json"
-    return root / "config.json"
+            return candidate
+    return root
+
+
+def config_path() -> Path:
+    """返回配置文件路径。
+
+    配置文件与数据库目录都位于 :func:`app_root`，避免源码、虚拟环境与
+    打包布局下使用不同的路径规则。
+
+    Returns:
+        ``config.json`` 的绝对路径。
+    """
+    return app_root() / "config.json"
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:

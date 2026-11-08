@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "base_name": "hsr",
+  "sources": [
+    {
+      "id": 1,
+      "feature": "hsr",
+      "version": "1.0",
+      "path": "runtime_data/hsr_bank_v1.0.json",
+      "description": "高铁纵横内置题库 v1.0（263 题）"
+    }
+  ]
+}

@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
-# 最后更新: 2026-11-03 18:00
+# 最后更新: 2026-11-08 13:26
 # 文件名: settings.py
-# 主要用途: 设置分组框架（FeatureSettingsGroup）、“设置”标签页功能实现与第三方扩展加载/启用管理。
-# 文件版本: 3.0.0
+# 主要用途: 设置分组框架（FeatureSettingsGroup）、“设置”标签页功能实现、第三方扩展加载/启用管理与数据库信息展示。
+# 文件版本: 3.1.0
 """设置分组与设置页功能。
 
 V2 起，每个功能通过 :class:`FeatureSettingsGroup` 注册自己的设置板块：
@@ -23,11 +23,11 @@ from dataclasses import dataclass
 from typing import Any, Final
 
 from hwklr import __version__ as APP_VERSION
-from hwklr import runtime_data
+from hwklr import db
 from hwklr.config import load_config, update_config
 from hwklr.features.base import ApiResult, Feature, failure, success
 
-__version__ = "3.0.0"
+__version__ = "3.1.0"
 __author__ = "Gary"
 __all__ = ["FeatureSettingsGroup", "SettingsFeature", "SettingsFieldSpec"]
 
@@ -768,7 +768,7 @@ class SettingsFeature(Feature):
         return success({"path": str(path or "")})
 
     def _get_bank_info(self, params: dict[str, Any]) -> ApiResult:
-        """列出所有功能知识库及题量。
+        """列出所有功能数据库及记录数量。
 
         Args:
             params: 未使用的动作参数。
@@ -776,35 +776,9 @@ class SettingsFeature(Feature):
         Returns:
             形如 ``{"banks": [...]}`` 的结果。
         """
-        banks: list[dict[str, Any]] = []
-        for feature_name, versions in runtime_data.list_banks().items():
-            for version in versions:
-                try:
-                    data: Any = runtime_data.load_bank(feature_name, version)
-                    count: int = self._count_items(data)
-                except (OSError, ValueError) as exc:
-                    _LOGGER.warning("读取知识库失败 %s v%s: %s", feature_name, version, exc)
-                    count = 0
-                banks.append({
-                    "feature": feature_name,
-                    "version": version,
-                    "count": count,
-                })
+        try:
+            banks: list[dict[str, Any]] = db.get_db_manager().bank_info()
+        except db.DbError as exc:
+            _LOGGER.warning("读取数据库信息失败: %s", exc)
+            return failure("读取数据库信息失败：%s" % exc)
         return success({"banks": banks})
-
-    @staticmethod
-    def _count_items(data: Any) -> int:
-        """统计知识库条目数量。
-
-        Args:
-            data: JSON 解析后的知识库对象。
-
-        Returns:
-            条目数量。
-        """
-        if isinstance(data, list):
-            return len(data)
-        if isinstance(data, dict):
-            items: Any = data.get("items") or data.get("questions") or []
-            return len(items) if isinstance(items, list) else 0
-        return 0

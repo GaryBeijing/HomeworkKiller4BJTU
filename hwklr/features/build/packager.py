@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-01 12:40
-# 最后更新: 2026-11-04 11:55
+# 最后更新: 2026-11-08 13:26
 # 文件名: packager.py
-# 主要用途: 构建功能的打包实现：图标/名称/四段版本资源、源码裁剪、V3 源码归档、说明文件分发、插件模板分发、PyInstaller 与 python-embed zip。
-# 文件版本: 3.0.1
+# 主要用途: 构建功能的打包实现：图标/名称/四段版本资源、源码裁剪、V3 源码归档、说明文件分发、数据库 provider 打包、插件模板分发、PyInstaller 与 python-embed zip。
+# 文件版本: 3.1.0
 """构建打包实现。
 
 构建过程不依赖 UI，可独立调用 :func:`build_package`：
@@ -39,7 +39,7 @@ from typing import Any, Callable, Final, NamedTuple
 
 from hwklr.features.manifest import OFFICIAL_FEATURES, FeatureSpec
 
-__version__ = "3.0.1"
+__version__ = "3.1.0"
 __author__ = "Gary"
 __all__ = [
     "APP_EXE_NAME",
@@ -401,6 +401,13 @@ def _build_executable(
         "--add-data",
         _data_arg(stage / "hwklr" / "runtime_data", "hwklr/runtime_data"),
     ]
+    # #数据库：源描述 JSON 是 data 文件，必须显式加入；provider 由 DbManager 动态导入，
+    # 需要告诉 PyInstaller 收集。被裁剪功能的 provider/源描述已在 _copy_app_tree 移除。
+    db_stage: Path = stage / "hwklr" / "db"
+    for source_json in sorted(db_stage.glob("*_sources.json")):
+        cmd.extend(["--add-data", _data_arg(source_json, "hwklr/db")])
+    for provider_file in sorted(db_stage.glob("*db.py")):
+        cmd.extend(["--hidden-import", "hwklr.db.%s" % provider_file.stem])
     if icon_path is not None:
         # --icon 写入 exe 资源（资源管理器、任务栏、Alt+Tab）；
         # 同时把 ico 放到 _internal 供 pywebview 设置窗口图标。
@@ -432,6 +439,9 @@ def _build_executable(
     for spec in OFFICIAL_FEATURES:
         if spec.name not in included_names:
             cmd.extend(["--exclude-module", spec.module])
+            # #数据库：被裁剪功能的 provider 也显式排除，避免被误收集。
+            package_name: str = spec.module.rsplit(".", 1)[-1]
+            cmd.extend(["--exclude-module", "hwklr.db.%sdb" % package_name])
     cmd.append(str(stage / "main.py"))
 
     log("开始执行 PyInstaller：%s" % (" ".join(cmd)))
@@ -625,6 +635,11 @@ def _copy_app_tree(dest: Path, included: list[FeatureSpec], *, log: LogFn) -> No
         )
         excluded_file_prefixes.append(
             "hwklr/runtime_data/%s_bank_" % package_name
+        )
+        # #数据库：功能被裁剪时同步移除它的 provider 与源描述文件。
+        excluded_prefixes.append("hwklr/db/%sdb.py" % package_name)
+        excluded_file_prefixes.append(
+            "hwklr/db/%s_sources.json" % package_name
         )
     # vendor 中 python-embed 下载缓存不进入导出包，但插件工程模板必须随开发产物分发。
 

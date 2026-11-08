@@ -587,6 +587,10 @@ excluded_prefixes += [
 ]
 excluded_file_prefixes += [
     "hwklr/runtime_data/<package_name>_bank_",              # 知识库（前缀匹配，覆盖所有版本）
+    "hwklr/db/<package_name>_sources.json",                 # 数据库源描述（3.1.0）
+]
+excluded_prefixes += [
+    "hwklr/db/<package_name>db.py",                         # 数据库 provider（3.1.0）
 ]
 excluded_prefixes.append("hwklr/features/build/vendor")     # 无条件排除下载缓存
 ```
@@ -675,19 +679,35 @@ extension.zip
 
 ### 总览
 
-三层：
+四层（3.1.0 起）：
 
 ```
-runtime_data（文件层）   按 "功能_bank_vX.Y.json" 扫描、按版本排序、读 JSON
+db（外部缓存层）          app_root()/db/{base}{id}.json；DbProvider.load 自愈/重建
       ↓
-Bank（索引与匹配层）     题干归一化建哈希索引；未命中走模糊；答案→选项编码解析
+runtime_data（内置源层）  hsr_sources.json 指向 "功能_bank_vX.Y.json"；仅首次 fetch 读取
       ↓
-HSRFeature（编排层）     为每道题产出 {codes, method, score, fallback}，构造提交结构
+Bank（索引与匹配层）      题干归一化建哈希索引；未命中走模糊；答案→选项编码解析
+      ↓
+HSRFeature（编排层）      为每道题产出 {codes, method, score, fallback}，构造提交结构
 ```
 
 匹配的核心策略是**"文本优先、字母兜底"**：先用题库里的选项原文去匹配考卷选项原文（选项顺序变了也不怕），只有文本匹配失败才按题库字母兜底，并把它标记为"风险题"（`risky`）。
 
 ### 细节
+
+#### 9.0 数据层（3.1.0 起）
+
+```
+app_root()/db/hsr1.json          ← DbProvider.load(1) 的缓存（JSON 对象）
+hwklr/db/hsr_sources.json        ← 源描述（id=1 → runtime_data/hsr_bank_v1.0.json）
+hwklr/runtime_data/*.json        ← 随包分发的内置源；运行期不再由 HSR/settings 直接读取
+```
+
+- 文件名为 `{base_name}{id}.json`，无分隔符；HSR 的 `base_name="hsr"`、`id=1`。
+- `DbProvider.load(id)`：`exist` → `_read` → 失败/缺失则 `fetch(id)` → `_dump` → 再读。
+- `fetch` 的基类实现读取 `*_sources.json` 中 `id` 匹配条目的 `path`（相对 `hwklr/`）；子类可忽略该助手自行抓取。
+- 写入使用同目录临时文件 + `os.replace`，并持 `RLock`（`DB_TIMEOUT=15`）；损坏缓存会被删除并重建。
+- `DbManager` 在 `WindowView.__init__` 中初始化，provider 注册表见 `hwklr/db/manager.py::PROVIDER_SPECS`；被构建裁剪的 provider 因 `ImportError` 自动跳过。
 
 #### 9.1 文件层
 
@@ -1324,7 +1344,8 @@ ICON_PATH = "icon.ico" / ""
 | `--console` | 开发构建 | 便于看日志 |
 | `--windowed --optimize 2` | 发布构建 | 无控制台 + 字节码优化 |
 | `--exclude-module` | 见 §8.4 | 减体积 |
-| `--hidden-import` / `--exclude-module` | 按 `included` | 动态导入需要显式声明 |
+| `--hidden-import` / `--exclude-module` | 按 `included` | 动态导入需要显式声明；3.1.0 起对 `hwklr/db/*db.py` 追加 `--hidden-import` |
+| `--add-data hwklr/db/*_sources.json` | 3.1.0 起 | 数据库源描述是 data 文件，需显式随包；外部 `db/` 不打包 |
 
 执行时把 PyInstaller 的 stdout/stderr 合并逐行喂给 `log`（用户在构建页实时看到），`env["PYTHONPATH"] = stage`，`cwd = stage`，Windows 下 `CREATE_NO_WINDOW`。退出码非 0 → `BuildError("PyInstaller 执行失败，退出码 N")`。
 

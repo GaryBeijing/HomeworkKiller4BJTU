@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
-# 最后更新: 2026-11-03 17:35
+# 最后更新: 2026-11-08 13:26
 # 文件名: base.py
-# 主要用途: 定义所有功能都必须继承的 Feature 抽象基类、统一调用协议、设置组与关于元信息只读属性。
-# 文件版本: 3.0.0
+# 主要用途: 定义所有功能都必须继承的 Feature 抽象基类、统一调用协议、设置组、数据库访问与关于元信息只读属性。
+# 文件版本: 3.1.0
 """功能抽象基类。
 
 约定：
@@ -16,13 +16,15 @@
 from __future__ import annotations
 
 import abc
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, final
+
+from hwklr import db
 
 if TYPE_CHECKING:  # 避免 base 与 settings/about 相互导入。
     from .about import AboutMetadataGroup
     from .settings import FeatureSettingsGroup
 
-__version__ = "3.0.0"
+__version__ = "3.1.0"
 __all__ = ["Feature", "success", "failure"]
 
 # 统一返回结构：ok 表示成功与否，data 放业务数据，error 放可读错误信息。
@@ -69,6 +71,8 @@ class Feature(abc.ABC):
         """
         self._universal_param: dict[str, Any] = dict(universal_param or {})
         self._started: bool = False
+        # 功能使用的数据库名称；空字符串表示不启用数据库。
+        self._db_base_name: str = ""
 
     @property
     def universal_param(self) -> dict[str, Any]:
@@ -115,6 +119,36 @@ class Feature(abc.ABC):
     def stop(self) -> None:
         """停止功能。默认仅记录状态，子类可按需覆盖。"""
         self._started = False
+
+    @final
+    def _load_db(self, id: int) -> dict[str, Any] | None:
+        """读取本功能对应的数据库记录。
+
+        未配置 ``_db_base_name`` 时抛出 :class:`hwklr.db.DbDisabledError`。
+        调用方应只在动作处理路径使用本方法，让 ``handle()`` / 桥接层把异常
+        转换为可读错误，避免影响程序启动。
+
+        Args:
+            id: 数据库记录编号，由功能与对应 provider 约定。
+
+        Returns:
+            数据库中的 JSON 对象；provider 没有可用数据时返回 ``None``。
+
+        Raises:
+            db.DbDisabledError: 功能未配置 ``_db_base_name``。
+            db.DbProviderNotFoundError: 没有与 ``_db_base_name`` 匹配的 provider。
+            db.DbError: 数据库读取或落盘失败。
+        """
+        if not self._db_base_name:
+            raise db.DbDisabledError(
+                "功能 %s 未配置 _db_base_name，数据库不可用" % type(self).__name__
+            )
+        payload: Any = db.get_db_manager().load(self._db_base_name, int(id))
+        if payload is not None and not isinstance(payload, dict):
+            raise db.DbFormatError(
+                "数据库 %s 的 id=%s 不是 JSON 对象" % (self._db_base_name, id)
+            )
+        return payload
 
     @abc.abstractmethod
     def handle(self, action: str, params: dict[str, Any]) -> ApiResult:

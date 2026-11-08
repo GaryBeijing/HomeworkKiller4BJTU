@@ -15,6 +15,7 @@ icon*.*
 __pycache__/
 *.pyc
 /config.json
+/db/
 /run.bat
 /docs
 
