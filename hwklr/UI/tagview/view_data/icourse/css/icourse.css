@@ -1,10 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-11-08 14:30
-  最后更新: 2026-11-08 17:10
+  最后更新: 2026-11-08 17:40
   文件名: icourse.css
   主要用途: “中国大学慕课”标签页样式：固定视口高度、内部滚动、紧凑顶栏、任务区与标签内登录提示。
-  文件版本: 4.0.1
+  文件版本: 4.1.0
 */
 
 /* 慕课页永远不滚动整个页面；滚动只发生在课程列表、任务表和日志内部。 */
@@ -481,6 +481,17 @@
   justify-content: center;
   background: rgba(18, 20, 42, 0.52);
   backdrop-filter: blur(3px);
+  opacity: 1;
+  visibility: visible;
+  transition: opacity var(--transition-duration, 0.19s) ease,
+    visibility var(--transition-duration, 0.19s) ease;
+}
+
+.tag-icourse .ic-login-overlay.hidden {
+  display: flex !important;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .tag-icourse .ic-login-prompt {

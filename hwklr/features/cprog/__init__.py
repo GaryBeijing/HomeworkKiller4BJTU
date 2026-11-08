@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-01 00:01
-# 最后更新: 2026-11-03 18:25
+# 最后更新: 2026-11-08 17:40
 # 文件名: __init__.py
 # 主要用途: 实现“C程序设计”功能：课程/题目选择、启发模式、题解模式、启用开关与设置板块（依赖延迟加载）。
-# 文件版本: 3.0.0
+# 文件版本: 4.1.0
 """C 程序设计功能。
 
 重制自 ``B_CHelper``，主要变化：
@@ -52,12 +52,16 @@ from .models import (
 from .parsers import deterministic_structure
 from .site import MoodleError, MoodleSite, SubmitError
 
-__version__ = "3.0.0"
+__version__ = "4.1.0"
 __author__ = "Gary"
 __all__ = ["CProgrammingFeature"]
 
 _LOGGER: Final[logging.Logger] = logging.getLogger(__name__)
 _MAX_ATTEMPTS: Final[int] = 5
+
+
+class SolutionCancelled(Exception):
+    """题解任务被用户终止。"""
 _MAX_SUBMIT_ERRORS: Final[int] = 3
 _MAX_EVENTS: Final[int] = 200
 _DEFAULT_CONCURRENCY: Final[int] = 1
@@ -181,6 +185,7 @@ class CProgrammingFeature(Feature):
         self._solutions: dict[int, SolutionDraft] = {}
         self._job: dict[str, Any] = self._idle_job()
         self._job_thread: threading.Thread | None = None
+        self._job_cancel: threading.Event = threading.Event()
         self._settings_group: FeatureSettingsGroup = self._build_settings_group()
 
     # ------------------------------------------------------------------ 设置
@@ -390,6 +395,8 @@ class CProgrammingFeature(Feature):
         """
         if action == "get_solution_job":
             return self._get_solution_job(params)
+        if action == "cancel_solution_job":
+            return self._cancel_solution_job(params)
         if action == "get_state":
             return self._get_state(params)
 
@@ -436,6 +443,7 @@ class CProgrammingFeature(Feature):
             "events": [],
             "result": None,
             "error": "",
+            "cancelling": False,
         }
 
     def _job_running(self) -> bool:
@@ -910,6 +918,7 @@ class CProgrammingFeature(Feature):
                 "worker": None,
             })
         concurrency: int = self._read_max_concurrency()
+        self._job_cancel = threading.Event()
 
         job_id: str = uuid.uuid4().hex
         job: dict[str, Any] = self._idle_job()
@@ -953,6 +962,32 @@ class CProgrammingFeature(Feature):
         if requested and job.get("job_id") != requested:
             return failure("任务不存在或已过期")
         return success(job)
+
+    def _cancel_solution_job(self, params: dict[str, Any]) -> ApiResult:
+        """终止当前题解任务。
+
+        Args:
+            params: 可包含 ``job_id``。
+
+        Returns:
+            终止结果。
+        """
+        requested: str = str(params.get("job_id") or "")
+        with self._job_lock:
+            if not self._job.get("running"):
+                return success({"cancelled": False})
+            if requested and self._job.get("job_id") != requested:
+                return failure("任务不存在或已过期")
+            job_id: str = str(self._job.get("job_id") or "")
+            self._job["cancelling"] = True
+            self._job["message"] = "正在终止解题…"
+            self._job_cancel.set()
+        self._push_event(
+            job_id,
+            "用户请求终止解题，正在等待当前步骤结束…",
+            "warn",
+        )
+        return success({"cancelled": True})
 
     def _set_problem_status(
         self,
@@ -1019,6 +1054,8 @@ class CProgrammingFeature(Feature):
         Returns:
             ``{"kind": "ac"/"failed"/"already", "data": {...}}``。
         """
+        if self._job_cancel.is_set():
+            raise SolutionCancelled()
         problem: ProblemRef = self._find_problem(module_id)
         solved: bool
         solved_text: str
@@ -1058,6 +1095,8 @@ class CProgrammingFeature(Feature):
         )
 
         while attempts < _MAX_ATTEMPTS:
+            if self._job_cancel.is_set():
+                raise SolutionCancelled()
             # 步骤 1：需要时生成思路；判题逻辑失败后会置空以更高等级重析。
             if analysis is None:
                 self._set_problem_status(
@@ -1160,6 +1199,8 @@ class CProgrammingFeature(Feature):
                 break
 
             # 步骤 3：提交并等待判题。
+            if self._job_cancel.is_set():
+                raise SolutionCancelled()
             self._set_problem_status(
                 job_id, module_id, "提交中", attempts=attempts, worker=worker
             )
@@ -1194,6 +1235,8 @@ class CProgrammingFeature(Feature):
             consequence: Consequence = site.poll_consequence(
                 activity_id, submit_id, timeout=150.0
             )
+            if self._job_cancel.is_set():
+                raise SolutionCancelled()
             with self._state_lock:
                 self._last_consequences[module_id] = consequence
             problem.my_result = (
@@ -1294,6 +1337,7 @@ class CProgrammingFeature(Feature):
         ac_list: list[dict[str, Any]] = []
         failed_list: list[dict[str, Any]] = []
         already_list: list[dict[str, Any]] = []
+        cancelled_list: list[dict[str, Any]] = []
         try:
             total: int = len(module_ids)
             concurrency: int = self._read_max_concurrency()
@@ -1314,6 +1358,8 @@ class CProgrammingFeature(Feature):
             # 步骤 1：只登录一次，再把登录 Cookie 克隆给各线程。
             # 同一账号重复登录会让平台使旧会话失效，导致只有最后一个线程能正常访问。
             base_site: MoodleSite = self._ensure_login()
+            if self._job_cancel.is_set():
+                raise SolutionCancelled()
             contexts: list[tuple[MoodleSite, AIClient]] = []
             for _ in range(workers):
                 contexts.append((base_site.clone(), self._build_ai()))
@@ -1330,10 +1376,47 @@ class CProgrammingFeature(Feature):
             ) -> None:
                 """处理一个连续题目分段。"""
                 for module_id in chunk:
+                    if self._job_cancel.is_set():
+                        try:
+                            title = self._find_problem(module_id).title
+                        except Exception:
+                            title = str(module_id)
+                        self._set_problem_status(
+                            job_id, module_id, "已取消", worker=worker_index
+                        )
+                        with outcomes_lock:
+                            outcomes.append({
+                                "kind": "cancelled",
+                                "data": {
+                                    "module_id": module_id,
+                                    "title": title,
+                                    "status": "CANCELLED",
+                                    "summary": "用户终止解题",
+                                },
+                            })
+                        self._complete_problem(job_id, title)
+                        continue
                     try:
                         outcome: dict[str, Any] = self._solve_problem(
                             job_id, module_id, site, ai, worker_index
                         )
+                    except SolutionCancelled:
+                        try:
+                            title = self._find_problem(module_id).title
+                        except Exception:
+                            title = str(module_id)
+                        self._set_problem_status(
+                            job_id, module_id, "已取消", worker=worker_index
+                        )
+                        outcome = {
+                            "kind": "cancelled",
+                            "data": {
+                                "module_id": module_id,
+                                "title": title,
+                                "status": "CANCELLED",
+                                "summary": "用户终止解题",
+                            },
+                        }
                     except Exception as exc:  # 单题异常不拖垮整个线程。
                         _LOGGER.exception(
                             "解题线程 %s 处理题目 %s 失败",
@@ -1397,6 +1480,8 @@ class CProgrammingFeature(Feature):
                     ac_list.append(payload)
                 elif kind == "already":
                     already_list.append(payload)
+                elif kind == "cancelled":
+                    cancelled_list.append(payload)
                 else:
                     failed_list.append(payload)
 
@@ -1404,22 +1489,57 @@ class CProgrammingFeature(Feature):
                 "ac": ac_list,
                 "failed": failed_list,
                 "already_ac": already_list,
+                "cancelled": cancelled_list,
                 "selected": len(module_ids),
             }
+            if self._job_cancel.is_set():
+                self._update_job(
+                    job_id,
+                    running=False,
+                    done=True,
+                    phase="cancelled",
+                    message="解题已终止",
+                    result=result,
+                )
+                self._push_event(
+                    job_id,
+                    f"解题已终止：AC {len(ac_list)} 题，失败 {len(failed_list)} 题，"
+                    f"取消 {len(cancelled_list)} 题。",
+                    "warn",
+                )
+            else:
+                self._update_job(
+                    job_id,
+                    running=False,
+                    done=True,
+                    phase="done",
+                    message="题解模式完成",
+                    result=result,
+                )
+                self._push_event(
+                    job_id,
+                    f"完成：AC {len(ac_list)} 题，失败 {len(failed_list)} 题，"
+                    f"此前已通过 {len(already_list)} 题。",
+                    "success",
+                )
+        except SolutionCancelled:
+            for module_id in module_ids:
+                self._set_problem_status(job_id, module_id, "已取消")
             self._update_job(
                 job_id,
                 running=False,
                 done=True,
-                phase="done",
-                message="题解模式完成",
-                result=result,
+                phase="cancelled",
+                message="解题已终止",
+                result={
+                    "ac": ac_list,
+                    "failed": failed_list,
+                    "already_ac": already_list,
+                    "cancelled": cancelled_list,
+                    "selected": len(module_ids),
+                },
             )
-            self._push_event(
-                job_id,
-                f"完成：AC {len(ac_list)} 题，失败 {len(failed_list)} 题，"
-                f"此前已通过 {len(already_list)} 题。",
-                "success",
-            )
+            self._push_event(job_id, "解题已终止", "warn")
         except Exception as exc:  # 任务级兜底，确保 UI 能收到错误。
             _LOGGER.exception("题解模式任务失败")
             self._update_job(

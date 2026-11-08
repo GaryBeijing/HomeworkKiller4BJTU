@@ -1,10 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-11-01 00:01
-  最后更新: 2026-11-01 20:39
+  最后更新: 2026-11-08 17:40
   文件名: cprog.js
   主要用途: “C程序设计”页面逻辑：课程/题目选择、启发模式分步弹窗、题解模式后台任务与结果弹窗（仅展示一次）。
-  文件版本: 2.3.1
+  文件版本: 4.1.0
 */
 
 (function () {
@@ -458,7 +458,10 @@
       els.selectionHint.textContent = `已选 ${count} 题`;
     }
     if (els.start) {
-      els.start.disabled = count === 0 || state.busy || jobRunning();
+      const running = jobRunning();
+      els.start.textContent = running ? '终止解题' : '开始学习';
+      els.start.className = running ? 'btn danger-outline' : 'btn primary';
+      els.start.disabled = running ? false : (count === 0 || state.busy);
     }
     const part = currentPart();
     if (els.selectAllInput) {
@@ -934,6 +937,26 @@
   }
 
   /**
+   * 终止当前题解任务。
+   * @returns {Promise<void>} 完成时 resolve。
+   */
+  async function cancelSolution() {
+    if (!state.jobId) {
+      return;
+    }
+    if (els.start) {
+      els.start.disabled = true;
+    }
+    try {
+      await App.callOk('cancel_solution_job', { job_id: state.jobId });
+      App.toast('正在终止解题…', 'warn');
+    } catch (error) {
+      App.toast(`终止解题失败: ${error.message}`, 'error');
+      updateSelectionUI();
+    }
+  }
+
+  /**
    * 安排下一次任务状态轮询。
    * @returns {void}
    */
@@ -1250,7 +1273,13 @@
       els.selectUnsolved.addEventListener('click', () => selectAllUnsolved(true));
     }
     if (els.start) {
-      els.start.addEventListener('click', startLearning);
+      els.start.addEventListener('click', () => {
+        if (jobRunning()) {
+          cancelSolution();
+        } else {
+          startLearning();
+        }
+      });
     }
     if (els.modeGuide) {
       els.modeGuide.addEventListener('click', () => requestMode('guide'));

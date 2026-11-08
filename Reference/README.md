@@ -8,9 +8,9 @@
 
 | 项 | 值 |
 |---|---|
-| 包版本 `hwklr.__version__` | `4.0.1` |
-| 基线提交 | `771935b`（`main` 分支）基础上实现 Version 3.0.0（2026-11-03）、3.0.1（2026-11-04）、3.1.0、4.0.0 与 4.0.1（2026-11-08） |
-| **需求基线** | `SoftwareIntro/function_requirements.md`（需求台账，已勾到 `4.0.0`）+ `SoftwareIntro/drction+rqrmnts(org).md`（编号化需求与验收记录，同步 `4.0.1`）。**这两份是需求与验收的主契约，优先级高于本文档。** |
+| 包版本 `hwklr.__version__` | `4.1.0` |
+| 基线提交 | `771935b`（`main` 分支）基础上实现 Version 3.0.0（2026-11-03）、3.0.1（2026-11-04）、3.1.0、4.0.0、4.0.1 与 4.1.0（2026-11-08） |
+| **需求基线** | `SoftwareIntro/function_requirements.md`（需求台账，已勾到 `4.0.0`）+ `SoftwareIntro/drction+rqrmnts(org).md`（编号化需求与验收记录，同步 `4.1.0`）。**这两份是需求与验收的主契约，优先级高于本文档。** |
 | 运行时 | CPython 3.15.2（Windows，venv，`PYTHONUTF8=1`） |
 | 关键三方库 | `pywebview 6.2.1`、`openai 3.42.0`、`requests 2.34.2`、`beautifulsoup4 4.15.0`、`Pillow 13.0.0`、`pyinstaller 6.22.3` |
 | 文档编写时间 | 2026-11-02（2026-11-03 回填 3.0.0；2026-11-04 回填 3.0.1；2026-11-08 回填 3.1.0 与 4.0.0） |

@@ -809,6 +809,7 @@ from hwklr.features.icourse import IcourseFeature
 - 登录态位于 `app_root()/auth/icourse_session.json`，无头模式使用 `auth/icourse_storage_state.json`；课件下载到 `documents/icourse/`，失败截图在 `artifacts/icourse/`。
 - 打开标签页时前端自动调用 `start_login_job(auto)`；`need_visible` 时显示仅覆盖本标签的登录提示层，用户拒绝或窗口登录失败后只保留右上角“重新登陆”。页面固定 `height:100%`、`overflow:hidden`，仅课程列表/任务表/日志内部滚动。
 - 4.0.1：测验提交后任务快照含 `score/total_score/score_text/full_score/screenshot`；未提交为“已填写”，讨论为“已发布/已填写”。所有全局加载遮罩都显示文字下方的“取消加载”按钮；点击会中止当前标签激活，并让遮罩期间等待的 `App.call` 以加载超时失败；页面可实现 `onCancelLoading` 协作清理。
+- 4.1.0：`App.TRANSITION_DURATION = 0.19`，CSS 变量 `--transition-duration`；全局加载遮罩与 `.modal-backdrop` 使用该时长淡入淡出，取消按钮文字统一为“取消”。C 程序设计新增 `cancel_solution_job` 动作。
 - 依赖：`playwright`（系统 Edge，不下载 Chromium）、`cryptography`（本机 Chromium Cookie 解密）、`websocket-client`（可见登录 CDP）。
 
 ---

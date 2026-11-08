@@ -1,10 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-10-31 20:45
-  最后更新: 2026-11-08 17:20
+  最后更新: 2026-11-08 17:40
   文件名: base.css
   主要用途: 全局布局、标签栏、通用卡片/表格/按钮/弹窗/提示与设置锁定遮罩样式。
-  文件版本: 4.0.1
+  文件版本: 4.1.0
 */
 
 :root {
@@ -28,6 +28,7 @@
   --bad-bg: #fdeaea;
   --shadow: 0 18px 44px rgba(18, 20, 66, 0.22);
   --radius-lg: 18px;
+  --transition-duration: 0.19s;
   --radius-md: 12px;
   --radius-sm: 8px;
   --font: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC",
@@ -339,6 +340,17 @@ textarea:focus {
   color: #ffffff;
 }
 
+.btn.danger-outline {
+  border-color: var(--bad);
+  background: #ffffff;
+  color: var(--bad);
+}
+
+.btn.danger-outline:hover:not(:disabled) {
+  background: #fdecec;
+  color: var(--bad);
+}
+
 .btn.small {
   padding: 6px 11px;
   font-size: 12px;
@@ -463,6 +475,23 @@ summary {
   padding: 20px;
   background: rgba(16, 18, 58, 0.55);
   backdrop-filter: blur(2px);
+  opacity: 1;
+  visibility: visible;
+  transition: opacity var(--transition-duration, 0.19s) ease,
+    visibility var(--transition-duration, 0.19s) ease;
+  animation: overlay-in var(--transition-duration, 0.19s) ease-out;
+}
+
+.modal-backdrop.hidden {
+  display: flex !important;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+@keyframes overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .modal {
@@ -471,7 +500,7 @@ summary {
   border-radius: var(--radius-lg);
   background: var(--panel);
   box-shadow: 0 30px 70px rgba(8, 10, 40, 0.35);
-  animation: modal-in 0.16s ease-out;
+  animation: modal-in var(--transition-duration, 0.19s) ease-out;
 }
 
 @keyframes modal-in {
@@ -523,6 +552,7 @@ summary {
 /* 未完成必要设置时覆盖整个标签页的灰白色遮罩。 */
 .settings-lock-overlay {
   position: absolute;
+  animation: overlay-in var(--transition-duration, 0.19s) ease-out;
   inset: 0;
   z-index: 25;
   display: flex;
@@ -588,6 +618,17 @@ summary {
   color: #ffffff;
   font-size: 14px;
   backdrop-filter: blur(2px);
+  opacity: 1;
+  visibility: visible;
+  transition: opacity var(--transition-duration, 0.19s) ease,
+    visibility var(--transition-duration, 0.19s) ease;
+}
+
+.loading.hidden {
+  display: flex !important;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .loading-panel {

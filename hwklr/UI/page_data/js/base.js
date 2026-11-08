@@ -1,14 +1,21 @@
 /*
   作者: Gary
   编写日期: 2026-10-31 20:45
-  最后更新: 2026-11-08 17:20
+  最后更新: 2026-11-08 17:40
   文件名: base.js
   主要用途: 前端公共逻辑：标签栏、设置锁定/跳转、资源加载、桥接调用、提示与加载状态。
-  文件版本: 4.0.1
+  文件版本: 4.1.0
 */
 
 (function () {
   'use strict';
+
+  /** 全局过渡时长（秒）；所有弹窗/遮罩统一使用。 */
+  const TRANSITION_DURATION = 0.19;
+  document.documentElement.style.setProperty(
+    '--transition-duration',
+    TRANSITION_DURATION + 's'
+  );
 
   /** 全局运行状态。 */
   const state = {
@@ -359,8 +366,7 @@
     close.type = 'button';
     close.setAttribute('aria-label', '关闭');
     close.addEventListener('click', () => {
-      backdrop.remove();
-      applyLockOverlay(tag);
+      dismissOverlay(backdrop, () => applyLockOverlay(tag));
     });
     modal.appendChild(close);
     modal.appendChild(createNode('h3', '', '请先完成必要设置'));
@@ -371,12 +377,35 @@
     const go = createNode('button', 'btn primary', '去设置');
     go.type = 'button';
     go.addEventListener('click', () => {
-      backdrop.remove();
-      openSettings(tag.settings_target || tag.settings_group);
+      dismissOverlay(backdrop, () => {
+        openSettings(tag.settings_target || tag.settings_group);
+      });
     });
     modal.appendChild(go);
     backdrop.appendChild(modal);
     document.body.appendChild(backdrop);
+  }
+
+  /**
+   * 按全局过渡时长淡出并移除遮罩。
+   * @param {HTMLElement} element 遮罩元素。
+   * @param {Function} [after] 淡出结束后执行。
+   * @returns {void}
+   */
+  function dismissOverlay(element, after) {
+    if (!element) {
+      if (typeof after === 'function') {
+        after();
+      }
+      return;
+    }
+    element.classList.add('hidden');
+    window.setTimeout(() => {
+      element.remove();
+      if (typeof after === 'function') {
+        after();
+      }
+    }, Math.max(0, TRANSITION_DURATION * 1000));
   }
 
   /**
@@ -598,6 +627,7 @@
     toast: toast,
     setLoading: setLoading,
     cancelLoading: cancelLoading,
+    TRANSITION_DURATION: TRANSITION_DURATION,
     registerPage: registerPage,
     refreshTags: refreshTags,
     openSettings: openSettings,

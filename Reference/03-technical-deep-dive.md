@@ -830,6 +830,7 @@ QuizAction / PopupQuiz                 ← 按题干/选项文本匹配答案
 - 前端资源位于 `hwklr/UI/tagview/view_data/icourse/`，job 轮询 800ms，百分比文字节流 3000ms（对应原型 `STATUS_INTERVAL_SECONDS`）。
 - 4.0.0 起标签打开即自动登录：保存 Cookie → 本机 Cookie → 设置账号（无头）；失败时在标签内提示窗口登录，拒绝/失败后仅显示“重新登陆”。
 - 4.0.1：加载遮罩可取消；测验自动提交后读取结果页分数并按满分着色，未提交显示黄色“已填写”并在标签内提示截图路径；讨论发布显示“已发布”；任务默认不选。
+- 4.1.0：前端统一 `TRANSITION_DURATION=0.19s`（`App.TRANSITION_DURATION` / CSS `--transition-duration`）；全局遮罩与标签弹窗淡入淡出；C 程序设计题解任务支持 `cancel_solution_job` 协作取消，UI 按钮切换为“终止解题”。
 
 ---
 

@@ -6,7 +6,7 @@
 
 ![Python](https://img.shields.io/badge/Python-3.15.2-3776AB?logo=python&logoColor=white)
 ![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-0078D4?logo=windows&logoColor=white)
-![Version](https://img.shields.io/badge/Version-4.0.1-5B4BFF)
+![Version](https://img.shields.io/badge/Version-4.1.0-5B4BFF)
 ![GUI](https://img.shields.io/badge/GUI-pywebview%20%2B%20WebView2-2F3AB2)
 
 [功能特性](#-功能特性) · [界面预览](#-界面预览) · [快速开始](#-快速开始) · [使用指南](#-使用指南) · [构建与分发](#-构建与分发) · [插件开发](#-插件开发) · [常见问题](#-常见问题)
@@ -37,7 +37,7 @@ HomeworkKiller4BJTU（简称 HWKLR）是一个基于 **pywebview + 本地 HTTP �
 
 ### 通用体验
 
-- **加载遮罩可取消**：所有全局加载遮罩（标签打开、登录、读取题目等）都在文字下方提供半透明白色“取消加载”按钮，点击后立即中止加载并提示加载超时。
+- **加载遮罩可取消**：所有全局加载遮罩（标签打开、登录、读取题目等）都在文字下方提供半透明白色“取消”按钮，点击后立即中止加载并提示加载超时；遮罩与标签内弹窗统一使用 0.19 秒淡入淡出。
 - **固定标签位置**：构建标签始终为倒数第三（构建、设置、关于），构建设置板块始终放在最后。
 - **多标签桌面 UI**：标签顺序固定为“功能标签 → 设置 → 关于”，支持窗口尺寸自适应。
 - **统一设置中心**：账号、密码、AI 配置、构建配置、扩展管理全部集中在“设置”标签页，不再在每个功能页重复登录。
@@ -59,6 +59,7 @@ HomeworkKiller4BJTU（简称 HWKLR）是一个基于 **pywebview + 本地 HTTP �
 - **失败重试**：WA/TLE/MLE/RE 时自动提高思考等级与输出上限；PE/CE 只重写代码；最多 5 次尝试。
 - **隐藏测试点识别**：Secure test 不公开输入/期望/实际输出时，只告知 AI“隐藏测试点”，避免误判。
 - **状态可视化**：未提交、等待队列、生成题解、提交中、AC、错误等状态有独立配色。
+- **终止解题**：题解任务运行中，原“开始学习”按钮变为红色描边、白底的“终止解题”，点击后在当前题目/AI 步骤结束时协作终止任务。
 
 ### 中国大学慕课
 
