@@ -25,6 +25,7 @@
   - 3.11 `hwklr.UI`（窗口层）
   - 3.12 `hwklr.UI.tagview`（标签层）
   - 3.13 `hwklr.UI.server`（本地 HTTP）
+  - 3.14 `hwklr.features.icourse`（中国大学慕课）
 - [4. 前端 API](#4-前端-api)
 - [5. 配置项参考（config.json）](#5-配置项参考configjson)
 - [6. 动作总表（tag × action）](#6-动作总表tag--action)
@@ -775,6 +776,39 @@ UiHttpServer(page_dir: Path, view_data_dir: Path, preferred_port: int = 49152,
 | 其他 | * | `404` |
 
 所有响应带 `Cache-Control: no-store`；静态文件额外带 `X-Content-Type-Options: nosniff`。路径解析后必须仍在对应根目录内，否则 `403`。
+
+---
+
+### 3.14 `hwklr.features.icourse`（中国大学慕课，4.0.0）
+
+```python
+from hwklr.features.icourse import IcourseFeature
+```
+
+核心动作（均为 `Feature.handle` 的公开 action，无前导下划线）：
+
+| 动作 | 参数 | 返回 |
+|---|---|---|
+| `get_state` | — | 登录状态、缓存课程/课程树、登录 job、题库同步快照、完成任务快照、非敏感设置 |
+| `load_courses` | `{refresh?}` | `{courses:[摘要], user}`；课程摘要含 `catalog.available` |
+| `select_course` | `{term_id, refresh?}` | `{course:{...,tasks}, types, catalog, answer_sync}` |
+| `get_course` | — | 缓存的课程树，不联网 |
+| `start_login_job` | `{mode: auto\|headless\|visible\|cookies, browser?}` | `{job_id, mode}`；凭据从 config 读取；`auto` 依次尝试保存 Cookie、本机 Cookie、设置账号，失败时快照 `phase=need_visible` |
+| `get_login_job` / `cancel_login_job` | `{job_id?}` | 登录快照 / 取消 |
+| `logout` | — | 删除会话并清缓存 |
+| `start_answer_sync` / `get_answer_sync` | `{term_id?, force?}` | 题库同步快照 |
+| `start_completion_job` | `{term_id, task_keys:[str]}` | 完成任务快照（含每个任务的 `status/percent/error`） |
+| `get_completion_job` / `cancel_completion_job` | `{job_id?}` | 快照 / 取消 |
+
+要点：
+
+- 任务快照的 `status` 为 `等待队列/进行中/完成/失败/已跳过/已取消`；前端把“进行中”渲染为胶囊内进度条，百分比文字最多每 3000ms 刷新一次。
+- `workers` 仅作用于视频阶段，每个 worker 独立 Playwright 会话/页面；文档/测验/讨论串行执行。
+- `submit_quizzes` 与 `publish_discussions` 默认 `False`；关闭时只填写，不提交/发布。
+- 题库 provider 为 `hwklr/db/icoursedb.py::IcourseDb`（`base_name="icourse"`）：`id=0` 返回 `hwklr/db/icourse_sources.json` 目录，`id=termId` 返回课程 + tests + questions 记录；外部文件 `db/icourse<termId>.json`。
+- 登录态位于 `app_root()/auth/icourse_session.json`，无头模式使用 `auth/icourse_storage_state.json`；课件下载到 `documents/icourse/`，失败截图在 `artifacts/icourse/`。
+- 打开标签页时前端自动调用 `start_login_job(auto)`；`need_visible` 时显示仅覆盖本标签的登录提示层，用户拒绝或窗口登录失败后只保留右上角“重新登陆”。页面固定 `height:100%`、`overflow:hidden`，仅课程列表/任务表/日志内部滚动。
+- 依赖：`playwright`（系统 Edge，不下载 Chromium）、`cryptography`（本机 Chromium Cookie 解密）、`websocket-client`（可见登录 CDP）。
 
 ---
 

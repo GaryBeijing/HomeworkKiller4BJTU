@@ -1,0 +1,116 @@
+<!--
+  作者: Gary
+  编写日期: 2026-11-08 14:30
+  最后更新: 2026-11-08 16:40
+  文件名: index.html
+  主要用途: “中国大学慕课”标签页结构：紧凑顶栏、内部滚动课程/任务区、自动登录提示与完成任务操作栏。
+  文件版本: 4.0.0
+-->
+<section class="tag-page tag-icourse" id="icourse-page">
+  <header class="ic-topbar">
+    <div class="ic-heading">
+      <h1>中国大学慕课</h1>
+      <span class="ic-sub">选择课程，勾选任务，批量完成视频 / 文档 / 测验 / 讨论</span>
+    </div>
+    <div class="ic-top-actions">
+      <span id="i-account-badge" class="pill info">未登录</span>
+      <button id="i-relogin" class="btn small ic-top-btn hidden" type="button">重新登陆</button>
+      <button id="i-open-settings" class="btn small ic-top-btn" type="button">设置</button>
+    </div>
+  </header>
+
+  <div class="ic-body">
+    <aside class="ic-side card">
+      <div class="card-head ic-card-head">
+        <h2>课程</h2>
+        <button id="i-refresh-courses" class="btn ghost small" type="button">刷新</button>
+      </div>
+      <div id="i-course-list" class="ic-course-list">
+        <p class="muted">正在准备登录…</p>
+      </div>
+      <div class="ic-side-foot">
+        <div class="ic-sync-row">
+          <span id="i-sync-message" class="hint">题库同步</span>
+          <button id="i-sync-answers" class="btn ghost small" type="button">同步</button>
+        </div>
+        <div class="progress-track ic-sync-track">
+          <div id="i-sync-bar" class="progress-bar"></div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="ic-main card">
+      <div class="card-head ic-card-head">
+        <div class="ic-course-heading">
+          <h2 id="i-course-title">任务</h2>
+          <span id="i-course-meta" class="hint"></span>
+        </div>
+        <button id="i-log-toggle" class="btn ghost small" type="button">日志</button>
+      </div>
+
+      <div class="ic-task-layout">
+        <nav id="i-type-rail" class="ic-type-rail" aria-label="任务类型"></nav>
+        <div class="table-wrap ic-task-wrap">
+          <table class="data-table ic-task-table">
+            <thead>
+              <tr>
+                <th class="check-col">
+                  <input type="checkbox" id="i-select-all" aria-label="全选当前类型未完成任务">
+                </th>
+                <th>任务</th>
+                <th class="ic-status-col">状态</th>
+              </tr>
+            </thead>
+            <tbody id="i-task-body">
+              <tr><td colspan="3" class="table-empty">请先选择课程</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <footer class="ic-actions">
+        <button id="i-select-unsolved" class="btn ghost small" type="button">全选未完成</button>
+        <span id="i-selection-hint" class="hint ic-selection-hint">已选 0 个任务</span>
+        <span id="i-job-inline" class="ic-job-inline hidden">
+          <span id="i-job-phase" class="pill info">准备中</span>
+          <span id="i-job-message" class="hint ic-job-message"></span>
+          <div class="progress-track ic-job-track">
+            <div id="i-job-bar" class="progress-bar"></div>
+          </div>
+          <button id="i-cancel-job" class="btn ghost small" type="button">取消</button>
+        </span>
+        <span class="spacer"></span>
+        <button id="i-start" class="btn primary" type="button" disabled>开始完成</button>
+      </footer>
+
+      <div id="i-log-panel" class="ic-log-panel hidden">
+        <div id="i-log-lines" class="progress-log"></div>
+      </div>
+    </main>
+  </div>
+
+  <div id="i-login-overlay" class="ic-login-overlay hidden" role="dialog"
+       aria-modal="true" aria-labelledby="i-login-overlay-title">
+    <div class="ic-login-prompt">
+      <h3 id="i-login-overlay-title">需要登录</h3>
+      <p id="i-login-overlay-text">自动登录失败。是否在弹出的浏览器窗口中完成登录？</p>
+      <div class="row end">
+        <button id="i-login-decline" class="btn ghost" type="button">暂不登录</button>
+        <button id="i-login-visible" class="btn primary" type="button">在浏览器中登录</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="i-warning-modal" role="dialog"
+       aria-modal="true" aria-labelledby="i-warning-title">
+    <div class="modal">
+      <h3 id="i-warning-title">确认开始</h3>
+      <p class="warning-text">警告：你可能会错过一些重要内容，确认开始？</p>
+      <p id="i-warning-detail" class="hint"></p>
+      <div class="row end">
+        <button id="i-warning-cancel" class="btn ghost" type="button">取消</button>
+        <button id="i-warning-confirm" class="btn danger" type="button">确认开始</button>
+      </div>
+    </div>
+  </div>
+</section>

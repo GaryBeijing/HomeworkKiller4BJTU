@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 13:26
+# 最后更新: 2026-11-08 14:30
 # 文件名: manager.py
 # 主要用途: 实例化并注册所有 DbProvider，提供按数据库名称访问数据库的进程级单例管理器。
-# 文件版本: 3.1.0
+# 文件版本: 4.0.0
 """数据库管理器。
 
 ``DbManager`` 在程序启动时实例化所有已登记的 :class:`DbProvider`，并以
@@ -22,7 +23,7 @@ from typing import Any, Final
 
 from .provider import DbProvider, DbProviderNotFoundError
 
-__version__ = "3.1.0"
+__version__ = "4.0.0"
 __author__ = "Gary"
 __all__ = [
     "PROVIDER_SPECS",
@@ -36,6 +37,7 @@ _LOGGER: Final[logging.Logger] = logging.getLogger(__name__)
 # 新增带数据库的功能时，在此登记 (模块路径, 类名)。
 PROVIDER_SPECS: Final[tuple[tuple[str, str], ...]] = (
     ("hwklr.db.hsrdb", "HSRDb"),
+    ("hwklr.db.icoursedb", "IcourseDb"),
 )
 
 

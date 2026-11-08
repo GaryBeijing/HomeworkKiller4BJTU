@@ -6,7 +6,7 @@
 
 ![Python](https://img.shields.io/badge/Python-3.15.2-3776AB?logo=python&logoColor=white)
 ![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-0078D4?logo=windows&logoColor=white)
-![Version](https://img.shields.io/badge/Version-3.0.0-5B4BFF)
+![Version](https://img.shields.io/badge/Version-4.0.0-5B4BFF)
 ![GUI](https://img.shields.io/badge/GUI-pywebview%20%2B%20WebView2-2F3AB2)
 
 [功能特性](#-功能特性) · [界面预览](#-界面预览) · [快速开始](#-快速开始) · [使用指南](#-使用指南) · [构建与分发](#-构建与分发) · [插件开发](#-插件开发) · [常见问题](#-常见问题)
@@ -22,10 +22,11 @@
 
 HomeworkKiller4BJTU（简称 HWKLR）是一个基于 **pywebview + 本地 HTTP 服务** 的 Windows 桌面应用。Python 负责业务逻辑与平台交互，HTML/CSS/JS 负责界面呈现，两者通过统一的 `Feature.handle(action, params)` 协议通信。
 
-项目当前包含三个官方功能：
+项目当前包含四个官方功能：
 
 - **高铁纵横**：登录高铁答题系统，按内置题库自动匹配答案并提交考试。
 - **C程序设计**：登录 CITEL 课程平台，获取课程与题目；提供“启发模式”逐步讲解，以及可选的“题解模式”生成并提交参考实现。
+- **中国大学慕课**：登录中国大学 MOOC（icourse163.org），选择课程后批量完成视频、文档、测验与讨论任务；支持题库答案匹配、并发刷课与任务进度展示。
 - **构建**：把程序导出为发布包/开发包，并支持第三方插件工程的创建、测试与打包。
 
 从 **3.0.0** 开始，应用支持运行期加载第三方扩展，并在“关于”页展示插件元信息。
@@ -56,6 +57,15 @@ HomeworkKiller4BJTU（简称 HWKLR）是一个基于 **pywebview + 本地 HTTP �
 - **失败重试**：WA/TLE/MLE/RE 时自动提高思考等级与输出上限；PE/CE 只重写代码；最多 5 次尝试。
 - **隐藏测试点识别**：Secure test 不公开输入/期望/实际输出时，只告知 AI“隐藏测试点”，避免误判。
 - **状态可视化**：未提交、等待队列、生成题解、提交中、AC、错误等状态有独立配色。
+
+### 中国大学慕课
+
+- **自动登录**：打开标签页后自动依次尝试“已保存 Cookie → 本机浏览器 Cookie → 设置中的账号密码（后台无头）”；全部失败时在标签内询问是否打开浏览器窗口登录，拒绝或再次失败后仅在右上角保留“重新登陆”。验证码/短信验证使用窗口登录。
+- **固定视口布局**：页面不产生整页滚动，课程列表、任务表、日志各自内部滚动；窗口高度/宽度变化时自动压缩间距与侧栏。
+- **课程与任务**：获取 MOOC/SPOC 课程与章节树，按视频、文档、测验、作业、考试、讨论分类展示；未完成任务默认勾选。
+- **批量完成**：点击“开始完成”并确认警告后，后台执行视频并发播放、文档翻页/下载、测验题库匹配与填答、讨论复制回复；最大并行数、自动提交测验、自动发布讨论可在设置中调整（后两者默认关闭）。
+- **进度展示**：运行中的任务胶囊变为浅绿色进度条并显示百分比（最多每 3 秒刷新），等待任务显示橙色“等待队列”，完成后自动刷新课程状态。
+- **题库**：内置 `hwklr/db/icourse_sources.json` 课程目录（422 门），从 GinsMooc 下载的课程/测验/题目缓存到程序同级的 `db/icourse<termId>.json`；默认 TTL 24 小时。
 
 ### 构建与插件
 
@@ -128,6 +138,8 @@ py -3.15 -m venv .
 ```
 
 > 如果已经存在可用的 `Scripts\python.exe`，跳过创建步骤，直接安装依赖即可。
+>
+> 中国大学慕课功能使用 Playwright 驱动**系统 Microsoft Edge**，不会下载 Chromium；请确保本机已安装 Edge。窗口登录会在 `auth/edge-profile/` 创建独立浏览器配置目录。
 
 ### 3. 启动
 
@@ -308,7 +320,7 @@ HomeworkKiller4BJTU/
 ├── hwklr/                      # 主包
 │   ├── __init__.py             # 版本、APP_*、DEV_BUILD
 │   ├── config.py               # config.json 唯一读写口与程序根解析
-│   ├── db/                     # 数据库机制（DbManager/DbProvider/HSRDb）
+│   ├── db/                     # 数据库机制（DbManager/DbProvider/HSRDb/IcourseDb）
 │   ├── features/
 │   │   ├── base.py             # Feature 抽象、success/failure
 │   │   ├── manifest.py         # OFFICIAL_FEATURES 官方功能清单
@@ -318,6 +330,7 @@ HomeworkKiller4BJTU/
 │   │   ├── versions.py         # 版本显示格式
 │   │   ├── hsr/                # 高铁纵横
 │   │   ├── cprog/              # C 程序设计
+│   │   ├── icourse/            # 中国大学慕课（登录/课程/动作/题库同步）
 │   │   └── build/              # 构建与插件打包
 │   ├── runtime_data/           # 随包分发的知识库源文件
 │   └── UI/
@@ -326,6 +339,7 @@ HomeworkKiller4BJTU/
 │       ├── page_data/          # 全局页面骨架与公共资源
 │       └── tagview/            # 标签抽象与各标签前端资源
 ├── db/                         # 运行期数据库缓存（自动生成，git 忽略）
+├── auth/ documents/ artifacts/ # 慕课登录态、下载课件与失败截图（自动生成，git 忽略）
 ├── SoftwareIntro/              # 需求与方向文档
 ├── Reference/                  # 详细参考文档（架构/API/技术）
 └── legacy/                     # 原版实现，仅作参考

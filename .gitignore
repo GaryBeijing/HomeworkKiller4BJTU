@@ -18,6 +18,7 @@ __pycache__/
 /db/
 /run.bat
 /docs
+/tests/
 
 # 构建产物与 python-embed 下载缓存（仅项目根目录的 build/，不要忽略功能源码目录）
 /build/
@@ -28,3 +29,8 @@ hwklr/features/build/vendor/*.zip
 # 运行期生成的扩展目录与开发虚拟环境
 /extension/
 /HwklrVenv/
+
+# 慕课登录态、下载课件与失败截图
+/auth/
+/documents/
+/artifacts/

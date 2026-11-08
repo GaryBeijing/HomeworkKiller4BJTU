@@ -1,0 +1,1037 @@
+/*
+  作者: Gary
+  编写日期: 2026-11-08 14:30
+  最后更新: 2026-11-08 16:40
+  文件名: icourse.js
+  主要用途: “中国大学慕课”标签页逻辑：自动登录、课程选择、任务勾选、批量完成、进度轮询与题库同步。
+  文件版本: 4.0.0
+*/
+(function () {
+  'use strict';
+
+  const PAGE_NAME = '中国大学慕课';
+  const POLL_MS = 800;
+  const LOGIN_POLL_MS = 1000;
+  const SYNC_POLL_MS = 1200;
+  const PERCENT_INTERVAL_MS = 3000;
+
+  const state = {
+    initialized: false,
+    loggedIn: false,
+    user: {},
+    courses: [],
+    course: null,
+    types: [],
+    activeType: '',
+    checked: new Map(),
+    jobId: '',
+    job: null,
+    jobTimer: null,
+    loginJobId: '',
+    loginJob: null,
+    loginTimer: null,
+    syncTimer: null,
+    percentShown: new Map(),
+    settings: {},
+    loginBlocked: false,
+    autoTried: false,
+    logOpen: false,
+    keydownHandler: null,
+  };
+
+  const els = {};
+
+  function node(tag, className, text) {
+    const element = document.createElement(tag);
+    if (className) {
+      element.className = className;
+    }
+    if (text !== undefined) {
+      element.textContent = text;
+    }
+    return element;
+  }
+
+  function cacheElements() {
+    [
+      'i-account-badge', 'i-relogin', 'i-open-settings', 'i-refresh-courses',
+      'i-course-list', 'i-sync-message', 'i-sync-answers', 'i-sync-bar',
+      'i-course-title', 'i-course-meta', 'i-log-toggle', 'i-type-rail',
+      'i-task-body', 'i-select-all', 'i-select-unsolved', 'i-selection-hint',
+      'i-start', 'i-job-inline', 'i-job-phase', 'i-job-message', 'i-job-bar',
+      'i-cancel-job', 'i-log-panel', 'i-log-lines', 'i-login-overlay',
+      'i-login-overlay-text', 'i-login-decline', 'i-login-visible',
+      'i-warning-modal', 'i-warning-detail', 'i-warning-cancel',
+      'i-warning-confirm',
+    ].forEach((id) => {
+      els[id] = document.getElementById(id);
+    });
+  }
+
+  function bindEvents() {
+    on(els['i-refresh-courses'], 'click', () => loadCourses(true));
+    on(els['i-relogin'], 'click', relogin);
+    on(els['i-open-settings'], 'click', (event) => {
+      event.preventDefault();
+      if (App.openSettings) {
+        App.openSettings('icourse');
+      }
+    });
+    on(els['i-sync-answers'], 'click', startAnswerSync);
+    on(els['i-log-toggle'], 'click', toggleLog);
+    on(els['i-select-all'], 'change', toggleSelectAll);
+    on(els['i-select-unsolved'], 'click', selectUnsolved);
+    on(els['i-start'], 'click', requestStart);
+    on(els['i-cancel-job'], 'click', cancelJob);
+    on(els['i-login-visible'], 'click', acceptVisibleLogin);
+    on(els['i-login-decline'], 'click', declineVisibleLogin);
+    on(els['i-warning-cancel'], 'click', hideWarning);
+    on(els['i-warning-confirm'], 'click', confirmStart);
+    if (els['i-warning-modal']) {
+      els['i-warning-modal'].addEventListener('click', (event) => {
+        if (event.target === els['i-warning-modal']) {
+          hideWarning();
+        }
+      });
+    }
+  }
+
+  function on(element, event, handler) {
+    if (element) {
+      element.addEventListener(event, handler);
+    }
+  }
+
+  function init(container) {
+    cacheElements();
+    bindEvents();
+    hideWarning();
+    hideLoginOverlay();
+    hideLog();
+    if (state.keydownHandler) {
+      document.removeEventListener('keydown', state.keydownHandler);
+    }
+    state.keydownHandler = (event) => {
+      if (event.key === 'Escape') {
+        hideWarning();
+      }
+    };
+    document.addEventListener('keydown', state.keydownHandler);
+    state.initialized = true;
+  }
+
+  async function onActivate() {
+    if (!state.initialized) {
+      return;
+    }
+    state.autoTried = false;
+    try {
+      await refreshState();
+    } catch (error) {
+      App.toast('读取慕课状态失败：' + error.message, 'error');
+    }
+    if (state.job && state.job.running) {
+      scheduleJobPoll();
+    }
+    if (state.loginJob && state.loginJob.running) {
+      scheduleLoginPoll();
+      return;
+    }
+    if (state.loggedIn) {
+      if (!state.courses.length) {
+        await loadCourses(false);
+      } else {
+        renderAll();
+      }
+      return;
+    }
+    if (!state.loginBlocked) {
+      await beginAutoLogin();
+    } else {
+      showRelogin(true);
+      setAccountStatus('登录失败', 'bad');
+      renderAll();
+    }
+  }
+
+  function onDeactivate() {
+    clearTimer('jobTimer');
+    clearTimer('loginTimer');
+    clearTimer('syncTimer');
+  }
+
+  function clearTimer(name) {
+    if (state[name]) {
+      window.clearTimeout(state[name]);
+      state[name] = null;
+    }
+  }
+
+  // ------------------------------------------------------------------ 状态
+  async function refreshState() {
+    const data = await App.callOk('get_state');
+    applyState(data);
+  }
+
+  function applyState(data) {
+    state.loggedIn = Boolean(data.logged_in);
+    state.user = data.user || {};
+    state.courses = data.courses || [];
+    state.settings = data.settings || {};
+    if (data.course && data.course.course) {
+      state.course = data.course;
+      state.types = data.course.types || [];
+    }
+    if (data.login_job && data.login_job.job_id) {
+      state.loginJob = data.login_job;
+      if (data.login_job.running) {
+        state.loginJobId = data.login_job.job_id;
+      }
+    }
+    if (data.job && data.job.job_id) {
+      state.job = data.job;
+      state.jobId = data.job.job_id;
+    }
+    if (state.loginJob) {
+      applyLoginSnapshot(state.loginJob);
+    } else {
+      updateAccountBadge();
+    }
+    updateSyncUI(data.answer_sync || ((state.course || {}).answer_sync));
+    renderAll();
+    if (state.loginJob && state.loginJob.phase === 'need_visible'
+        && !state.loginBlocked && !state.loggedIn) {
+      showLoginPrompt(state.loginJob);
+    }
+  }
+
+  function setAccountStatus(text, kind) {
+    const badge = els['i-account-badge'];
+    if (!badge) {
+      return;
+    }
+    badge.className = 'pill ' + (kind || 'info');
+    badge.textContent = text;
+  }
+
+  function updateAccountBadge() {
+    const job = state.loginJob;
+    if (job && job.running) {
+      setAccountStatus(
+        job.phase === 'browser' ? '等待浏览器登录…' : '正在自动登录…',
+        'info'
+      );
+      return;
+    }
+    if (job && job.phase === 'need_visible') {
+      setAccountStatus('需要登录', 'warn');
+      return;
+    }
+    if (state.loginBlocked) {
+      setAccountStatus('登录失败', 'bad');
+      return;
+    }
+    if (state.loggedIn) {
+      const user = state.user || {};
+      const label = user.nickName || user.nickname || user.realName
+        || user.email || user.loginId || user.id || '当前账号';
+      setAccountStatus('已登录：' + String(label), 'ok');
+      return;
+    }
+    setAccountStatus('未登录', 'info');
+  }
+
+  function showRelogin(show) {
+    if (els['i-relogin']) {
+      els['i-relogin'].classList.toggle('hidden', !show);
+    }
+  }
+
+  // ------------------------------------------------------------------ 自动登录
+  async function beginAutoLogin() {
+    if (state.loginBlocked || (state.loginJob && state.loginJob.running)) {
+      return;
+    }
+    state.autoTried = true;
+    hideLoginOverlay();
+    showRelogin(false);
+    setAccountStatus('正在自动登录…', 'info');
+    try {
+      await startLoginJob('auto');
+    } catch (error) {
+      finalLoginFailure(error.message);
+    }
+  }
+
+  async function startLoginJob(mode) {
+    const data = await App.callOk('start_login_job', { mode: mode, browser: 'auto' });
+    state.loginJobId = data.job_id;
+    state.loginJob = {
+      job_id: data.job_id,
+      running: true,
+      done: false,
+      phase: 'starting',
+      message: mode === 'visible' ? '正在打开浏览器…' : '正在自动登录…',
+      events: [],
+      error: '',
+      user: {},
+    };
+    applyLoginSnapshot(state.loginJob);
+    scheduleLoginPoll();
+  }
+
+  function scheduleLoginPoll() {
+    clearTimer('loginTimer');
+    state.loginTimer = window.setTimeout(pollLogin, LOGIN_POLL_MS);
+  }
+
+  async function pollLogin() {
+    clearTimer('loginTimer');
+    if (App.active !== PAGE_NAME) {
+      return;
+    }
+    try {
+      const data = await App.callOk('get_login_job', { job_id: state.loginJobId });
+      state.loginJob = data;
+      applyLoginSnapshot(data);
+      if (data.running) {
+        scheduleLoginPoll();
+      } else {
+        handleLoginFinished(data);
+      }
+    } catch (error) {
+      finalLoginFailure('读取登录状态失败：' + error.message);
+    }
+  }
+
+  function applyLoginSnapshot(job) {
+    state.loginJob = job;
+    updateAccountBadge();
+    renderLogs();
+    if (job.running && els['i-log-panel'] && els['i-log-panel'].classList.contains('hidden')) {
+      // 自动登录时默认收起日志，避免遮挡任务区；用户可点“日志”查看。
+    }
+  }
+
+  async function handleLoginFinished(job) {
+    if (job.phase === 'need_visible') {
+      state.loggedIn = false;
+      showLoginPrompt(job);
+      return;
+    }
+    if (job.done && !job.error && !job.cancelled) {
+      state.loggedIn = true;
+      state.loginBlocked = false;
+      state.user = job.user || state.user || {};
+      hideLoginOverlay();
+      showRelogin(false);
+      updateAccountBadge();
+      await refreshState();
+      await loadCourses(false);
+      renderAll();
+      return;
+    }
+    finalLoginFailure(job.error || '登录失败');
+  }
+
+  function showLoginPrompt(job) {
+    if (state.loginBlocked) {
+      return;
+    }
+    const text = els['i-login-overlay-text'];
+    if (text) {
+      const events = Array.isArray(job.events) ? job.events : [];
+      const reason = (job.error || job.message || (events.length
+        ? events[events.length - 1].message : '')).trim();
+      text.textContent = '自动登录失败' + (reason ? '（' + reason + '）' : '')
+        + '。是否在弹出的浏览器窗口中完成登录？';
+    }
+    showRelogin(false);
+    setAccountStatus('需要登录', 'warn');
+    if (els['i-login-overlay']) {
+      els['i-login-overlay'].classList.remove('hidden');
+    }
+  }
+
+  function hideLoginOverlay() {
+    if (els['i-login-overlay']) {
+      els['i-login-overlay'].classList.add('hidden');
+    }
+  }
+
+  async function acceptVisibleLogin() {
+    hideLoginOverlay();
+    try {
+      await startLoginJob('visible');
+    } catch (error) {
+      finalLoginFailure(error.message);
+    }
+  }
+
+  function declineVisibleLogin() {
+    hideLoginOverlay();
+    finalLoginFailure('你选择了暂不登录。');
+  }
+
+  function finalLoginFailure(message) {
+    state.loggedIn = false;
+    state.loginBlocked = true;
+    state.loginJob = state.loginJob || {};
+    state.loginJob.running = false;
+    hideLoginOverlay();
+    showRelogin(true);
+    setAccountStatus('登录失败', 'bad');
+    if (els['i-log-lines']) {
+      els['i-log-lines'].appendChild(node('div', 'log-line error',
+        '[' + new Date().toLocaleTimeString() + '] ' + message));
+    }
+    App.toast(message, 'error');
+    renderAll();
+  }
+
+  async function relogin() {
+    state.loginBlocked = false;
+    state.autoTried = false;
+    showRelogin(false);
+    await beginAutoLogin();
+  }
+
+  // ------------------------------------------------------------------ 课程
+  async function loadCourses(showToast) {
+    if (!state.loggedIn) {
+      return;
+    }
+    if (els['i-course-list']) {
+      els['i-course-list'].innerHTML = '';
+      els['i-course-list'].appendChild(node('p', 'muted', '正在读取课程…'));
+    }
+    try {
+      const data = await App.callOk('load_courses');
+      state.courses = data.courses || [];
+      state.user = data.user || state.user;
+      updateAccountBadge();
+      renderCourses();
+      if (showToast) {
+        App.toast('课程列表已刷新', 'success');
+      }
+    } catch (error) {
+      appendLog('error', '获取课程失败：' + error.message);
+      if (!state.autoTried) {
+        state.loggedIn = false;
+        await beginAutoLogin();
+      } else {
+        finalLoginFailure('获取课程失败：' + error.message);
+      }
+    }
+  }
+
+  async function selectCourse(termId) {
+    if (jobRunning()) {
+      App.toast('任务运行中，暂不能切换课程', 'warn');
+      return;
+    }
+    renderTaskPlaceholder('正在读取课程任务…');
+    try {
+      const data = await App.callOk('select_course', { term_id: Number(termId) });
+      state.course = data;
+      state.types = data.types || [];
+      state.checked = new Map();
+      state.job = null;
+      state.jobId = '';
+      state.percentShown = new Map();
+      state.activeType = chooseDefaultType();
+      renderAll();
+      if ((data.answer_sync || {}).running) {
+        scheduleSyncPoll();
+      }
+    } catch (error) {
+      renderTaskPlaceholder('读取课程任务失败');
+      App.toast('读取课程任务失败：' + error.message, 'error');
+    }
+  }
+
+  function chooseDefaultType() {
+    const types = state.types || [];
+    if (!types.length) {
+      return '';
+    }
+    const preferred = types.find((item) => item.kind === '视频' && item.pending > 0);
+    if (preferred) {
+      return preferred.kind;
+    }
+    const pending = types.find((item) => item.pending > 0);
+    return (pending || types[0]).kind;
+  }
+
+  function renderAll() {
+    renderCourses();
+    renderCourse();
+    renderTypes();
+    renderTasks();
+    updateSelectionUI();
+    renderJob(state.job);
+    renderLogs();
+  }
+
+  function renderCourses() {
+    const host = els['i-course-list'];
+    if (!host) {
+      return;
+    }
+    host.innerHTML = '';
+    if (!state.loggedIn) {
+      host.appendChild(node('p', 'muted', '登录后可选择课程。'));
+      return;
+    }
+    if (!state.courses.length) {
+      host.appendChild(node('p', 'muted', '暂无课程，点击“刷新”。'));
+      return;
+    }
+    state.courses.forEach((course) => {
+      const button = node('button', 'course-item');
+      button.type = 'button';
+      button.dataset.termId = String(course.term_id);
+      const title = node('span', '', course.name || ('课程 ' + course.term_id));
+      const pending = Number((course.summary || {}).pending || 0);
+      const sub = node('span', 'course-sub',
+        (course.school || '') + (course.is_spoc ? ' · SPOC' : ' · MOOC')
+        + (pending ? ' · 待办 ' + pending : ''));
+      button.appendChild(title);
+      button.appendChild(sub);
+      if (state.course && state.course.course
+          && Number(state.course.course.term_id) === Number(course.term_id)) {
+        button.classList.add('active');
+      }
+      button.addEventListener('click', () => selectCourse(course.term_id));
+      host.appendChild(button);
+    });
+  }
+
+  function renderCourse() {
+    if (!els['i-course-title'] || !els['i-course-meta']) {
+      return;
+    }
+    if (!state.course || !state.course.course) {
+      els['i-course-title'].textContent = '任务';
+      els['i-course-meta'].textContent = '';
+      return;
+    }
+    const course = state.course.course;
+    els['i-course-title'].textContent = course.name || '任务';
+    const catalog = state.course.catalog || {};
+    els['i-course-meta'].textContent = [
+      course.school || '',
+      course.is_spoc ? 'SPOC' : 'MOOC',
+      catalog.available ? '题库已收录' : '题库未收录',
+    ].filter(Boolean).join(' · ');
+  }
+
+  function renderTypes() {
+    const host = els['i-type-rail'];
+    if (!host) {
+      return;
+    }
+    host.innerHTML = '';
+    const types = state.types || [];
+    if (!types.length) {
+      host.appendChild(node('p', 'muted', '暂无'));
+      return;
+    }
+    types.forEach((item) => {
+      const button = node('button', 'ic-type-item');
+      button.type = 'button';
+      button.dataset.kind = item.kind;
+      button.appendChild(node('span', '', item.kind));
+      button.appendChild(node('span', 'ic-type-count',
+        String(item.pending) + '/' + String(item.total)));
+      if (item.kind === state.activeType) {
+        button.classList.add('active');
+      }
+      button.addEventListener('click', () => {
+        state.activeType = item.kind;
+        renderTypes();
+        renderTasks();
+        updateSelectionUI();
+      });
+      host.appendChild(button);
+    });
+  }
+
+  function tasksOfKind(kind) {
+    if (!state.course || !state.course.course) {
+      return [];
+    }
+    return (state.course.course.tasks || []).filter((task) => task.type === kind);
+  }
+
+  function tasksOfActiveType() {
+    return tasksOfKind(state.activeType);
+  }
+
+  function selectedSet(kind) {
+    if (!state.checked.has(kind)) {
+      const set = new Set();
+      tasksOfKind(kind).forEach((task) => {
+        if (task.status !== 'done') {
+          set.add(task.key);
+        }
+      });
+      state.checked.set(kind, set);
+    }
+    return state.checked.get(kind);
+  }
+
+  function renderTaskPlaceholder(message) {
+    const body = els['i-task-body'];
+    if (!body) {
+      return;
+    }
+    body.innerHTML = '';
+    const row = node('tr');
+    const cell = node('td', 'table-empty', message);
+    cell.colSpan = 3;
+    row.appendChild(cell);
+    body.appendChild(row);
+  }
+
+  function renderTasks() {
+    const body = els['i-task-body'];
+    if (!body) {
+      return;
+    }
+    body.innerHTML = '';
+    if (!state.course || !state.course.course) {
+      renderTaskPlaceholder(state.loggedIn ? '请先选择课程' : '登录后选择课程');
+      return;
+    }
+    const tasks = tasksOfActiveType();
+    if (!tasks.length) {
+      renderTaskPlaceholder('该类型下没有任务');
+      return;
+    }
+    const checked = selectedSet(state.activeType);
+    tasks.forEach((task) => {
+      const row = node('tr');
+      row.dataset.key = task.key;
+      row.dataset.kind = task.type;
+
+      const checkCell = node('td', 'check-col');
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = checked.has(task.key);
+      checkbox.disabled = task.status === 'done' || jobRunning();
+      checkbox.addEventListener('change', () => {
+        if (checkbox.checked) {
+          checked.add(task.key);
+        } else {
+          checked.delete(task.key);
+        }
+        updateSelectionUI();
+      });
+      checkCell.appendChild(checkbox);
+      row.appendChild(checkCell);
+
+      const nameCell = node('td');
+      nameCell.appendChild(node('span', 'ic-task-name', task.name || '—'));
+      const parts = [task.type || '', task.chapter || '', task.lesson || '']
+        .filter(Boolean);
+      nameCell.appendChild(node('span', 'ic-task-sub', parts.join(' · ')));
+      row.appendChild(nameCell);
+
+      const statusCell = node('td');
+      renderTaskStatus(statusCell, task, findJobTask(task.key));
+      row.appendChild(statusCell);
+      body.appendChild(row);
+    });
+  }
+
+  function findJobTask(key) {
+    if (!state.job || !Array.isArray(state.job.tasks)) {
+      return null;
+    }
+    return state.job.tasks.find((item) => item.key === key) || null;
+  }
+
+  function statusPill(kind, text, title) {
+    const pill = node('span', 'pill ' + kind, text);
+    if (title) {
+      pill.title = title;
+    }
+    return pill;
+  }
+
+  function renderTaskStatus(cell, task, jobTask) {
+    cell.innerHTML = '';
+    if (jobTask) {
+      if (jobTask.status === '等待队列') {
+        cell.appendChild(statusPill('queued', '等待队列'));
+        return;
+      }
+      if (jobTask.status === '进行中') {
+        const pill = node('span', 'pill progress-pill');
+        const fill = node('span', 'pill-progress-fill');
+        const text = node('span', 'pill-progress-text', jobTask.percent_text || '0%');
+        pill.appendChild(fill);
+        pill.appendChild(text);
+        const shown = state.percentShown.get(task.key);
+        const now = Date.now();
+        const percent = Number(jobTask.percent || 0);
+        if (!shown || now - shown.at >= PERCENT_INTERVAL_MS || percent >= 100) {
+          state.percentShown.set(task.key, { at: now, percent: percent });
+          fill.style.width = String(Math.max(0, Math.min(100, percent))) + '%';
+          text.textContent = Math.round(percent) + '%';
+        } else {
+          fill.style.width = String(Math.max(0, Math.min(100, shown.percent))) + '%';
+          text.textContent = Math.round(shown.percent) + '%';
+        }
+        cell.appendChild(pill);
+        return;
+      }
+      if (jobTask.status === '完成') {
+        cell.appendChild(statusPill('done-pill', '完成'));
+        return;
+      }
+      if (jobTask.status === '失败') {
+        cell.appendChild(statusPill('failed-pill', '失败', jobTask.error || ''));
+        return;
+      }
+      if (jobTask.status === '已取消') {
+        cell.appendChild(statusPill('todo-pill', '已取消'));
+        return;
+      }
+      if (jobTask.status === '已跳过') {
+        cell.appendChild(statusPill('todo-pill', '已跳过', jobTask.message || ''));
+        return;
+      }
+    }
+    if (task.status === 'done') {
+      cell.appendChild(statusPill('done-pill', '完成'));
+    } else {
+      cell.appendChild(statusPill('todo-pill',
+        task.status === 'overdue' ? '未完成（已逾期）' : '未完成'));
+    }
+  }
+
+  function updateSelectionUI() {
+    const checked = state.checked.get(state.activeType) || new Set();
+    const tasks = tasksOfActiveType();
+    const selectable = tasks.filter((task) => task.status !== 'done');
+    if (els['i-select-all']) {
+      const checkedCount = selectable.filter((task) => checked.has(task.key)).length;
+      els['i-select-all'].checked = selectable.length > 0
+        && checkedCount === selectable.length;
+      els['i-select-all'].indeterminate = checkedCount > 0
+        && checkedCount < selectable.length;
+      els['i-select-all'].disabled = jobRunning() || selectable.length === 0;
+    }
+    const total = countChecked();
+    if (els['i-selection-hint']) {
+      els['i-selection-hint'].textContent = '已选 ' + total + ' 个任务';
+    }
+    if (els['i-start']) {
+      els['i-start'].disabled = total === 0 || jobRunning() || !state.loggedIn;
+    }
+  }
+
+  function countChecked() {
+    let total = 0;
+    state.checked.forEach((set) => {
+      total += set.size;
+    });
+    return total;
+  }
+
+  function toggleSelectAll() {
+    const checked = selectedSet(state.activeType);
+    const tasks = tasksOfActiveType().filter((task) => task.status !== 'done');
+    if (els['i-select-all'] && els['i-select-all'].checked) {
+      tasks.forEach((task) => checked.add(task.key));
+    } else {
+      tasks.forEach((task) => checked.delete(task.key));
+    }
+    renderTasks();
+    updateSelectionUI();
+  }
+
+  function selectUnsolved() {
+    selectedSet(state.activeType);
+    const checked = state.checked.get(state.activeType);
+    tasksOfActiveType().forEach((task) => {
+      if (task.status !== 'done') {
+        checked.add(task.key);
+      }
+    });
+    renderTasks();
+    updateSelectionUI();
+  }
+
+  // ------------------------------------------------------------------ 题库同步
+  async function startAnswerSync() {
+    const course = state.course && state.course.course;
+    if (!course) {
+      App.toast('请先选择课程', 'warn');
+      return;
+    }
+    try {
+      const data = await App.callOk('start_answer_sync', {
+        term_id: Number(course.term_id),
+        force: false,
+      });
+      updateSyncUI(data.sync || {});
+      scheduleSyncPoll();
+    } catch (error) {
+      App.toast(error.message, 'error');
+    }
+  }
+
+  function scheduleSyncPoll() {
+    clearTimer('syncTimer');
+    state.syncTimer = window.setTimeout(pollSync, SYNC_POLL_MS);
+  }
+
+  async function pollSync() {
+    clearTimer('syncTimer');
+    if (App.active !== PAGE_NAME) {
+      return;
+    }
+    try {
+      const data = await App.callOk('get_answer_sync');
+      updateSyncUI(data);
+      if (data.running) {
+        scheduleSyncPoll();
+      }
+    } catch (error) {
+      // 同步状态失败不打断主流程。
+    }
+  }
+
+  function updateSyncUI(sync) {
+    if (!sync) {
+      return;
+    }
+    const message = els['i-sync-message'];
+    const bar = els['i-sync-bar'];
+    if (message) {
+      if (sync.running) {
+        message.textContent = '题库同步 ' + (sync.current || 0) + '/' + (sync.total || 0);
+      } else if (sync.error) {
+        message.textContent = '同步失败';
+        message.title = sync.error;
+      } else if (sync.done) {
+        message.textContent = '同步完成 ' + (sync.cached || 0) + ' 项';
+      } else {
+        message.textContent = state.course ? '可同步当前课程题库' : '题库同步';
+      }
+    }
+    if (bar) {
+      const total = Number(sync.total || 0);
+      const current = Number(sync.current || 0);
+      bar.style.width = String(total > 0 ? Math.min(100, current * 100 / total) : 0) + '%';
+    }
+  }
+
+  // ------------------------------------------------------------------ 开始完成
+  function jobRunning() {
+    return Boolean(state.job && state.job.running);
+  }
+
+  function requestStart() {
+    const keys = [];
+    state.checked.forEach((set) => {
+      set.forEach((key) => keys.push(key));
+    });
+    if (!keys.length) {
+      App.toast('请先选择任务', 'warn');
+      return;
+    }
+    if (els['i-warning-detail']) {
+      const settings = state.settings || {};
+      els['i-warning-detail'].textContent =
+        '将处理 ' + keys.length + ' 个任务；最大并行数 '
+        + (settings.workers || 1) + '；自动提交测验：'
+        + (settings.submit_quizzes ? '开' : '关') + '；自动发布讨论：'
+        + (settings.publish_discussions ? '开' : '关') + '。';
+    }
+    if (els['i-warning-modal']) {
+      els['i-warning-modal'].classList.remove('hidden');
+    }
+  }
+
+  function hideWarning() {
+    if (els['i-warning-modal']) {
+      els['i-warning-modal'].classList.add('hidden');
+    }
+  }
+
+  async function confirmStart() {
+    hideWarning();
+    const keys = [];
+    state.checked.forEach((set) => {
+      set.forEach((key) => keys.push(key));
+    });
+    const course = state.course && state.course.course;
+    if (!course || !keys.length) {
+      return;
+    }
+    try {
+      const data = await App.callOk('start_completion_job', {
+        term_id: Number(course.term_id),
+        task_keys: keys,
+      });
+      state.jobId = data.job_id;
+      state.job = data;
+      state.percentShown = new Map();
+      renderJob(data);
+      renderTasks();
+      updateSelectionUI();
+      scheduleJobPoll();
+    } catch (error) {
+      App.toast(error.message, 'error');
+    }
+  }
+
+  function scheduleJobPoll() {
+    clearTimer('jobTimer');
+    state.jobTimer = window.setTimeout(pollJob, POLL_MS);
+  }
+
+  async function pollJob() {
+    clearTimer('jobTimer');
+    if (App.active !== PAGE_NAME) {
+      return;
+    }
+    try {
+      const data = await App.callOk('get_completion_job', { job_id: state.jobId });
+      state.job = data;
+      renderJob(data);
+      renderTasks();
+      updateSelectionUI();
+      if (data.running) {
+        scheduleJobPoll();
+      } else if (data.done) {
+        const result = data.result || {};
+        App.toast('任务结束：完成 ' + (result.done || 0) + '，失败 '
+          + (result.failed || 0) + '，跳过 ' + (result.skipped || 0), 'info');
+        await refreshCourseState();
+      }
+    } catch (error) {
+      App.toast('读取任务状态失败：' + error.message, 'error');
+    }
+  }
+
+  async function refreshCourseState() {
+    try {
+      const data = await App.callOk('get_course');
+      state.course = data;
+      state.types = data.types || [];
+      state.checked = new Map();
+      state.percentShown = new Map();
+      renderAll();
+    } catch (error) {
+      // 刷新失败保留当前视图。
+    }
+  }
+
+  async function cancelJob() {
+    try {
+      await App.callOk('cancel_completion_job', { job_id: state.jobId });
+      App.toast('已请求取消任务', 'warn');
+    } catch (error) {
+      App.toast(error.message, 'error');
+    }
+  }
+
+  function renderJob(job) {
+    const inline = els['i-job-inline'];
+    if (!inline) {
+      return;
+    }
+    if (!job || !job.job_id) {
+      inline.classList.add('hidden');
+      return;
+    }
+    inline.classList.remove('hidden');
+    if (els['i-job-phase']) {
+      const labels = {
+        idle: '准备中', starting: '准备中', login: '登录', db: '题库',
+        video: '刷课', document: '刷文档', quiz: '刷题', discussion: '讨论',
+        serial: '处理中', verifying: '刷新状态', done: '完成',
+        error: '失败', cancelled: '已取消',
+      };
+      els['i-job-phase'].textContent = labels[job.phase] || job.phase || '处理中';
+      els['i-job-phase'].className = 'pill '
+        + (job.phase === 'error' ? 'failed-pill'
+          : (job.phase === 'done' ? 'done-pill'
+            : (job.phase === 'cancelled' ? 'todo-pill' : 'info')));
+    }
+    if (els['i-job-message']) {
+      els['i-job-message'].textContent = job.message || '';
+      els['i-job-message'].title = job.error || job.message || '';
+    }
+    if (els['i-job-bar']) {
+      const total = Number(job.total || 0);
+      const current = Number(job.current || 0);
+      els['i-job-bar'].style.width = String(
+        total > 0 ? Math.min(100, current * 100 / total) : 0
+      ) + '%';
+    }
+    if (els['i-cancel-job']) {
+      els['i-cancel-job'].disabled = !job.running;
+      els['i-cancel-job'].classList.toggle('hidden', !job.running);
+    }
+  }
+
+  // ------------------------------------------------------------------ 日志
+  function toggleLog() {
+    state.logOpen = !state.logOpen;
+    if (els['i-log-panel']) {
+      els['i-log-panel'].classList.toggle('hidden', !state.logOpen);
+    }
+    if (state.logOpen) {
+      renderLogs();
+    }
+  }
+
+  function hideLog() {
+    state.logOpen = false;
+    if (els['i-log-panel']) {
+      els['i-log-panel'].classList.add('hidden');
+    }
+  }
+
+  function appendLog(level, message) {
+    if (!els['i-log-lines']) {
+      return;
+    }
+    els['i-log-lines'].appendChild(node('div', 'log-line ' + level,
+      '[' + new Date().toLocaleTimeString() + '] ' + message));
+    els['i-log-lines'].scrollTop = els['i-log-lines'].scrollHeight;
+  }
+
+  function renderLogs() {
+    const host = els['i-log-lines'];
+    if (!host) {
+      return;
+    }
+    const jobEvents = state.job && Array.isArray(state.job.events)
+      ? state.job.events : [];
+    const loginEvents = state.loginJob && Array.isArray(state.loginJob.events)
+      ? state.loginJob.events : [];
+    const events = jobEvents.length ? jobEvents : loginEvents;
+    if (!events.length) {
+      return;
+    }
+    host.innerHTML = '';
+    events.slice(-120).forEach((event) => {
+      host.appendChild(node('div', 'log-line ' + (event.level || 'info'),
+        '[' + (event.time || '') + '] ' + (event.message || '')));
+    });
+    host.scrollTop = host.scrollHeight;
+  }
+
+  App.registerPage(PAGE_NAME, {
+    init: init,
+    onActivate: onActivate,
+    onDeactivate: onDeactivate,
+  });
+})();

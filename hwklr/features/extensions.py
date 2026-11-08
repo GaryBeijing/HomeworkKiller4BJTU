@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-03 17:20
+# 最后更新: 2026-11-08 14:30
 # 文件名: extensions.py
 # 主要用途: 第三方扩展的扫描、校验、导入、启用状态管理，以及插件工程模板与插件发布包构建。
-# 文件版本: 3.0.0
+# 文件版本: 4.0.0
 """第三方扩展与插件工程支持。
 
 扩展目录结构（zip 解压后）：::
@@ -42,7 +43,7 @@ from hwklr.config import load_config, update_config
 from hwklr.features.base import Feature
 from hwklr.features.versions import format_plugin_version
 
-__version__ = "3.0.0"
+__version__ = "4.0.0"
 __author__ = "Gary"
 __all__ = [
     "ExtensionError",
@@ -74,6 +75,7 @@ _MODULE_SEQ: int = 0
 _OFFICIAL_SECTIONS: Final[dict[str, str]] = {
     "高铁纵横": "hsr",
     "C程序设计": "c_programming",
+    "中国大学慕课": "icourse",
     "构建": "build",
 }
 

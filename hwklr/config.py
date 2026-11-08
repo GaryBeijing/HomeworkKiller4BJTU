@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
-# 最后更新: 2026-11-08 13:26
+# 最后更新: 2026-11-08 14:30
 # 文件名: config.py
 # 主要用途: 统一读写 config.json；按设置分组存放账号、密码、AI、构建与第三方扩展配置，并解析源码/虚拟环境/打包后的程序根目录。
-# 文件版本: 3.1.0
+# 文件版本: 4.0.0
 """项目配置读写。
 
 配置文件固定位于**项目根目录**（``main.py`` 同级）的 ``config.json``。
@@ -20,7 +20,7 @@ import threading
 from pathlib import Path
 from typing import Any, Final
 
-__version__ = "3.1.0"
+__version__ = "4.0.0"
 __all__ = [
     "DEFAULT_CONFIG",
     "app_root",
@@ -52,6 +52,19 @@ DEFAULT_CONFIG: Final[dict[str, Any]] = {
         "last_course_id": None,
         "enabled": True,
     },
+    "icourse": {
+        "account": "",
+        "password": "",
+        "account_type": "auto",
+        "workers": 1,
+        "video_rate": 2.0,
+        "submit_quizzes": False,
+        "publish_discussions": False,
+        "answer_ttl_hours": 24,
+        "auto_sync_answers": True,
+        "download_documents": True,
+        "enabled": True,
+    },
     "build": {
         "output_dir": "",
         "dev_format": "executable",
@@ -61,6 +74,7 @@ DEFAULT_CONFIG: Final[dict[str, Any]] = {
         "features": {
             "高铁纵横": "release",
             "C程序设计": "release",
+            "中国大学慕课": "release",
             "构建": "dev",
         },
     },

@@ -810,6 +810,26 @@ item["optionsCodeList"] = None
 2. `lookup_item` 从"全扫"改为"先缩候选集，再算相似度"。
 3. 或引入 `rapidfuzz` 替代 `difflib`（但会新增依赖，需评估"延迟导入"与打包体积）。
 
+#### 9.8 中国大学慕课题库（4.0.0）
+
+`hwklr/features/icourse/` 使用独立的数据链路，不与 HSR 的 `Bank` 共用：
+
+```
+hwklr/db/icourse_sources.json          ← 422 门课程目录（id=0 的记录源）
+        ↓ IcourseDb.fetch/refresh
+db/icourse<termId>.json                ← 课程元信息 + tests{tid:{meta,questions}}
+        ↓ AnswerIndex.from_questions
+QuizAction / PopupQuiz                 ← 按题干/选项文本匹配答案
+```
+
+- `IcourseDb` 的 `fetch(0)` 读取内置目录；`fetch(termId)` 只抓课程元信息与 `testList`；题目由 `sync_test` 按测验逐个抓取。
+- `refresh_course` / `sync_test` 在网络请求完成后再短暂加锁合并落盘，避免 `DbProvider.load` 的 `RLock` 在长请求期间超过 `DB_TIMEOUT`。
+- 题目缓存默认 24h；`sync_test` 命中 TTL 不发请求；测试未收录时记录 `error` 与 6h `retry_after`。
+- 禁止调用 GinsMooc SSE `/api/mooc/course/refresh/{cid}`（有服务端副作用）。
+- 课程不在目录中或为 SPOC 时，测验在 UI/job 中被标记为不支持，视频/文档/讨论不受影响。
+- 前端资源位于 `hwklr/UI/tagview/view_data/icourse/`，job 轮询 800ms，百分比文字节流 3000ms（对应原型 `STATUS_INTERVAL_SECONDS`）。
+- 4.0.0 起标签打开即自动登录：保存 Cookie → 本机 Cookie → 设置账号（无头）；失败时在标签内提示窗口登录，拒绝/失败后仅显示“重新登陆”。
+
 ---
 
 ## 10. 高铁纵横：接口协议与验证码逆向

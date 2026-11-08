@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-01 12:40
-# 最后更新: 2026-11-03 22:10
+# 最后更新: 2026-11-08 14:30
 # 文件名: manifest.py
 # 主要用途: 登记官方功能模块与标签资源目录，供 UI 注册、构建导出与开发标记共同使用。
-# 文件版本: 3.0.0
+# 文件版本: 4.0.0
 """官方功能清单。
 
 ``OFFICIAL_FEATURES`` 是新增功能时必须同步维护的唯一清单：
@@ -16,7 +16,7 @@ from __future__ import annotations
 import importlib
 from typing import Any, Final, NamedTuple
 
-__version__ = "3.0.0"
+__version__ = "4.0.0"
 __author__ = "Gary"
 __all__ = [
     "FEATURE_BY_NAME",
@@ -60,6 +60,13 @@ OFFICIAL_FEATURES: Final[tuple[FeatureSpec, ...]] = (
         class_name="CProgrammingFeature",
         view_dir="cprog",
         description="CITEL 课程题目辅助：启发模式逐步讲解，题解模式生成并提交参考实现。",
+    ),
+    FeatureSpec(
+        name="中国大学慕课",
+        module="hwklr.features.icourse",
+        class_name="IcourseFeature",
+        view_dir="icourse",
+        description="登录中国大学慕课，批量完成课程视频、文档、测验与讨论任务。",
     ),
     FeatureSpec(
         name="构建",

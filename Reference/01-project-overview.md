@@ -10,7 +10,7 @@
 
 - [1. 项目介绍](#1-项目介绍)
   - 1.1 一句话定位
-  - 1.2 它实际提供的三个功能
+  - 1.2 它实际提供的四个功能
   - 1.3 目标用户与使用边界
   - 1.4 不是什么
 - [2. 技术选型](#2-技术选型)
@@ -39,14 +39,15 @@
 
 **面向北京交通大学学生的桌面学习辅助工具**：一个 Python 后端 + 本地 Web UI 的多标签页应用，把"高铁答题系统自动作答"和"C 语言程序设计课程作业辅助（启发式讲解 / 自动题解）"封装成可点击的桌面软件，并自带一键打包导出能力。
 
-### 1.2 它实际提供的三个功能
+### 1.2 它实际提供的四个功能
 
-三个功能在代码里是三个平级的 `Feature` 实现，也对应 UI 里三个标签页：
+四个功能在代码里是四个平级的 `Feature` 实现，也对应 UI 里四个标签页：
 
 | 标签页 | 实现 | 一句话职责 | 联网对象 |
 |---|---|---|---|
 | **高铁纵横** | `hwklr/features/hsr/` | 登录高铁答题系统，用内置题库（263 题）按**选项原文**匹配答案，自动答题并提交 | `http://59.64.5.158/prod-api`（明文 HTTP） |
 | **C程序设计** | `hwklr/features/cprog/` | 登录 CITEL（Moodle）读课程题目；**启发模式**给六段式讲解让人自己写码，**题解模式**让 AI 直接生成完整 C 代码并自动提交、按判题结果迭代修正 | `https://citel.bjtu.edu.cn/mlsv3` + OpenAI 兼容 API |
+| **中国大学慕课** | `hwklr/features/icourse/` | 登录中国大学 MOOC，选择课程后批量完成视频/文档/测验/讨论；题库答案来自 GinsMooc 并缓存到外部 `db/` | `https://www.icourse163.org` + `https://ginnnnnn.top/api` + 系统 Edge（Playwright） |
 | **构建** | `hwklr/features/build/` | 把当前源码导出为「PyInstaller 目录版可执行文件」或「python-embed + zip 免安装包」，支持功能裁剪、图标、名称、四段版本号 | 阿里云镜像（下载 python-embed） |
 
 另有两个**框架级**标签页，不是 `OFFICIAL_FEATURES` 的成员，由 `view_data/__init__.py` 硬编码追加：
@@ -148,7 +149,11 @@ hwklr/
 │   ├── provider.py                          DbProvider、DB_TIMEOUT、外部 db/ 路径与原子写入
 │   ├── manager.py                           DbManager、PROVIDER_SPECS、进程级单例
 │   ├── hsrdb.py                             HSRDb：高铁题库 provider
-│   └── hsr_sources.json                     高铁内置题库源描述
+│   ├── hsr_sources.json                     高铁内置题库源描述
+│   ├── icoursedb.py                         IcourseDb：中国大学慕课题库 provider（id=0 目录 + 课程记录）
+│   ├── icourse_models.py                    题库纯模型 / 题目归一化 / AnswerIndex
+│   ├── icourse_client.py                    GinsMooc HTTP 客户端
+│   └── icourse_sources.json                 422 门慕课课程目录（一次性爬取）
 │
 ├── features/                                ── 功能层 ──
 │   ├── __init__.py                 66 行    统一导出 + PEP 562 惰性 __getattr__（按需加载可选功能）
@@ -164,6 +169,18 @@ hwklr/
 │   │   ├── bank.py                659 行    Bank：题干归一化、精确/模糊匹配、答案→选项编码解析、多格式题库导入
 │   │   ├── aes.py                 149 行    AES-128-ECB + PKCS7（复刻 crypto-js），含 FIPS-197 自检
 │   │   └── captcha.py             130 行    滑块拼图匹配（Pillow ImageChops 差值最小化）
+│   ├── icourse/                             ── 中国大学慕课（4.0.0）──
+│   │   ├── __init__.py                      IcourseFeature：动作分发 / 设置 / 登录与任务 job
+│   │   ├── models.py                        课程/任务模型与完成判定（无 CLI 编号）
+│   │   ├── courses.py                       课程列表、term 树与学习状态合并
+│   │   ├── client.py                        icourse163 RPC 客户端
+│   │   ├── login_service.py                 账号/窗口/无头/Cookie 登录编排
+│   │   ├── session_store.py                 会话持久化
+│   │   ├── answer_store.py / answer_sync.py 题库适配与后台同步
+│   │   ├── job.py                           完成任务阶段编排与快照
+│   │   ├── pages/icourse163.py              URL / 选择器 / SPA 导航 / 视频脚本
+│   │   ├── browser_*.py                     Playwright 会话、登录与 Cookie 导入
+│   │   └── actions/                         视频 / 文档 / 测验 / 讨论 / 弹题 / worker
 │   ├── cprog/                               ── C 程序设计 ──
 │   │   ├── __init__.py           1412 行    CProgrammingFeature：状态机、启发分析、提交、**题解后台任务**
 │   │   ├── ai.py                  567 行    AIClient（严格 JSON）+ 两套提示词 + 思考等级/预算升级
