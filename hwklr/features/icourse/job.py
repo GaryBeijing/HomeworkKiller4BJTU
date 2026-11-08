@@ -3,7 +3,7 @@
 # 编写日期: 2026-11-08 14:30
 # 文件名: job.py
 # 主要用途: 编排“开始完成”后台任务：视频并发、文档/测验/讨论串行、进度快照与取消。
-# 文件版本: 4.0.0
+# 文件版本: 4.0.1
 """完成任务的 job 编排。"""
 from __future__ import annotations
 
@@ -95,6 +95,11 @@ class CompletionJob:
                 "started_at": 0.0,
                 "finished_at": 0.0,
                 "result": {},
+                "score": None,
+                "total_score": None,
+                "score_text": "",
+                "full_score": None,
+                "screenshot": "",
             }
         self._snapshot: dict[str, Any] = {
             "job_id": self.job_id,
@@ -196,16 +201,27 @@ class CompletionJob:
         message: str = "",
         error: str = "",
         result: dict[str, Any] | None = None,
+        score: float | None = None,
+        total_score: float | None = None,
+        score_text: str = "",
+        full_score: bool | None = None,
+        screenshot: str = "",
     ) -> None:
+        completed: bool = status in ("完成", "已发布", "已填写")
         self._set_task(
             task,
             status=status,
-            percent=100.0 if status == "完成" else 0.0,
-            percent_text="100%" if status == "完成" else "0%",
+            percent=100.0 if completed else 0.0,
+            percent_text="100%" if completed else "0%",
             message=message,
             error=error,
             finished_at=time.time(),
             result=result or {},
+            score=score,
+            total_score=total_score,
+            score_text=score_text,
+            full_score=full_score,
+            screenshot=screenshot,
         )
         self._event(
             "error" if status == "失败" else "info",
@@ -288,7 +304,9 @@ class CompletionJob:
             self._event("warn", "刷新课程状态失败：%s" % exc)
 
         done_count: int = sum(
-            1 for state in self._task_states.values() if state["status"] == "完成"
+            1
+            for state in self._task_states.values()
+            if state["status"] in ("完成", "已发布", "已填写")
         )
         failed_count: int = sum(
             1 for state in self._task_states.values() if state["status"] == "失败"
@@ -487,31 +505,79 @@ class CompletionJob:
                     apply=True,
                     refresh_db=bool(self._settings.get("refresh_quiz_db", False)),
                 )
-                self._finish_task(
-                    task,
-                    "完成",
-                    message=(
-                        "已提交" if result.submitted else "已填写，未提交"
-                    ),
-                    result={
-                        "url": result.url,
-                        "matched": result.matched,
-                        "applied": result.applied,
-                        "submitted": result.submitted,
-                    },
-                )
+                screenshot: str = str(getattr(result, "screenshot", "") or "")
+                score: float | None = getattr(result, "score", None)
+                total_score: float | None = getattr(result, "total_score", None)
+                score_text: str = str(getattr(result, "score_text", "") or "")
+                full_score: bool | None = getattr(result, "full_score", None)
+                base_result: dict[str, Any] = {
+                    "url": result.url,
+                    "matched": result.matched,
+                    "applied": result.applied,
+                    "submitted": result.submitted,
+                    "screenshot": screenshot,
+                }
+                if submit and not result.submitted:
+                    self._finish_task(task, "失败", error="测验提交失败")
+                elif result.submitted:
+                    self._finish_task(
+                        task,
+                        "完成",
+                        message="已提交",
+                        result={
+                            **base_result,
+                            "score": score,
+                            "total_score": total_score,
+                            "score_text": score_text,
+                            "full_score": full_score,
+                        },
+                        score=score,
+                        total_score=total_score,
+                        score_text=score_text,
+                        full_score=full_score,
+                        screenshot=screenshot,
+                    )
+                else:
+                    self._finish_task(
+                        task,
+                        "已填写",
+                        message="已填写，未提交",
+                        result=base_result,
+                        screenshot=screenshot,
+                    )
                 return
             if task.kind == DISCUSSION_KIND:
                 publish: bool = bool(self._settings.get("publish_discussions", False))
                 result = DiscussionAction(ctx).run(
                     self.course, task, submit=publish, silent=False
                 )
-                self._finish_task(
-                    task,
-                    "完成",
-                    message="已发布" if result.submitted else "已填写，未发布",
-                    result={"url": result.url, "submitted": result.submitted},
-                )
+                screenshot = str(getattr(result, "screenshot", "") or "")
+                if publish and not result.submitted:
+                    self._finish_task(task, "失败", error="讨论发布失败")
+                elif result.submitted:
+                    self._finish_task(
+                        task,
+                        "已发布",
+                        message="已发布",
+                        result={
+                            "url": result.url,
+                            "submitted": True,
+                            "screenshot": screenshot,
+                        },
+                        screenshot=screenshot,
+                    )
+                else:
+                    self._finish_task(
+                        task,
+                        "已填写",
+                        message="已填写，未发布",
+                        result={
+                            "url": result.url,
+                            "submitted": False,
+                            "screenshot": screenshot,
+                        },
+                        screenshot=screenshot,
+                    )
                 return
             self._finish_task(task, "已跳过", message="暂不支持该任务类型")
         except ActionCancelled as exc:

@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
-# 最后更新: 2026-11-08 13:26
+# 最后更新: 2026-11-08 17:00
 # 文件名: __init__.py
 # 主要用途: 封装 pywebview 核心窗口 WindowView、运行期扩展注册、数据库管理器初始化、关于元信息注册与 JS 桥接对象 BridgeApi。
-# 文件版本: 3.1.0
+# 文件版本: 4.0.1
 """UI 窗口层。
 
 入口只需::
@@ -50,7 +50,7 @@ from .tagview.view_data import (
     unregister_extension_param,
 )
 
-__version__ = "3.0.0"
+__version__ = "4.0.1"
 __author__ = "Gary"
 __all__ = ["BridgeApi", "WindowView"]
 
@@ -58,6 +58,8 @@ _LOGGER: Final[logging.Logger] = logging.getLogger(__name__)
 _UI_DIR: Final[Path] = Path(__file__).resolve().parent
 _PAGE_DATA_DIR: Final[Path] = _UI_DIR / "page_data"
 _VIEW_DATA_DIR: Final[Path] = _UI_DIR / "tagview" / "view_data"
+# 4.0.1 起“构建”固定为倒数第三的标签（构建、设置、关于）。
+_BUILD_NAME: Final[str] = "构建"
 _WINDOW_BACKGROUND: Final[str] = "#2f3ab2"
 
 
@@ -189,9 +191,16 @@ class WindowView:
         # 步骤 3：把各标签的只读设置组注册到设置标签。
         settings_tag: TagView | None = self._tags.get(SETTINGS_NAME)
         if settings_tag is not None:
-            for name in list(self._tags):
-                if name in (SETTINGS_NAME, ABOUT_NAME):
-                    continue
+            group_names: list[str] = [
+                name
+                for name in self._tags
+                if name not in (SETTINGS_NAME, ABOUT_NAME)
+            ]
+            # “构建”的设置板块始终放在最后。
+            if _BUILD_NAME in group_names:
+                group_names.remove(_BUILD_NAME)
+                group_names.append(_BUILD_NAME)
+            for name in group_names:
                 self._register_settings_group(name, self._tags[name])
 
         # 步骤 4：把各功能的关于元信息注册到“关于”页。
@@ -236,10 +245,16 @@ class WindowView:
             if name not in (SETTINGS_NAME, ABOUT_NAME)
             and self._is_feature_enabled(name)
         ]
+        # “构建”始终排在功能标签最后，从而位于 构建 / 设置 / 关于 的倒数第三。
+        if _BUILD_NAME in feature_names:
+            feature_names.remove(_BUILD_NAME)
+            feature_names.append(_BUILD_NAME)
         order: list[str] = feature_names + [SETTINGS_NAME, ABOUT_NAME]
-        # 双重校验：无论注册表如何调整，最后两个标签的位置必须固定。
+        # 双重校验：无论注册表如何调整，最后三个标签的位置必须固定。
         if order[-1] != ABOUT_NAME or order[-2] != SETTINGS_NAME:
             raise RuntimeError("标签顺序不合法：设置必须倒数第二、关于必须最后")
+        if _BUILD_NAME in order and order[-3] != _BUILD_NAME:
+            raise RuntimeError("标签顺序不合法：构建必须倒数第三")
         self._order = order
         self._meta["features"] = [
             {"name": name, "description": self._tags[name].description}

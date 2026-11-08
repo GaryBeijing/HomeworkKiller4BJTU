@@ -1,10 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-11-08 14:30
-  最后更新: 2026-11-08 16:40
+  最后更新: 2026-11-08 17:00
   文件名: icourse.js
   主要用途: “中国大学慕课”标签页逻辑：自动登录、课程选择、任务勾选、批量完成、进度轮询与题库同步。
-  文件版本: 4.0.0
+  文件版本: 4.0.1
 */
 (function () {
   'use strict';
@@ -29,6 +29,7 @@
     jobTimer: null,
     loginJobId: '',
     loginJob: null,
+    loginWaiter: null,
     loginTimer: null,
     syncTimer: null,
     percentShown: new Map(),
@@ -36,6 +37,7 @@
     loginBlocked: false,
     autoTried: false,
     logOpen: false,
+    notifiedKeys: new Set(),
     keydownHandler: null,
   };
 
@@ -55,6 +57,7 @@
   function cacheElements() {
     [
       'i-account-badge', 'i-relogin', 'i-open-settings', 'i-refresh-courses',
+      'i-notice-stack',
       'i-course-list', 'i-sync-message', 'i-sync-answers', 'i-sync-bar',
       'i-course-title', 'i-course-meta', 'i-log-toggle', 'i-type-rail',
       'i-task-body', 'i-select-all', 'i-select-unsolved', 'i-selection-hint',
@@ -135,6 +138,12 @@
     }
     if (state.loginJob && state.loginJob.running) {
       scheduleLoginPoll();
+      setLoadingForLogin(true);
+      await waitForLogin();
+      setLoadingForLogin(false);
+      if (state.loggedIn && !state.courses.length) {
+        await loadCourses(false);
+      }
       return;
     }
     if (state.loggedIn) {
@@ -146,7 +155,10 @@
       return;
     }
     if (!state.loginBlocked) {
-      await beginAutoLogin();
+      await beginAutoLogin(true);
+      if (state.loggedIn && !state.courses.length) {
+        await loadCourses(false);
+      }
     } else {
       showRelogin(true);
       setAccountStatus('登录失败', 'bad');
@@ -158,6 +170,25 @@
     clearTimer('jobTimer');
     clearTimer('loginTimer');
     clearTimer('syncTimer');
+  }
+
+  /**
+   * 全局加载遮罩点击“取消加载”时调用：取消后台登录并回到失败态。
+   * @returns {void}
+   */
+  function onCancelLoading() {
+    if (state.loginJob && state.loginJob.running && state.loginJobId) {
+      App.call('cancel_login_job', { job_id: state.loginJobId }).catch(() => {});
+    }
+    state.loginJob = state.loginJob || {};
+    state.loginJob.running = false;
+    state.loggedIn = false;
+    state.loginBlocked = true;
+    hideLoginOverlay();
+    showRelogin(true);
+    setAccountStatus('登录失败', 'bad');
+    renderAll();
+    resolveLoginWaiter();
   }
 
   function clearTimer(name) {
@@ -248,7 +279,38 @@
   }
 
   // ------------------------------------------------------------------ 自动登录
-  async function beginAutoLogin() {
+  function resetLoginWaiter() {
+    let resolve = null;
+    const promise = new Promise((done) => {
+      resolve = done;
+    });
+    state.loginWaiter = { promise: promise, resolve: resolve };
+    return state.loginWaiter;
+  }
+
+  function resolveLoginWaiter() {
+    const waiter = state.loginWaiter;
+    state.loginWaiter = null;
+    if (waiter && typeof waiter.resolve === 'function') {
+      waiter.resolve();
+    }
+  }
+
+  function waitForLogin() {
+    return state.loginWaiter ? state.loginWaiter.promise : Promise.resolve();
+  }
+
+  function setLoadingForLogin(visible) {
+    if (App.setLoading) {
+      App.setLoading(
+        visible,
+        '正在自动登录中国大学慕课…',
+        visible ? { cancellable: true } : undefined
+      );
+    }
+  }
+
+  async function beginAutoLogin(showMask) {
     if (state.loginBlocked || (state.loginJob && state.loginJob.running)) {
       return;
     }
@@ -256,16 +318,39 @@
     hideLoginOverlay();
     showRelogin(false);
     setAccountStatus('正在自动登录…', 'info');
+    if (showMask) {
+      setLoadingForLogin(true);
+    }
     try {
       await startLoginJob('auto');
+      await waitForLogin();
     } catch (error) {
-      finalLoginFailure(error.message);
+      if (!state.loginBlocked) {
+        finalLoginFailure(error.message);
+      }
+    } finally {
+      if (showMask) {
+        setLoadingForLogin(false);
+      }
     }
   }
 
   async function startLoginJob(mode) {
-    const data = await App.callOk('start_login_job', { mode: mode, browser: 'auto' });
+    resetLoginWaiter();
+    let data;
+    try {
+      data = await App.callOk('start_login_job', { mode: mode, browser: 'auto' });
+    } catch (error) {
+      resolveLoginWaiter();
+      throw error;
+    }
     state.loginJobId = data.job_id;
+    // 如果用户在请求返回前已点击“取消加载”，立即取消刚创建的任务。
+    if (state.loginBlocked) {
+      App.call('cancel_login_job', { job_id: data.job_id }).catch(() => {});
+      resolveLoginWaiter();
+      return;
+    }
     state.loginJob = {
       job_id: data.job_id,
       running: true,
@@ -317,6 +402,7 @@
     if (job.phase === 'need_visible') {
       state.loggedIn = false;
       showLoginPrompt(job);
+      resolveLoginWaiter();
       return;
     }
     if (job.done && !job.error && !job.cancelled) {
@@ -329,6 +415,7 @@
       await refreshState();
       await loadCourses(false);
       renderAll();
+      resolveLoginWaiter();
       return;
     }
     finalLoginFailure(job.error || '登录失败');
@@ -387,13 +474,14 @@
     }
     App.toast(message, 'error');
     renderAll();
+    resolveLoginWaiter();
   }
 
   async function relogin() {
     state.loginBlocked = false;
     state.autoTried = false;
     showRelogin(false);
-    await beginAutoLogin();
+    await beginAutoLogin(false);
   }
 
   // ------------------------------------------------------------------ 课程
@@ -439,6 +527,8 @@
       state.job = null;
       state.jobId = '';
       state.percentShown = new Map();
+      state.notifiedKeys = new Set();
+      clearNotices();
       state.activeType = chooseDefaultType();
       renderAll();
       if ((data.answer_sync || {}).running) {
@@ -570,13 +660,8 @@
 
   function selectedSet(kind) {
     if (!state.checked.has(kind)) {
-      const set = new Set();
-      tasksOfKind(kind).forEach((task) => {
-        if (task.status !== 'done') {
-          set.add(task.key);
-        }
-      });
-      state.checked.set(kind, set);
+      // 4.0.1：任务默认全部不选，由用户手动勾选或点“全选未完成”。
+      state.checked.set(kind, new Set());
     }
     return state.checked.get(kind);
   }
@@ -688,7 +773,23 @@
         return;
       }
       if (jobTask.status === '完成') {
-        cell.appendChild(statusPill('done-pill', '完成'));
+        if (jobTask.score_text) {
+          const full = jobTask.full_score;
+          const kind = full === false ? 'failed-pill' : 'done-pill';
+          cell.appendChild(statusPill(kind, jobTask.score_text,
+            full === false ? '未得满分' : '得分'));
+        } else {
+          cell.appendChild(statusPill('done-pill', '完成'));
+        }
+        return;
+      }
+      if (jobTask.status === '已发布') {
+        cell.appendChild(statusPill('published-pill', '已发布'));
+        return;
+      }
+      if (jobTask.status === '已填写') {
+        cell.appendChild(statusPill('filled-pill', '已填写',
+          jobTask.message || '已填写'));
         return;
       }
       if (jobTask.status === '失败') {
@@ -881,6 +982,8 @@
       state.jobId = data.job_id;
       state.job = data;
       state.percentShown = new Map();
+      state.notifiedKeys = new Set();
+      clearNotices();
       renderJob(data);
       renderTasks();
       updateSelectionUI();
@@ -979,6 +1082,51 @@
       els['i-cancel-job'].disabled = !job.running;
       els['i-cancel-job'].classList.toggle('hidden', !job.running);
     }
+    showFilledNotices(job);
+  }
+
+  function clearNotices() {
+    if (els['i-notice-stack']) {
+      els['i-notice-stack'].innerHTML = '';
+    }
+  }
+
+  function showTagNotice(message) {
+    const stack = els['i-notice-stack'];
+    if (!stack) {
+      return;
+    }
+    const item = node('div', 'ic-notice');
+    item.appendChild(node('span', 'ic-notice-text', message));
+    const close = node('button', 'ic-notice-close', '×');
+    close.type = 'button';
+    close.setAttribute('aria-label', '关闭提示');
+    close.addEventListener('click', () => item.remove());
+    item.appendChild(close);
+    stack.appendChild(item);
+    while (stack.children.length > 3) {
+      stack.removeChild(stack.firstChild);
+    }
+  }
+
+  function showFilledNotices(job) {
+    if (!job || !Array.isArray(job.tasks)) {
+      return;
+    }
+    job.tasks.forEach((task) => {
+      if (task.status !== '已填写' || state.notifiedKeys.has(task.key)) {
+        return;
+      }
+      state.notifiedKeys.add(task.key);
+      const label = task.kind === '讨论' ? '讨论截图' : '答案截图';
+      const path = task.screenshot
+        || (task.result && task.result.screenshot)
+        || 'artifacts/icourse/';
+      showTagNotice(
+        (task.kind || '任务') + '「' + (task.title || '') + '」已填写，'
+        + label + '已保存至 ' + path
+      );
+    });
   }
 
   // ------------------------------------------------------------------ 日志
@@ -1033,5 +1181,6 @@
     init: init,
     onActivate: onActivate,
     onDeactivate: onDeactivate,
+    onCancelLoading: onCancelLoading,
   });
 })();

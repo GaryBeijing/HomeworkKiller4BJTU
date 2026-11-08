@@ -1,10 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-11-08 14:30
-  最后更新: 2026-11-08 16:40
+  最后更新: 2026-11-08 17:10
   文件名: icourse.css
   主要用途: “中国大学慕课”标签页样式：固定视口高度、内部滚动、紧凑顶栏、任务区与标签内登录提示。
-  文件版本: 4.0.0
+  文件版本: 4.0.1
 */
 
 /* 慕课页永远不滚动整个页面；滚动只发生在课程列表、任务表和日志内部。 */
@@ -429,6 +429,48 @@
   color: var(--warn);
 }
 
+/* ---------------------------------------------------------------- 标签内通知 */
+.tag-icourse .ic-notice-stack {
+  position: absolute;
+  top: 44px;
+  right: 12px;
+  z-index: 15;
+  display: grid;
+  gap: 6px;
+  width: min(400px, 55%);
+  pointer-events: none;
+}
+
+.tag-icourse .ic-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid #f0d48a;
+  border-radius: var(--radius-sm);
+  background: #fffbeb;
+  color: #7a5b00;
+  box-shadow: 0 10px 24px rgba(40, 34, 10, 0.14);
+  font-size: 12px;
+  line-height: 1.55;
+  pointer-events: auto;
+  word-break: break-all;
+}
+
+.tag-icourse .ic-notice .ic-notice-text {
+  flex: 1 1 auto;
+}
+
+.tag-icourse .ic-notice .ic-notice-close {
+  flex: 0 0 auto;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+
 /* ---------------------------------------------------------------- 标签内登录提示 */
 .tag-icourse .ic-login-overlay {
   position: absolute;
@@ -481,6 +523,16 @@
 .tag-icourse .pill.failed-pill {
   background: #fdecec;
   color: var(--bad);
+}
+
+.tag-icourse .pill.filled-pill {
+  background: #fff8cc;
+  color: #8a6d00;
+}
+
+.tag-icourse .pill.published-pill {
+  background: #e7f7ed;
+  color: var(--ok);
 }
 
 .tag-icourse .progress-pill {

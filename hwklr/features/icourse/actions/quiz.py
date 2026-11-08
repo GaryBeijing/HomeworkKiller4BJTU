@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-08 16:25
+# 最后更新: 2026-11-08 17:10
 # 文件名: quiz.py
 # 主要用途: 测验任务：读取题目、匹配题库、填答与提交。
-# 文件版本: 4.0.0
+# 文件版本: 4.0.1
 """测验/作业：从 GinsMooc 取答案，填入页面并可选提交。
 
 默认 dry-run（只计算并展示将填的答案），只有 ``submit=True`` 才点击提交。
@@ -70,6 +70,37 @@ QUIZ_PAGE_STATE_JS = r"""
 }
 """
 
+SCORE_READ_JS = r"""
+() => {
+  const text = document.body?.innerText || '';
+  const pick = (patterns) => {
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match) return match[1];
+    }
+    return '';
+  };
+  const score = pick([
+    /本次得分\s*[:：]?\s*([\d.]+)/,
+    /你的得分\s*[:：]?\s*([\d.]+)/,
+    /得分\s*[:：]?\s*([\d.]+)/,
+  ]);
+  const total = pick([
+    /满分\s*[:：]?\s*([\d.]+)/,
+    /总分\s*[:：]?\s*([\d.]+)/,
+    /共\s*([\d.]+)\s*分/,
+  ]);
+  let pairScore = '';
+  let pairTotal = '';
+  const pair = text.match(/([\d.]+)\s*[\/／]\s*([\d.]+)\s*分?/);
+  if (pair) {
+    pairScore = pair[1];
+    pairTotal = pair[2];
+  }
+  return {score, total, pairScore, pairTotal};
+}
+"""
+
 READ_QUESTIONS_JS = r"""
 () => [...document.querySelectorAll('.u-questionItem')].map((q, index) => {
   const titleEl = q.querySelector('.j-title .j-richTxt');
@@ -113,10 +144,23 @@ class QuizResult:
     applied: bool = False
     submitted: bool = False
     screenshot: str = ""
+    score: float | None = None
+    total_score: float | None = None
+    score_text: str = ""
+    full_score: bool | None = None
 
     @property
     def matched(self) -> int:
         return sum(1 for question in self.questions if question.matched)
+
+
+def _to_float(value: Any) -> float | None:
+    """把成绩文本转换为浮点数。"""
+    try:
+        text = str(value or "").strip()
+        return float(text) if text else None
+    except (TypeError, ValueError):
+        return None
 
 
 def parse_option_id(input_id: str, question: DbQuestion) -> int | None:
@@ -199,7 +243,11 @@ class QuizAction:
             self.ctx.info("提交答案并等待成功状态…")
             result.submitted = self._submit(page, task)
             if result.submitted:
-                self.ctx.info("已提交并确认成功。")
+                self._read_score(page, task, result)
+                self.ctx.info(
+                    "已提交并确认成功"
+                    + ("，得分 %s" % result.score_text if result.score_text else "。")
+                )
             else:
                 self.ctx.warn(
                     "已点击提交，但 20 秒内未检测到明确的成功/成绩状态；"
@@ -400,6 +448,42 @@ class QuizAction:
                 self.ctx.log(f"  已填写 {filled} 个空")
             elif plan.question_type in ("HOMEWORK", "ONLINE_JUDGE"):
                 self.ctx.log("  主观题已跳过（需人工作答）")
+
+    # ------------------------------------------------------------------ 成绩
+    def _read_score(self, page, task: Task, result: QuizResult) -> None:
+        """提交后读取成绩与满分；读不到时保留空值。
+
+        Args:
+            page: 测验结果页。
+            task: 任务（可能带 ``total_score``）。
+            result: 待填充的测验结果。
+        """
+        deadline = time.monotonic() + 6.0
+        while time.monotonic() < deadline:
+            try:
+                data: Any = page.evaluate(SCORE_READ_JS)
+            except Exception:
+                data = {}
+            score = _to_float((data or {}).get("score"))
+            if score is None:
+                score = _to_float((data or {}).get("pairScore"))
+            total = _to_float((data or {}).get("total"))
+            if total is None:
+                total = _to_float((data or {}).get("pairTotal"))
+            if score is not None:
+                result.score = score
+                result.total_score = total
+                break
+            page.wait_for_timeout(400)
+        if result.total_score is None and task.total_score is not None:
+            result.total_score = float(task.total_score)
+        if result.score is None:
+            return
+        if result.total_score is not None:
+            result.full_score = result.score >= result.total_score - 0.01
+            result.score_text = "%g/%g" % (result.score, result.total_score)
+        else:
+            result.score_text = "%g 分" % result.score
 
     # ------------------------------------------------------------------ 提交
     def _confirm_dialog(self, page) -> bool:

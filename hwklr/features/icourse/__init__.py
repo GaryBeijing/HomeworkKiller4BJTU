@@ -37,7 +37,7 @@ from .models import (
     extract_term_id,
 )
 
-__version__ = "4.0.0"
+__version__ = "4.0.1"
 __author__ = "Gary"
 __all__ = ["IcourseFeature"]
 

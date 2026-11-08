@@ -1,10 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-10-31 20:45
-  最后更新: 2026-11-01 00:01
+  最后更新: 2026-11-08 17:20
   文件名: base.css
   主要用途: 全局布局、标签栏、通用卡片/表格/按钮/弹窗/提示与设置锁定遮罩样式。
-  文件版本: 2.0.0
+  文件版本: 4.0.1
 */
 
 :root {
@@ -584,11 +584,43 @@ summary {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
   background: rgba(24, 27, 84, 0.42);
   color: #ffffff;
   font-size: 14px;
   backdrop-filter: blur(2px);
+}
+
+.loading-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  min-width: 240px;
+  padding: 22px 28px 20px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 16px;
+  background: rgba(20, 24, 60, 0.72);
+  box-shadow: 0 22px 60px rgba(8, 10, 32, 0.34);
+}
+
+.loading-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  white-space: nowrap;
+}
+
+.loading .loading-cancel {
+  min-width: 118px;
+  border-color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--ink-soft);
+  backdrop-filter: blur(2px);
+}
+
+.loading .loading-cancel:hover:not(:disabled) {
+  background: #ffffff;
+  color: var(--accent-strong);
 }
 
 .spinner {

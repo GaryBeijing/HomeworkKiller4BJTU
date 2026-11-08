@@ -1,10 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-10-31 20:45
-  最后更新: 2026-11-01 00:01
+  最后更新: 2026-11-08 17:20
   文件名: base.js
   主要用途: 前端公共逻辑：标签栏、设置锁定/跳转、资源加载、桥接调用、提示与加载状态。
-  文件版本: 2.0.0
+  文件版本: 4.0.1
 */
 
 (function () {
@@ -22,6 +22,9 @@
     activationToken: 0,
     activating: '',
     settingsTarget: '',
+    cancelActivation: null,
+    loadingVisible: false,
+    pendingCancels: new Set(),
   };
 
   /**
@@ -151,16 +154,55 @@
    * @param {string} [text] 提示文本。
    * @returns {void}
    */
-  function setLoading(visible, text) {
+  function setLoading(visible, text, options) {
     const loading = element('loading');
     const label = element('loading-text');
+    const cancel = element('loading-cancel');
     if (!loading) {
       return;
     }
     if (label && text) {
       label.textContent = text;
     }
+    state.loadingVisible = Boolean(visible);
+    // 4.0.1：所有全局加载遮罩都提供“取消加载”。
+    if (cancel) {
+      cancel.classList.toggle('hidden', !visible);
+      cancel.disabled = !visible;
+    }
     loading.classList.toggle('hidden', !visible);
+  }
+
+  /**
+   * 取消当前加载（由加载遮罩上的“取消加载”按钮触发）。
+   * 会中止当前标签激活，并让正在等待的桥接调用以超时错误失败。
+   * @returns {void}
+   */
+  function cancelLoading() {
+    const handler = state.cancelActivation;
+    const hadActivation = typeof handler === 'function';
+    if (hadActivation) {
+      try {
+        handler();
+      } catch (error) {
+        console.error(error);
+      }
+    }
+    const error = new Error('加载超时：已取消加载');
+    let rejected = 0;
+    state.pendingCancels.forEach((reject) => {
+      try {
+        reject(error);
+        rejected += 1;
+      } catch (ignored) {
+        // 忽略已经结束的调用。
+      }
+    });
+    state.pendingCancels.clear();
+    setLoading(false);
+    if (!hadActivation && rejected === 0) {
+      toast('加载超时，已取消加载', 'warn');
+    }
   }
 
   /**
@@ -364,6 +406,20 @@
     state.activating = name;
 
     const token = ++state.activationToken;
+    const activation = { cancelled: false };
+    const cancelHandler = () => {
+      activation.cancelled = true;
+      const page = state.pages.get(name) || {};
+      if (typeof page.onCancelLoading === 'function') {
+        try {
+          page.onCancelLoading();
+        } catch (error) {
+          console.error(error);
+        }
+      }
+      setLoading(false);
+    };
+    state.cancelActivation = cancelHandler;
     const previous = state.tags.find((item) => item.name === state.active);
     if (previous) {
       const previousPage = state.pages.get(previous.name);
@@ -376,12 +432,18 @@
       }
     }
 
-    setLoading(true, `正在打开「${tag.title || tag.name}」…`);
+    setLoading(true, `正在打开「${tag.title || tag.name}」…`, { cancellable: true });
+    const ensureActive = () => {
+      if (activation.cancelled) {
+        throw new Error('登录超时：已取消加载');
+      }
+    };
     try {
       // 步骤 1：并行加载该标签的 CSS 与 JS。
       const cssList = Array.isArray(tag.css_urls) ? tag.css_urls : [];
       const jsList = Array.isArray(tag.js_urls) ? tag.js_urls : [];
       await Promise.all([...cssList.map(loadCss), ...jsList.map(loadScript)]);
+      ensureActive();
 
       // 步骤 2：拉取 HTML 片段（标签栏以外的定制内容）。
       const response = await fetch(tag.html_url, { cache: 'no-store' });
@@ -389,6 +451,7 @@
         throw new Error(`加载页面失败 (${response.status}): ${tag.html_url}`);
       }
       const html = await response.text();
+      ensureActive();
       if (token !== state.activationToken) {
         return;
       }
@@ -409,6 +472,7 @@
       if (typeof page.init === 'function') {
         await page.init(host);
       }
+      ensureActive();
 
       // 步骤 5：必要设置未完成时，弹出提醒并跳过页面业务初始化。
       if (tag.settings_ok === false && name !== '设置' && name !== '关于') {
@@ -418,8 +482,13 @@
 
       if (typeof page.onActivate === 'function') {
         await page.onActivate();
+        ensureActive();
       }
     } catch (error) {
+      if (activation.cancelled) {
+        toast('登录超时，已取消加载', 'warn');
+        return;
+      }
       if (token !== state.activationToken) {
         return;
       }
@@ -428,6 +497,9 @@
     } finally {
       if (state.activating === name) {
         state.activating = '';
+      }
+      if (state.cancelActivation === cancelHandler) {
+        state.cancelActivation = null;
       }
       if (token === state.activationToken) {
         setLoading(false);
@@ -446,11 +518,27 @@
       throw new Error('尚未激活任何标签');
     }
     await waitForBridge();
-    const result = await window.pywebview.api.call(
+    const request = window.pywebview.api.call(
       state.active,
       method,
       params || {}
     );
+    let result;
+    if (state.loadingVisible) {
+      // 遮罩显示期间允许“取消加载”立即让本次桥接调用以超时失败。
+      let rejectCancel = null;
+      const cancelled = new Promise((_, reject) => {
+        rejectCancel = reject;
+      });
+      state.pendingCancels.add(rejectCancel);
+      try {
+        result = await Promise.race([request, cancelled]);
+      } finally {
+        state.pendingCancels.delete(rejectCancel);
+      }
+    } else {
+      result = await request;
+    }
     if (!result || typeof result !== 'object') {
       throw new Error('桥接返回格式异常');
     }
@@ -476,6 +564,10 @@
    * @returns {Promise<void>} 初始化完成时 resolve。
    */
   async function init() {
+    const cancelButton = element('loading-cancel');
+    if (cancelButton) {
+      cancelButton.addEventListener('click', cancelLoading);
+    }
     setLoading(true, '正在初始化…');
     try {
       const [tags, meta] = await Promise.all([
@@ -505,6 +597,7 @@
     callOk: callOk,
     toast: toast,
     setLoading: setLoading,
+    cancelLoading: cancelLoading,
     registerPage: registerPage,
     refreshTags: refreshTags,
     openSettings: openSettings,

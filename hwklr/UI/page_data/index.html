@@ -2,9 +2,10 @@
 <!--
   作者: Gary
   编写日期: 2026-10-31 20:45
+  最后更新: 2026-11-08 17:20
   文件名: index.html
   主要用途: 应用主页面骨架：标签栏、内容区、加载遮罩与消息提示容器。
-  文件版本: 1.0.0
+  文件版本: 4.0.1
 -->
 <html lang="zh-CN">
 <head>
@@ -19,8 +20,13 @@
     <main class="content" id="content">
       <div id="content-host" class="content-host"></div>
       <div id="loading" class="loading hidden" aria-live="polite">
-        <span class="spinner" aria-hidden="true"></span>
-        <span id="loading-text">处理中…</span>
+        <div class="loading-panel">
+          <div class="loading-row">
+            <span class="spinner" aria-hidden="true"></span>
+            <span id="loading-text">处理中…</span>
+          </div>
+          <button id="loading-cancel" class="btn small loading-cancel hidden" type="button">取消加载</button>
+        </div>
       </div>
     </main>
     <div id="toast-host" class="toast-host" aria-live="polite"></div>
