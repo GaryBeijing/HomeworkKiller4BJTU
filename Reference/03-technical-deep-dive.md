@@ -815,7 +815,7 @@ item["optionsCodeList"] = None
 `hwklr/features/icourse/` 使用独立的数据链路，不与 HSR 的 `Bank` 共用：
 
 ```
-hwklr/db/icourse_sources.json          ← 422 门课程目录（id=0 的记录源）
+hwklr/db/icourse_sources.json          ← 422 门课程目录（2026-11-08 快照；公开 API 当前 431 门）
         ↓ IcourseDb.fetch/refresh
 db/icourse<termId>.json                ← 课程元信息 + tests{tid:{meta,questions}}
         ↓ AnswerIndex.from_questions
@@ -833,6 +833,8 @@ QuizAction / PopupQuiz                 ← 按题干/选项文本匹配答案
 - 4.1.0：前端统一 `TRANSITION_DURATION=0.19s`（`App.TRANSITION_DURATION` / CSS `--transition-duration`）；全局遮罩与标签弹窗淡入淡出；C 程序设计题解任务支持 `cancel_solution_job` 协作取消，UI 按钮切换为“终止解题”。
 - 4.1.1：自动登录与任务启动前增加浏览器级 storage_state 校验；失效 Cookie 会回退到本机 Cookie/后台登录/窗口登录，并避免整批任务误报失败。
 - 4.2.0：登录校验改为标签激活时执行（`validate_login`），开始任务不再预检；icourse 顶栏固定“重新登录”，底部按钮运行时切换为“终止任务”，总进度条加长加高。
+- 4.3.1：串行阶段每个任务独立 Playwright Page；文档打开失败换新 Page 重试一次，截图失败不再导致任务失败；`ActionUnavailable` 与 `ActionCancelled` 分离，讨论支持新版 `article.soft-shell`/已展开编辑器/无回复默认文本，任务结束后对题库未收录或缺少 testId 的测验弹出原因。
+- 4.3.2：`page_block_reason` 增加 PDF/下载链接/新版讨论内容标记，修复文档和讨论被隐藏“登录 | 注册”文本误判为登录墙；讨论识别“回复已发布”成功信号并优先提取真实回复正文；文档/讨论异常后按服务端状态复核，已 `DONE` 的任务改为完成/已发布。
 
 ---
 

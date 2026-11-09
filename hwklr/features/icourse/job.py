@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
+# 最后更新: 2026-11-09 20:40
 # 文件名: job.py
 # 主要用途: 编排“开始完成”后台任务：视频并发、文档/测验/讨论串行、进度快照与取消。
-# 文件版本: 4.2.0
+# 文件版本: 4.3.2
 """完成任务的 job 编排。"""
 from __future__ import annotations
 
@@ -19,11 +20,13 @@ from . import config
 from .actions import (
     ActionCancelled,
     ActionContext,
+    ActionUnavailable,
     DiscussionAction,
     DocumentAction,
     QuizAction,
     run_workers,
 )
+from .actions.base import safe_screenshot
 from .answer_store import AnswerStore
 from .browser_auth import export_saved_storage_state
 from .browser_session import BrowserSession
@@ -31,7 +34,7 @@ from .client import AuthError, MoocClient
 from .courses import reload_course
 from .models import DONE, Course, Task
 
-__version__ = "4.2.0"
+__version__ = "4.3.2"
 __author__ = "Gary"
 __all__ = ["CompletionJob"]
 
@@ -303,6 +306,8 @@ class CompletionJob:
             )
         except Exception as exc:
             self._event("warn", "刷新课程状态失败：%s" % exc)
+        if self._updated_course is not None:
+            self._reconcile_failed_tasks(self._updated_course)
 
         done_count: int = sum(
             1
@@ -434,20 +439,33 @@ class CompletionJob:
             with BrowserSession(
                 headless=True, attach=False, storage_state=str(state)
             ) as session:
-                page = session.new_page()
-                ctx = ActionContext(
-                    session=session,
-                    repository=store,
-                    page=page,
-                    interactive=False,
-                    log_callback=self._log_callback,
-                    cancel_event=self._cancel,
-                )
                 for task in tasks:
                     if self._cancel.is_set():
                         self._finish_task(task, "已取消", message="任务已取消")
                         continue
-                    self._run_one_serial(ctx, task, store)
+                    # 关键步骤：每个串行任务使用独立 Page，避免上一任务导航/弹窗
+                    # 污染页面状态，导致后续文档或讨论连续失败。
+                    page = session.new_page()
+                    ctx = ActionContext(
+                        session=session,
+                        repository=store,
+                        page=page,
+                        interactive=False,
+                        log_callback=self._log_callback,
+                        cancel_event=self._cancel,
+                    )
+                    try:
+                        self._run_one_serial(ctx, task, store)
+                    finally:
+                        try:
+                            page.close()
+                        except Exception:
+                            pass
+                        if ctx.page is not None and ctx.page is not page:
+                            try:
+                                ctx.page.close()
+                            except Exception:
+                                pass
         except Exception as exc:
             self._event("error", "串行阶段失败：%s" % exc)
             for task in tasks:
@@ -550,16 +568,22 @@ class CompletionJob:
                     self.course, task, submit=publish, silent=False
                 )
                 screenshot = str(getattr(result, "screenshot", "") or "")
+                message = str(getattr(result, "message", "") or "")
                 if publish and not result.submitted:
-                    self._finish_task(task, "失败", error="讨论发布失败")
+                    self._finish_task(
+                        task, "失败", error=message or "讨论发布失败"
+                    )
                 elif result.submitted:
                     self._finish_task(
                         task,
                         "已发布",
-                        message="已发布",
+                        message=message or "已发布",
                         result={
                             "url": result.url,
                             "submitted": True,
+                            "fallback_reply": bool(
+                                getattr(result, "fallback_reply", False)
+                            ),
                             "screenshot": screenshot,
                         },
                         screenshot=screenshot,
@@ -568,10 +592,13 @@ class CompletionJob:
                     self._finish_task(
                         task,
                         "已填写",
-                        message="已填写，未发布",
+                        message=message or "已填写，未发布",
                         result={
                             "url": result.url,
                             "submitted": False,
+                            "fallback_reply": bool(
+                                getattr(result, "fallback_reply", False)
+                            ),
                             "screenshot": screenshot,
                         },
                         screenshot=screenshot,
@@ -580,10 +607,146 @@ class CompletionJob:
             self._finish_task(task, "已跳过", message="暂不支持该任务类型")
         except ActionCancelled as exc:
             self._finish_task(task, "已取消", message=str(exc))
+        except ActionUnavailable as exc:
+            # 关键步骤：无法继续不等于用户取消；题库类任务仍按“跳过”展示。
+            reason: str = self._error_text(exc)
+            self._capture_failure(ctx, task)
+            if task.kind in (DOCUMENT_KIND, DISCUSSION_KIND) and self._server_marked_done(task):
+                status = "完成" if task.kind == DOCUMENT_KIND else "已发布"
+                self._finish_task(
+                    task,
+                    status,
+                    message="服务端已记录完成（原动作异常：%s）" % reason,
+                )
+            elif task.kind in QUIZ_KINDS:
+                self._finish_task(task, "已跳过", message=reason)
+            else:
+                self._finish_task(task, "失败", error=reason)
         except AuthError as exc:
-            self._finish_task(task, "失败", error=str(exc))
+            self._capture_failure(ctx, task)
+            self._finish_task(task, "失败", error=self._error_text(exc))
         except Exception as exc:
-            self._finish_task(task, "失败", error=str(exc))
+            self._capture_failure(ctx, task)
+            reason = self._error_text(exc)
+            if task.kind in (DOCUMENT_KIND, DISCUSSION_KIND) and self._server_marked_done(task):
+                status = "完成" if task.kind == DOCUMENT_KIND else "已发布"
+                self._finish_task(
+                    task,
+                    status,
+                    message="服务端已记录完成（原动作异常：%s）" % reason,
+                )
+            else:
+                self._finish_task(task, "失败", error=reason)
+
+    def _server_marked_done(self, task: Task) -> bool:
+        """动作异常后向服务端复核，避免把已完成的文档/讨论误报为失败。
+
+        Args:
+            task: 当前文档或讨论任务。
+
+        Returns:
+            服务端课程树中该任务已 ``DONE`` 时返回 ``True``。
+        """
+        if (
+            task.kind == DISCUSSION_KIND
+            and not self._settings.get("publish_discussions", False)
+        ):
+            # 未开启自动发布时，讨论只需要“已填写”；不能用服务端
+            # done 状态把它误标成“已发布”。
+            return False
+        for attempt in range(3):
+            try:
+                fresh: Course = reload_course(
+                    self._client,
+                    self.course,
+                    spoc_session=config.spoc_session_file(),
+                )
+            except Exception as exc:
+                self._event("warn", "复核任务完成状态失败：%s" % exc)
+                return False
+            if not isinstance(fresh, Course):
+                return False
+            candidate = self._find_fresh_task(fresh, task)
+            if candidate is not None:
+                if candidate.status == DONE:
+                    return True
+            # 站点写学习状态有短暂延迟；失败后连续复核几次，避免
+            # “动作报错但刷新后已完成”被误记为失败。
+            if attempt < 2 and self._cancel.wait(1.2):
+                return False
+        return False
+
+    @staticmethod
+    def _find_fresh_task(fresh: Course, task: Task) -> Task | None:
+        """在同一课程的新课程树中查找对应任务。"""
+        for candidate in fresh.tasks:
+            if candidate.kind != task.kind:
+                continue
+            if (
+                task.unit_id
+                and candidate.unit_id == task.unit_id
+            ) or (
+                task.content_id
+                and candidate.content_id == task.content_id
+            ):
+                return candidate
+        return None
+
+    def _reconcile_failed_tasks(self, fresh: Course) -> None:
+        """任务结束后用服务端状态修正“实际已完成但动作报错”的任务。
+
+        Args:
+            fresh: 任务结束后重新拉取的课程树。
+        """
+        if not isinstance(fresh, Course):
+            return
+        publish_discussions: bool = bool(
+            self._settings.get("publish_discussions", False)
+        )
+        for task in self.tasks:
+            state: dict[str, Any] = self._task_states.get(task.key) or {}
+            if state.get("status") != "失败":
+                continue
+            if task.kind not in (DOCUMENT_KIND, DISCUSSION_KIND):
+                continue
+            if task.kind == DISCUSSION_KIND and not publish_discussions:
+                continue
+            candidate = self._find_fresh_task(fresh, task)
+            if candidate is None or candidate.status != DONE:
+                continue
+            status: str = "完成" if task.kind == DOCUMENT_KIND else "已发布"
+            self._finish_task(
+                task,
+                status,
+                message="服务端已记录完成（任务结束后复核）",
+            )
+
+    @staticmethod
+    def _capture_failure(ctx: ActionContext, task: Task) -> None:
+        """在文档/讨论失败时保留现场截图，便于定位页面问题。"""
+        if task.kind not in (DOCUMENT_KIND, DISCUSSION_KIND):
+            return
+        page = getattr(ctx, "page", None)
+        if page is None:
+            return
+        prefix = "document" if task.kind == DOCUMENT_KIND else "discussion"
+        identifier = task.unit_id or task.content_id or task.name
+        safe_screenshot(ctx, page, f".artifacts/{prefix}-{identifier}-failed.png")
+
+    @staticmethod
+    def _error_text(exc: BaseException) -> str:
+        """把异常压缩成适合 UI tooltip 的单行文本。
+
+        Args:
+            exc: 捕获到的异常。
+
+        Returns:
+            单行、限长的错误说明。
+        """
+        text: str = " ".join(str(exc or "").split())
+        if not text:
+            text = type(exc).__name__
+        return text[:500]
 
     @staticmethod
     def _phase_for(task: Task) -> str:

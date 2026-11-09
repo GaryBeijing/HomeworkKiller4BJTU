@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
+# 最后更新: 2026-11-09 21:40
 # 文件名: icourse163.py
-# 主要用途: icourse163 页面 URL、选择器、SPA 导航与视频状态脚本。
-# 文件版本: 4.0.0
+# 主要用途: icourse163 页面 URL、选择器、SPA 导航、登录墙判定与视频状态脚本。
+# 文件版本: 4.3.2
 """icourse163 页面 URL 与选择器。
 
 结构基于 2026-11 的新版 React 学习页：
@@ -146,8 +147,17 @@ def page_block_reason(page: Page) -> str:
                     return '页面被重定向到课程介绍页（登录态失效或未选课）';
                   }
                   const text = document.body ? document.body.innerText : '';
+                  // 文档页/新版讨论页的正文不一定包含 video/question 节点；
+                  // 把 PDF 阅读器、下载链接、新版 discussion 也视为“有内容”，
+                  // 避免隐藏的“登录 | 注册”文本导致误判登录墙。
                   const hasContent = !!document.querySelector(
-                    'video, .u-questionItem, .j-reply-all, .m-learnChapterNormal'
+                    'video, .u-questionItem, .j-reply-all, ' +
+                    '.m-learnChapterNormal, .m-learnChapterList, ' +
+                    '.pdf-unit-renderer, .pdf-unit-reader, ' +
+                    '.mooc-docs-reader__page-status, ' +
+                    '.ux-h5pdfreader_container_footer_pages_total, ' +
+                    'a.j-downpdf, a.j-downtxt, ' +
+                    'article.soft-shell, #forum-reply-form'
                   );
                   const isSpoc = /\/spoc\//.test(url);
                   if (!isSpoc && !hasContent &&

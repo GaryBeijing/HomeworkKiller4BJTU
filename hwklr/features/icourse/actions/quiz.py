@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-08 17:10
+# 最后更新: 2026-11-09 20:40
 # 文件名: quiz.py
 # 主要用途: 测验任务：读取题目、匹配题库、填答与提交。
-# 文件版本: 4.0.1
+# 文件版本: 4.3.2
 """测验/作业：从 GinsMooc 取答案，填入页面并可选提交。
 
 默认 dry-run（只计算并展示将填的答案），只有 ``submit=True`` 才点击提交。
@@ -20,7 +20,7 @@ from typing import Any
 from hwklr.db.icourse_models import AnswerIndex, DbQuestion, QuestionType
 from ..models import Course, Task
 from ..pages import close_modals, is_spoc_url, learn_url, open_route, page_block_reason
-from .base import ActionCancelled, ActionContext
+from .base import ActionContext, ActionUnavailable
 
 QUIZ_SELECTORS = {
     "question": ".u-questionItem",
@@ -192,11 +192,11 @@ class QuizAction:
     ) -> QuizResult:
         self.ctx.check_cancel()
         if course.is_spoc:
-            raise ActionCancelled("测验自动化仅支持 MOOC，不支持 SPOC。")
+            raise ActionUnavailable("测验自动化仅支持 MOOC，不支持 SPOC。")
         if not course.school_short_name or not course.course_id:
-            raise ActionCancelled("课程缺少 schoolShortName/courseId，无法构造测验 URL")
+            raise ActionUnavailable("课程缺少 schoolShortName/courseId，无法构造测验 URL")
         if not task.test_id:
-            raise ActionCancelled(f"任务「{task.name}」没有 testId")
+            raise ActionUnavailable(f"任务「{task.name}」没有 testId")
 
         base = learn_url(
             course.school_short_name,
@@ -212,7 +212,7 @@ class QuizAction:
         close_modals(page)
 
         if is_spoc_url(page.url):
-            raise ActionCancelled("测验自动化仅支持 MOOC，不支持 SPOC。")
+            raise ActionUnavailable("测验自动化仅支持 MOOC，不支持 SPOC。")
 
         self._wait_ready(page, task)
         page_questions = page.evaluate(READ_QUESTIONS_JS)
@@ -220,7 +220,7 @@ class QuizAction:
             self.ctx.session.screenshot(
                 page, f".artifacts/quiz-noquestions-{task.test_id}.png"
             )
-            raise ActionCancelled("测验页面没有解析出任何题目。")
+            raise ActionUnavailable("测验页面没有解析出任何题目。")
 
         self.ctx.info(f"已读取 {len(page_questions)} 道题，开始匹配题库…")
         index = self.ctx.repository.answer_index(
@@ -301,14 +301,14 @@ class QuizAction:
                 self.ctx.session.screenshot(
                     page, f".artifacts/quiz-blocked-{task.test_id}.png"
                 )
-                raise ActionCancelled(f"{blocked}。当前 URL：{page.url}")
+                raise ActionUnavailable(f"{blocked}。当前 URL：{page.url}")
             state = self._page_state(page)
             reason = self._blocked_reason(state)
             if reason:
                 self.ctx.session.screenshot(
                     page, f".artifacts/quiz-blocked-{task.test_id}.png"
                 )
-                raise ActionCancelled(
+                raise ActionUnavailable(
                     f"{reason}。当前 URL：{state.get('url') or page.url}"
                 )
             if int(state.get("questions") or 0) > 0:
@@ -323,7 +323,7 @@ class QuizAction:
             page, f".artifacts/quiz-noquestions-{task.test_id}.png"
         )
         state = self._page_state(page)
-        raise ActionCancelled(
+        raise ActionUnavailable(
             "测验页面 30 秒内没有加载出题目（可能需要手动处理验证码/协议）。"
             f"当前 URL：{state.get('url') or page.url}"
         )
@@ -544,7 +544,7 @@ class QuizAction:
         """点击提交，并等待明确的成功/成绩状态，而不是点击后立即返回。"""
         button = page.locator(QUIZ_SELECTORS["submit"])
         if button.count() == 0:
-            raise ActionCancelled("没有找到「提交答案」按钮")
+            raise ActionUnavailable("没有找到「提交答案」按钮")
         try:
             button.first.click(timeout=5000)
         except Exception:

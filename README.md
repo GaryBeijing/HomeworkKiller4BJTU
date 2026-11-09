@@ -6,7 +6,7 @@
 
 ![Python](https://img.shields.io/badge/Python-3.15.2-3776AB?logo=python&logoColor=white)
 ![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-0078D4?logo=windows&logoColor=white)
-![Version](https://img.shields.io/badge/Version-4.3.0-5B4BFF)
+![Version](https://img.shields.io/badge/Version-4.3.2-5B4BFF)
 ![GUI](https://img.shields.io/badge/GUI-pywebview%20%2B%20WebView2-2F3AB2)
 
 [功能特性](#-功能特性) · [界面预览](#-界面预览) · [快速开始](#-快速开始) · [使用指南](#-使用指南) · [构建与分发](#-构建与分发) · [插件开发](#-插件开发) · [常见问题](#-常见问题)
@@ -87,16 +87,6 @@ HomeworkKiller4BJTU（简称 HWKLR）是一个基于 **pywebview + 本地 HTTP �
 - 展示软件版本、作者、功能列表、使用声明。
 - 展示所有插件/功能的元信息：插件名、包名、作者、版本、更新日期、启用状态。
 - 版本显示规则：软件 `vA.B.PatchC-bD`，插件 `前缀A.BpC-bD`；官方包名追加 `(Offical)`。
-
----
-
-## 🖼️ 界面预览
-
-<p align="center">
-  <img src="docs/assets/screenshot-cprog.jpg" alt="C程序设计界面" width="900">
-</p>
-
-<p align="center"><sub>C程序设计：课程选择、题目列表、启发/题解模式与题目状态</sub></p>
 
 ---
 
@@ -385,6 +375,13 @@ HomeworkKiller4BJTU/
 - 4.3.0 及以后版本的 PyInstaller 产物自带运行时钩子，启动时会自动清除该标记。
 - 旧版本可手动解除：右键 zip → 属性 → 勾选“解除锁定” → 用 7-Zip 重新解压；或对解压目录执行 `Get-ChildItem -Recurse | Unblock-File`。
 - 若仍失败，请确认系统已启用 .NET Framework 4.8（Windows 11 默认包含）。
+</details>
+
+<details>
+<summary><b>中国大学慕课测验显示“已跳过”</b></summary>
+
+测验自动作答依赖 GinsMooc 题库收录该课程。若课程未收录（或测验单元缺少 `testId`），任务会在结束后弹出「部分测验未能自动完成」，列出具体任务与原因；可手动完成测验，或等待题库更新后重新运行。文档、讨论不受影响。
+
 </details>
 
 <details>

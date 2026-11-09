@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
+# 最后更新: 2026-11-09 20:40
 # 文件名: __init__.py
 # 主要用途: 实现“中国大学慕课”功能：登录、课程/任务展示、批量完成视频/文档/测验/讨论与题库同步。
-# 文件版本: 4.2.0
+# 文件版本: 4.3.2
 """中国大学慕课功能。
 
 功能层只负责动作分发、状态缓存与 job 编排；浏览器自动化、课程解析与题库
@@ -37,7 +38,7 @@ from .models import (
     extract_term_id,
 )
 
-__version__ = "4.2.0"
+__version__ = "4.3.2"
 __author__ = "Gary"
 __all__ = ["IcourseFeature"]
 
@@ -151,7 +152,7 @@ class IcourseFeature(Feature):
             package="ICourse",
             author="Gary",
             version=__version__,
-            update_date="2026-11-08",
+            update_date="2026-11-09",
             official=True,
             feature_key=_FEATURE_NAME,
             description="登录中国大学慕课，批量完成课程视频、文档、测验与讨论任务。",

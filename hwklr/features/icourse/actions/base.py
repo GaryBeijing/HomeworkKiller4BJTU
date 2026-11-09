@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
+# 最后更新: 2026-11-09 20:40
 # 文件名: base.py
-# 主要用途: 动作层公共上下文：日志回调、取消检查与页面获取；已移除终端确认与 rich 输出。
-# 文件版本: 4.0.0
+# 主要用途: 动作层公共上下文：日志回调、取消检查、页面获取与安全截图；已移除终端确认与 rich 输出。
+# 文件版本: 4.3.2
 """动作层公共设施。"""
 from __future__ import annotations
 
@@ -27,7 +28,11 @@ LogCallback = Callable[[str, str], None]
 
 
 class ActionCancelled(Exception):
-    """任务被用户取消或无法继续。"""
+    """任务被用户主动取消。"""
+
+
+class ActionUnavailable(Exception):
+    """任务无法继续（页面结构、登录或缺少数据），不是用户主动取消。"""
 
 
 @dataclass
@@ -114,3 +119,21 @@ class ActionContext:
             始终为 ``True``。
         """
         return True
+
+
+def safe_screenshot(ctx: ActionContext, page: Any, name: str) -> str:
+    """截取诊断截图；截图失败不应把任务本身判为失败。
+
+    Args:
+        ctx: 动作上下文。
+        page: Playwright Page 或等价页面对象。
+        name: 截图文件名（相对 ``artifacts/icourse/``）。
+
+    Returns:
+        截图路径；失败时返回空字符串。
+    """
+    try:
+        return str(ctx.session.screenshot(page, name))
+    except Exception as exc:
+        ctx.warn("截图失败：%s" % exc)
+        return ""

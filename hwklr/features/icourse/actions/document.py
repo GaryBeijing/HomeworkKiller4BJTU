@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
+# 最后更新: 2026-11-09 20:40
 # 文件名: document.py
 # 主要用途: 文档任务：翻页、下载课件与完成状态验证。
-# 文件版本: 4.0.0
+# 文件版本: 4.3.2
 """文档/课件任务：下载课件并刷新完成状态。
 
 文档单元（``contentType=3``）的页面会加载 PDF 阅读器，站点只有在
@@ -34,7 +35,12 @@ from ..pages import (
     page_block_reason,
 )
 from ..paths import documents_dir
-from .base import ActionCancelled, ActionContext
+from .base import (
+    ActionCancelled,
+    ActionContext,
+    ActionUnavailable,
+    safe_screenshot,
+)
 
 DOCUMENT_CONTENT_TYPE = 3
 DOCUMENT_READY_TIMEOUT_MS = 20_000
@@ -54,7 +60,21 @@ PDF_STATUS_JS = r"""
   const modern = document.querySelector('.mooc-docs-reader__page-status');
   if (modern) {
     const pair = parse(modern.innerText) || [0, 0];
-    return {kind: 'modern', current: pair[0], total: pair[1]};
+    if (pair[1] > 0) {
+      return {kind: 'modern', current: pair[0], total: pair[1]};
+    }
+  }
+  // 2026-11 的 v2 阅读器没有独立页码节点，页码文本嵌在 .pdf-unit-renderer 内。
+  const v2 = document.querySelector('.pdf-unit-renderer, .pdf-unit-reader');
+  if (v2) {
+    const pairs = [...String(v2.innerText || '').matchAll(
+      /(\d+)\s*\/\s*(\d+)/g
+    )].map((match) => [parseInt(match[1]), parseInt(match[2])]);
+    const pair = pairs.find((item) => item[1] > 0 && item[1] <= 1000
+      && item[0] <= item[1]);
+    if (pair) {
+      return {kind: 'modern', current: pair[0], total: pair[1]};
+    }
   }
   const currentInput = document.querySelector(
     '.ux-h5pdfreader_container_footer_pages_in'
@@ -261,11 +281,11 @@ class DocumentAction:
     ) -> DocumentResult:
         self.ctx.check_cancel()
         if task.kind != DOCUMENT_KIND:
-            raise ActionCancelled(f"任务「{task.name}」不是文档任务")
+            raise ActionUnavailable(f"任务「{task.name}」不是文档任务")
         if not course.school_short_name or not course.course_id:
-            raise ActionCancelled("课程缺少 schoolShortName/courseId，无法构造文档页 URL")
+            raise ActionUnavailable("课程缺少 schoolShortName/courseId，无法构造文档页 URL")
         if not task.unit_id or not task.lesson_id:
-            raise ActionCancelled(f"任务「{task.name}」缺少 unitId/lessonId")
+            raise ActionUnavailable(f"任务「{task.name}」缺少 unitId/lessonId")
 
         base = learn_url(
             course.school_short_name,
@@ -279,15 +299,28 @@ class DocumentAction:
         )
         url = base + hash_path
         started = time.monotonic()
-        page = self.ctx.acquire_page()
-        open_route(page, base, hash_path)
+        page = self._open_page(base, hash_path, url, task)
         close_modals(page)
+        self._wait_page_ready(page)
         blocked = page_block_reason(page)
         if blocked:
-            self.ctx.session.screenshot(
-                page, f".artifacts/document-blocked-{task.unit_id}.png"
-            )
-            raise ActionCancelled(f"文档页无法访问：{blocked}。当前 URL：{page.url}")
+            # 文档页可能没有 video/question 等常规内容节点，登录墙判定
+            # 存在误报；只要阅读器/下载链接已经出现，就按页面可处理继续。
+            try:
+                has_document = page.locator(
+                    "a.j-downpdf, a.j-downtxt, .pdf-unit-renderer, "
+                    ".pdf-unit-reader, .mooc-docs-reader__page-status, "
+                    ".ux-h5pdfreader_container_footer_pages_total"
+                ).count() > 0
+            except Exception:
+                has_document = False
+            if not has_document:
+                safe_screenshot(
+                    self.ctx, page, f".artifacts/document-blocked-{task.unit_id}.png"
+                )
+                raise ActionUnavailable(
+                    f"文档页无法访问：{blocked}。当前 URL：{page.url}"
+                )
 
         result = DocumentResult(task=task, url=url, status_before=task.status)
         fallback = f"document-{task.unit_id}.pdf"
@@ -302,10 +335,8 @@ class DocumentAction:
                 page_num=int(status.get("total") or 1),
             )
             result.message = "dry-run：仅预览下载地址和完成请求，未下载/未写入"
-            result.screenshot = str(
-                self.ctx.session.screenshot(
-                    page, f".artifacts/document-{task.unit_id}-dryrun.png"
-                )
+            result.screenshot = safe_screenshot(
+                self.ctx, page, f".artifacts/document-{task.unit_id}-dryrun.png"
             )
             result.elapsed = time.monotonic() - started
             return result
@@ -386,15 +417,108 @@ class DocumentAction:
         )
 
         suffix = "done"
-        result.screenshot = str(
-            self.ctx.session.screenshot(
-                page, f".artifacts/document-{task.unit_id}-{suffix}.png"
-            )
+        result.screenshot = safe_screenshot(
+            self.ctx, page, f".artifacts/document-{task.unit_id}-{suffix}.png"
         )
         result.elapsed = time.monotonic() - started
         return result
 
     # ------------------------------------------------------------------ 页面
+    def _open_page(
+        self, base: str, hash_path: str, url: str, task: Task
+    ) -> Any:
+        """打开文档页；首次失败时换一个新 Page 重试一次。
+
+        Args:
+            base: 学习页基础 URL。
+            hash_path: SPA hash 路由。
+            url: 完整文档 URL。
+            task: 当前任务（用于截图命名）。
+
+        Returns:
+            Playwright Page。
+
+        Raises:
+            ActionUnavailable: 两次打开均失败。
+        """
+        page = self.ctx.acquire_page()
+        try:
+            open_route(page, base, hash_path)
+            return page
+        except ActionCancelled:
+            raise
+        except Exception as exc:
+            self.ctx.warn(f"文档页首次打开失败：{exc}")
+            safe_screenshot(
+                self.ctx, page, f".artifacts/document-{task.unit_id}-failed.png"
+            )
+            try:
+                page.close()
+            except Exception:
+                pass
+        self.ctx.check_cancel()
+        retry_page = self.ctx.session.new_page()
+        self.ctx.page = retry_page
+        try:
+            try:
+                open_route(retry_page, base, hash_path)
+            except ActionCancelled:
+                raise
+            except Exception:
+                # 关键步骤：SPA 冷启动 hash 路由不稳定，退化为直接打开完整 URL。
+                retry_page.goto(url, wait_until="commit", timeout=45_000)
+                retry_page.wait_for_timeout(2500)
+            return retry_page
+        except ActionCancelled:
+            raise
+        except Exception as exc:
+            safe_screenshot(
+                self.ctx,
+                retry_page,
+                f".artifacts/document-{task.unit_id}-failed.png",
+            )
+            raise ActionUnavailable(
+                f"文档页打开失败：{exc}；URL：{url}"
+            ) from exc
+
+    def _wait_page_ready(self, page, *, timeout_ms: int = 15_000) -> None:
+        """等待文档页的阅读器/下载链接/章节内容出现，减少 SPA 慢加载误判。
+
+        Args:
+            page: Playwright Page。
+            timeout_ms: 最长等待毫秒数。
+        """
+        deadline = time.monotonic() + max(0, timeout_ms) / 1000
+        started: float = time.monotonic()
+        selector = (
+            "a.j-downpdf, a.j-downtxt, .mooc-docs-reader__page-status, "
+            ".pdf-unit-renderer, .pdf-unit-reader, "
+            ".ux-h5pdfreader_container_footer_pages_total"
+        )
+        while time.monotonic() < deadline:
+            self.ctx.check_cancel()
+            try:
+                if page.locator(selector).count() > 0:
+                    return
+            except Exception:
+                return
+            # 至少给 SPA 3 秒渲染时间；若已有章节框架且没有登录墙，
+            # 说明页面本身已打开，可以交给后续 PDF/下载链接探测。
+            if time.monotonic() - started >= 3:
+                if page_block_reason(page):
+                    return
+                try:
+                    if page.locator(
+                        ".m-learnChapterNormal, .m-learnChapterList"
+                    ).count() > 0:
+                        return
+                except Exception:
+                    return
+            try:
+                page.wait_for_timeout(500)
+            except Exception as exc:
+                raise ActionUnavailable(f"文档页已关闭：{exc}") from exc
+
     @staticmethod
     def _pdf_status(page) -> dict[str, Any]:
         try:
@@ -435,10 +559,14 @@ class DocumentAction:
         if current >= total:
             return True, total
 
-        next_selector = (
-            'button[aria-label="下一页"]'
+        next_selectors: tuple[str, ...] = (
+            (
+                'button[aria-label="下一页"]',
+                '[aria-label="下一页"]',
+                'button:has-text("下一页")',
+            )
             if kind == "modern"
-            else ".ux-h5pdfreader_container_footer_pages_next"
+            else (".ux-h5pdfreader_container_footer_pages_next",)
         )
         self.ctx.info(f"文档共 {total} 页，正在翻到最后一页…")
         stalled = 0
@@ -449,10 +577,18 @@ class DocumentAction:
             total = int(status.get("total") or total)
             if current >= total:
                 break
-            button = page.locator(next_selector).first
+            button = None
+            for next_selector in next_selectors:
+                candidate = page.locator(next_selector).first
+                try:
+                    if candidate.count() > 0 and candidate.is_visible():
+                        button = candidate
+                        break
+                except Exception:
+                    continue
+            if button is None:
+                break
             try:
-                if button.count() == 0 or not button.is_visible():
-                    break
                 classes = str(button.get_attribute("class") or "")
                 if "disable" in classes or "disabled" in classes:
                     break
@@ -496,7 +632,13 @@ class DocumentAction:
                 'a:has-text("文档下载")',
                 'a:has-text("附件下载")',
             ):
-                for element in page.locator(css).all():
+                try:
+                    # 关键步骤：页面导航中 locator.all() 可能抛异常，
+                    # 不能让诊断性遍历把整个文档任务判失败。
+                    elements = page.locator(css).all()
+                except Exception:
+                    continue
+                for element in elements:
                     try:
                         href = str(element.get_attribute("href") or "").strip()
                         text = str(element.inner_text() or "").strip()

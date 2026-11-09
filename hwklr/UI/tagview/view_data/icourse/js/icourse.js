@@ -1,10 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-11-08 14:30
-  最后更新: 2026-11-09 10:00
+  最后更新: 2026-11-09 20:40
   文件名: icourse.js
-  主要用途: “中国大学慕课”标签页逻辑：自动登录、课程选择、任务勾选、批量完成、进度轮询与题库同步。
-  文件版本: 4.2.0
+  主要用途: “中国大学慕课”标签页逻辑：自动登录、课程选择、任务勾选、批量完成、进度轮询、题库同步与任务结果提醒。
+  文件版本: 4.3.2
 */
 (function () {
   'use strict';
@@ -38,6 +38,7 @@
     autoTried: false,
     logOpen: false,
     notifiedKeys: new Set(),
+    resultShownJobId: '',
     keydownHandler: null,
   };
 
@@ -65,7 +66,8 @@
       'i-log-panel', 'i-log-lines', 'i-login-overlay',
       'i-login-overlay-text', 'i-login-decline', 'i-login-visible',
       'i-warning-modal', 'i-warning-detail', 'i-warning-cancel',
-      'i-warning-confirm',
+      'i-warning-confirm', 'i-result-modal', 'i-result-title',
+      'i-result-summary', 'i-result-bank', 'i-result-list', 'i-result-close',
     ].forEach((id) => {
       els[id] = document.getElementById(id);
     });
@@ -99,6 +101,14 @@
       els['i-warning-modal'].addEventListener('click', (event) => {
         if (event.target === els['i-warning-modal']) {
           hideWarning();
+        }
+      });
+    }
+    on(els['i-result-close'], 'click', hideResult);
+    if (els['i-result-modal']) {
+      els['i-result-modal'].addEventListener('click', (event) => {
+        if (event.target === els['i-result-modal']) {
+          hideResult();
         }
       });
     }
@@ -142,6 +152,9 @@
       scheduleJobPoll();
       renderAll();
       return;
+    }
+    if (state.job && state.job.done) {
+      showJobResult(state.job);
     }
     if (state.loginJob && state.loginJob.running) {
       scheduleLoginPoll();
@@ -842,7 +855,9 @@
         return;
       }
       if (jobTask.status === '已取消') {
-        cell.appendChild(statusPill('todo-pill', '已取消'));
+        cell.appendChild(statusPill(
+          'todo-pill', '已取消', jobTask.message || jobTask.error || '任务已取消'
+        ));
         return;
       }
       if (jobTask.status === '已跳过') {
@@ -1016,6 +1031,73 @@
     }
   }
 
+  function hideResult() {
+    if (els['i-result-modal']) {
+      els['i-result-modal'].classList.add('hidden');
+    }
+  }
+
+  function showJobResult(job) {
+    if (!job || job.cancelled || !job.job_id
+      || state.resultShownJobId === job.job_id) {
+      return;
+    }
+    const tasks = Array.isArray(job.tasks) ? job.tasks : [];
+    const quizKinds = new Set(['测验', '随堂测验', '作业', '考试']);
+    const skippedQuizzes = tasks.filter(
+      (task) => task.status === '已跳过' && quizKinds.has(task.kind)
+    );
+    if (!skippedQuizzes.length) {
+      return;
+    }
+    state.resultShownJobId = job.job_id;
+    const result = job.result || {};
+    const courseName = (state.course && state.course.course
+      && state.course.course.name) || job.course_name || '当前课程';
+    if (els['i-result-title']) {
+      els['i-result-title'].textContent = '部分测验未能自动完成';
+    }
+    if (els['i-result-summary']) {
+      els['i-result-summary'].textContent =
+        '课程「' + courseName + '」任务结束：完成 '
+        + (result.done || 0) + '，失败 ' + (result.failed || 0)
+        + '，跳过 ' + (result.skipped || 0) + '。';
+    }
+    if (els['i-result-bank']) {
+      const reasons = skippedQuizzes.map(
+        (task) => task.message || task.error || ''
+      );
+      let bankText = '';
+      if (reasons.some((text) => /题库未收录|系统异常/.test(text))) {
+        bankText = '该课程未被 GinsMooc 题库收录（或题库查询失败），'
+          + '测验无法自动作答。题库收录后可重新运行；也可以手动完成测验。';
+      } else if (reasons.some((text) => /没有测验 id|testId/i.test(text))) {
+        bankText = '部分测验单元没有 testId，无法定位测验页面，'
+          + '因此无法自动作答。';
+      } else if (reasons.some((text) => /SPOC/i.test(text))) {
+        bankText = 'SPOC 课程暂不支持自动刷题。';
+      }
+      els['i-result-bank'].textContent = bankText;
+      els['i-result-bank'].classList.toggle('hidden', !bankText);
+    }
+    if (els['i-result-list']) {
+      els['i-result-list'].innerHTML = '';
+      skippedQuizzes.forEach((task) => {
+        const item = node('li');
+        item.appendChild(node(
+          'strong', '', (task.kind || '测验') + '「' + (task.title || '') + '」'
+        ));
+        item.appendChild(node(
+          'span', 'result-reason', task.message || task.error || '题库未收录'
+        ));
+        els['i-result-list'].appendChild(item);
+      });
+    }
+    if (els['i-result-modal']) {
+      els['i-result-modal'].classList.remove('hidden');
+    }
+  }
+
   async function confirmStart() {
     hideWarning();
     const keys = [];
@@ -1039,6 +1121,8 @@
       state.job = data;
       state.percentShown = new Map();
       state.notifiedKeys = new Set();
+      state.resultShownJobId = '';
+      hideResult();
       clearNotices();
       renderJob(data);
       renderTasks();
@@ -1084,6 +1168,7 @@
         App.toast('任务结束：完成 ' + (result.done || 0) + '，失败 '
           + (result.failed || 0) + '，跳过 ' + (result.skipped || 0), 'info');
         await refreshCourseState();
+        showJobResult(data);
       }
     } catch (error) {
       App.toast('读取任务状态失败：' + error.message, 'error');

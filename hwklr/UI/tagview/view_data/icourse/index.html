@@ -1,10 +1,10 @@
 <!--
   作者: Gary
   编写日期: 2026-11-08 14:30
-  最后更新: 2026-11-09 10:00
+  最后更新: 2026-11-09 20:40
   文件名: index.html
-  主要用途: “中国大学慕课”标签页结构：紧凑顶栏、内部滚动课程/任务区、自动登录提示与完成任务操作栏。
-  文件版本: 4.2.0
+  主要用途: “中国大学慕课”标签页结构：紧凑顶栏、内部滚动课程/任务区、自动登录提示、完成任务操作栏与任务结果弹窗。
+  文件版本: 4.3.2
 -->
 <section class="tag-page tag-icourse" id="icourse-page">
   <header class="ic-topbar">
@@ -111,6 +111,19 @@
       <div class="row end">
         <button id="i-warning-cancel" class="btn ghost" type="button">取消</button>
         <button id="i-warning-confirm" class="btn danger" type="button">确认开始</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="i-result-modal" role="dialog"
+       aria-modal="true" aria-labelledby="i-result-title">
+    <div class="modal">
+      <h3 id="i-result-title">任务完成</h3>
+      <p id="i-result-summary" class="hint"></p>
+      <p id="i-result-bank" class="warning-text hidden"></p>
+      <ul id="i-result-list" class="result-list"></ul>
+      <div class="row end">
+        <button id="i-result-close" class="btn primary" type="button">知道了</button>
       </div>
     </div>
   </div>
