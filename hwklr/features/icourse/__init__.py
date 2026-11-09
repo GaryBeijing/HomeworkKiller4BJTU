@@ -3,7 +3,7 @@
 # 编写日期: 2026-11-08 14:30
 # 文件名: __init__.py
 # 主要用途: 实现“中国大学慕课”功能：登录、课程/任务展示、批量完成视频/文档/测验/讨论与题库同步。
-# 文件版本: 4.0.0
+# 文件版本: 4.2.0
 """中国大学慕课功能。
 
 功能层只负责动作分发、状态缓存与 job 编排；浏览器自动化、课程解析与题库
@@ -37,7 +37,7 @@ from .models import (
     extract_term_id,
 )
 
-__version__ = "4.1.0"
+__version__ = "4.2.0"
 __author__ = "Gary"
 __all__ = ["IcourseFeature"]
 
@@ -395,6 +395,7 @@ class IcourseFeature(Feature):
         """
         handlers = {
             "get_state": self._action_get_state,
+            "validate_login": self._action_validate_login,
             "load_courses": self._action_load_courses,
             "select_course": self._action_select_course,
             "get_course": self._action_get_course,
@@ -419,6 +420,26 @@ class IcourseFeature(Feature):
         except Exception as exc:  # 兜底，保证错误能回到 UI。
             _LOGGER.exception("慕课功能未预期异常")
             return failure("操作失败: %s" % exc)
+
+    def _action_validate_login(self, params: dict[str, Any]) -> ApiResult:
+        """校验当前浏览器登录态；仅在失效时返回 logged_in=False。
+
+        该校验在标签激活时调用，不清理已选课程缓存。
+        """
+        from . import login_service
+
+        try:
+            with self._state_lock:
+                member: dict[str, Any] = dict(self._member)
+            if not member:
+                _client, member = login_service.load_client()
+            login_service.ensure_storage_state_valid()
+        except Exception as exc:
+            _LOGGER.info("慕课登录态校验失败: %s", exc)
+            return success({"logged_in": False, "reason": str(exc), "user": {}})
+        with self._state_lock:
+            self._member = dict(member)
+        return success({"logged_in": True, "user": dict(member)})
 
     def _action_get_state(self, params: dict[str, Any]) -> ApiResult:
         """返回缓存状态，不联网。"""
@@ -691,6 +712,7 @@ class IcourseFeature(Feature):
         try:
             client, user = login_service.load_client(log=lambda m: say("info", m))
             validate(client)
+            login_service.ensure_storage_state_valid(log=lambda m: say("info", m))
             say("success", "已使用保存的 Cookie 登录")
             return user
         except Exception as exc:
@@ -705,6 +727,7 @@ class IcourseFeature(Feature):
             )
             client, user = login_service.load_client(log=lambda m: say("info", m))
             validate(client)
+            login_service.ensure_storage_state_valid(log=lambda m: say("info", m))
             say("success", "已导入本机浏览器 Cookie 登录")
             return user or imported
         except Exception as exc:
@@ -722,6 +745,7 @@ class IcourseFeature(Feature):
                     log=lambda m: say("info", m),
                     cancel=self._login_cancel,
                 )
+                login_service.ensure_storage_state_valid(log=lambda m: say("info", m))
                 say("success", "已使用设置中的账号登录")
                 return user
             except Exception as exc:
@@ -882,9 +906,6 @@ class IcourseFeature(Feature):
 
             try:
                 client, member = self._require_client()
-                from . import login_service
-
-                login_service.ensure_storage_state()
             except Exception as exc:
                 return failure(str(exc))
             with self._state_lock:

@@ -1,10 +1,10 @@
 <!--
   作者: Gary
   编写日期: 2026-11-08 14:30
-  最后更新: 2026-11-08 17:10
+  最后更新: 2026-11-09 10:00
   文件名: index.html
   主要用途: “中国大学慕课”标签页结构：紧凑顶栏、内部滚动课程/任务区、自动登录提示与完成任务操作栏。
-  文件版本: 4.0.1
+  文件版本: 4.2.0
 -->
 <section class="tag-page tag-icourse" id="icourse-page">
   <header class="ic-topbar">
@@ -14,7 +14,7 @@
     </div>
     <div class="ic-top-actions">
       <span id="i-account-badge" class="pill info">未登录</span>
-      <button id="i-relogin" class="btn small ic-top-btn hidden" type="button">重新登陆</button>
+      <button id="i-relogin" class="btn small ic-top-btn" type="button">重新登录</button>
       <button id="i-open-settings" class="btn small ic-top-btn" type="button">设置</button>
     </div>
   </header>
@@ -79,7 +79,6 @@
           <div class="progress-track ic-job-track">
             <div id="i-job-bar" class="progress-bar"></div>
           </div>
-          <button id="i-cancel-job" class="btn ghost small" type="button">取消</button>
         </span>
         <span class="spacer"></span>
         <button id="i-start" class="btn primary" type="button" disabled>开始完成</button>

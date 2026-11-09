@@ -1,10 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-11-08 14:30
-  最后更新: 2026-11-08 17:00
+  最后更新: 2026-11-09 10:00
   文件名: icourse.js
   主要用途: “中国大学慕课”标签页逻辑：自动登录、课程选择、任务勾选、批量完成、进度轮询与题库同步。
-  文件版本: 4.0.1
+  文件版本: 4.2.0
 */
 (function () {
   'use strict';
@@ -62,7 +62,7 @@
       'i-course-title', 'i-course-meta', 'i-log-toggle', 'i-type-rail',
       'i-task-body', 'i-select-all', 'i-select-unsolved', 'i-selection-hint',
       'i-start', 'i-job-inline', 'i-job-phase', 'i-job-message', 'i-job-bar',
-      'i-cancel-job', 'i-log-panel', 'i-log-lines', 'i-login-overlay',
+      'i-log-panel', 'i-log-lines', 'i-login-overlay',
       'i-login-overlay-text', 'i-login-decline', 'i-login-visible',
       'i-warning-modal', 'i-warning-detail', 'i-warning-cancel',
       'i-warning-confirm',
@@ -84,8 +84,13 @@
     on(els['i-log-toggle'], 'click', toggleLog);
     on(els['i-select-all'], 'change', toggleSelectAll);
     on(els['i-select-unsolved'], 'click', selectUnsolved);
-    on(els['i-start'], 'click', requestStart);
-    on(els['i-cancel-job'], 'click', cancelJob);
+    on(els['i-start'], 'click', () => {
+      if (jobRunning()) {
+        cancelJob();
+      } else {
+        requestStart();
+      }
+    });
     on(els['i-login-visible'], 'click', acceptVisibleLogin);
     on(els['i-login-decline'], 'click', declineVisibleLogin);
     on(els['i-warning-cancel'], 'click', hideWarning);
@@ -135,6 +140,8 @@
     }
     if (state.job && state.job.running) {
       scheduleJobPoll();
+      renderAll();
+      return;
     }
     if (state.loginJob && state.loginJob.running) {
       scheduleLoginPoll();
@@ -146,7 +153,15 @@
       }
       return;
     }
-    if (state.loggedIn) {
+    if (state.loginBlocked) {
+      showRelogin();
+      setAccountStatus('登录失败', 'bad');
+      renderAll();
+      return;
+    }
+    // 4.2.0：标签激活时校验登录态，而不是点击“开始完成”时。
+    const valid = await validateLogin();
+    if (valid) {
       if (!state.courses.length) {
         await loadCourses(false);
       } else {
@@ -154,15 +169,31 @@
       }
       return;
     }
-    if (!state.loginBlocked) {
-      await beginAutoLogin(true);
-      if (state.loggedIn && !state.courses.length) {
-        await loadCourses(false);
+    state.loggedIn = false;
+    await beginAutoLogin(true);
+    if (state.loggedIn && !state.courses.length) {
+      await loadCourses(false);
+    }
+  }
+
+  /**
+   * 通过无头浏览器校验当前登录态，不清理已选课程。
+   * @returns {Promise<boolean>} 是否有效。
+   */
+  async function validateLogin() {
+    try {
+      const data = await App.callOk('validate_login');
+      state.loggedIn = Boolean(data.logged_in);
+      state.user = data.user || {};
+      updateAccountBadge();
+      if (!state.loggedIn && data.reason) {
+        appendLog('warn', '登录态校验失败：' + data.reason);
       }
-    } else {
-      showRelogin(true);
-      setAccountStatus('登录失败', 'bad');
-      renderAll();
+      return state.loggedIn;
+    } catch (error) {
+      state.loggedIn = false;
+      appendLog('warn', '登录态校验失败：' + error.message);
+      return false;
     }
   }
 
@@ -272,9 +303,9 @@
     setAccountStatus('未登录', 'info');
   }
 
-  function showRelogin(show) {
+  function showRelogin() {
     if (els['i-relogin']) {
-      els['i-relogin'].classList.toggle('hidden', !show);
+      els['i-relogin'].classList.remove('hidden');
     }
   }
 
@@ -392,6 +423,9 @@
   function applyLoginSnapshot(job) {
     state.loginJob = job;
     updateAccountBadge();
+    if (els['i-relogin']) {
+      els['i-relogin'].disabled = Boolean(job && job.running);
+    }
     renderLogs();
     if (job.running && els['i-log-panel'] && els['i-log-panel'].classList.contains('hidden')) {
       // 自动登录时默认收起日志，避免遮挡任务区；用户可点“日志”查看。
@@ -478,9 +512,20 @@
   }
 
   async function relogin() {
+    if (jobRunning()) {
+      App.toast('任务运行中，暂不能刷新登录状态', 'warn');
+      return;
+    }
     state.loginBlocked = false;
     state.autoTried = false;
-    showRelogin(false);
+    showRelogin();
+    setAccountStatus('正在刷新登录状态…', 'info');
+    const valid = await validateLogin();
+    if (valid) {
+      App.toast('登录状态有效', 'success');
+      renderAll();
+      return;
+    }
     await beginAutoLogin(false);
   }
 
@@ -829,8 +874,15 @@
     if (els['i-selection-hint']) {
       els['i-selection-hint'].textContent = '已选 ' + total + ' 个任务';
     }
+    const running = jobRunning();
     if (els['i-start']) {
-      els['i-start'].disabled = total === 0 || jobRunning() || !state.loggedIn;
+      els['i-start'].textContent = running ? '终止任务' : '开始完成';
+      els['i-start'].className = running ? 'btn danger-outline' : 'btn primary';
+      els['i-start'].disabled = running ? false : (total === 0 || !state.loggedIn);
+    }
+    if (els['i-relogin']) {
+      els['i-relogin'].disabled = running
+        || Boolean(state.loginJob && state.loginJob.running);
     }
   }
 
@@ -974,6 +1026,10 @@
     if (!course || !keys.length) {
       return;
     }
+    if (els['i-start']) {
+      els['i-start'].disabled = true;
+    }
+    App.toast('正在校验登录状态并启动任务…', 'info');
     try {
       const data = await App.callOk('start_completion_job', {
         term_id: Number(course.term_id),
@@ -989,7 +1045,19 @@
       updateSelectionUI();
       scheduleJobPoll();
     } catch (error) {
-      App.toast(error.message, 'error');
+      if (/登录|Cookie|会话/i.test(error.message)) {
+        state.loggedIn = false;
+        state.loginBlocked = false;
+        state.user = {};
+        showRelogin(false);
+        setAccountStatus('登录失效，正在重新登录…', 'warn');
+        renderAll();
+        await beginAutoLogin(false);
+      } else {
+        App.toast(error.message, 'error');
+      }
+    } finally {
+      updateSelectionUI();
     }
   }
 
@@ -1036,11 +1104,15 @@
   }
 
   async function cancelJob() {
+    if (els['i-start']) {
+      els['i-start'].disabled = true;
+    }
     try {
       await App.callOk('cancel_completion_job', { job_id: state.jobId });
       App.toast('已请求取消任务', 'warn');
     } catch (error) {
       App.toast(error.message, 'error');
+      updateSelectionUI();
     }
   }
 
@@ -1077,10 +1149,6 @@
       els['i-job-bar'].style.width = String(
         total > 0 ? Math.min(100, current * 100 / total) : 0
       ) + '%';
-    }
-    if (els['i-cancel-job']) {
-      els['i-cancel-job'].disabled = !job.running;
-      els['i-cancel-job'].classList.toggle('hidden', !job.running);
     }
     showFilledNotices(job);
   }

@@ -3,7 +3,7 @@
 # 编写日期: 2026-11-08 14:30
 # 文件名: browser_auth.py
 # 主要用途: Cookie 注入、登录态校验与 Playwright storage_state 导出。
-# 文件版本: 4.0.0
+# 文件版本: 4.1.1
 """把保存的 Cookie 同步进调试 Edge，或导出无头模式登录态。"""
 
 from __future__ import annotations
@@ -146,7 +146,7 @@ def ensure_storage_state_login(path: Path | str) -> None:
     except Exception as exc:
         raise AuthError(f"无头登录态校验失败：{exc}") from exc
     raise AuthError(
-        "无头登录态已失效（浏览器打开后未登录）。请重新运行 "
+        "无头登录态已失效（浏览器打开后未登录）。"
         "请重新登录中国大学慕课，或重新导入 Cookie。"
     )
 

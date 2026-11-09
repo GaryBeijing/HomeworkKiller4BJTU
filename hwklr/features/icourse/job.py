@@ -3,7 +3,7 @@
 # 编写日期: 2026-11-08 14:30
 # 文件名: job.py
 # 主要用途: 编排“开始完成”后台任务：视频并发、文档/测验/讨论串行、进度快照与取消。
-# 文件版本: 4.0.1
+# 文件版本: 4.2.0
 """完成任务的 job 编排。"""
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ from .client import AuthError, MoocClient
 from .courses import reload_course
 from .models import DONE, Course, Task
 
-__version__ = "4.0.0"
+__version__ = "4.2.0"
 __author__ = "Gary"
 __all__ = ["CompletionJob"]
 
@@ -223,9 +223,10 @@ class CompletionJob:
             full_score=full_score,
             screenshot=screenshot,
         )
+        detail: str = message or error
         self._event(
             "error" if status == "失败" else "info",
-            "%s：%s%s" % (task.name, status, ("（%s）" % message) if message else ""),
+            "%s：%s%s" % (task.name, status, ("（%s）" % detail) if detail else ""),
         )
 
     # ------------------------------------------------------------------ 执行
@@ -340,12 +341,9 @@ class CompletionJob:
         try:
             state = export_saved_storage_state(config.storage_state_file())
             storage_state = str(state)
-            from .browser_auth import ensure_storage_state_login
-
-            ensure_storage_state_login(storage_state)
         except Exception as exc:
             for task in videos:
-                self._finish_task(task, "失败", error="登录态不可用：%s" % exc)
+                self._finish_task(task, "失败", error="缺少登录态：%s" % exc)
             return
         answer_index = store.all_questions_index(self.course.term_id)
 

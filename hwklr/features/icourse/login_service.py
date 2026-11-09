@@ -3,7 +3,7 @@
 # 编写日期: 2026-11-08 14:30
 # 文件名: login_service.py
 # 主要用途: 编排慕课账号登录、窗口/无头浏览器登录、本机 Cookie 导入与已保存会话加载。
-# 文件版本: 4.0.0
+# 文件版本: 4.1.1
 """慕课登录与会话服务。
 
 - 账号登录统一走 icourse163 登录页（Playwright/系统 Edge），
@@ -30,11 +30,12 @@ from .session_store import (
     save_session,
 )
 
-__version__ = "4.0.0"
+__version__ = "4.1.1"
 __author__ = "Gary"
 __all__ = [
     "LoginError",
     "ensure_storage_state",
+    "ensure_storage_state_valid",
     "import_browser_cookies",
     "load_client",
     "login_with_credentials",
@@ -155,6 +156,28 @@ def ensure_storage_state(log: Log | None = None) -> Path:
         raise LoginError("生成无头登录态失败：%s" % exc) from exc
     if log:
         log("已生成无头登录态：%s" % target.name)
+    return target
+
+
+def ensure_storage_state_valid(log: Log | None = None) -> Path:
+    """生成并验证无头 storage_state 是否仍处于登录状态。
+
+    Args:
+        log: 日志回调。
+
+    Returns:
+        storage_state 文件路径。
+
+    Raises:
+        LoginError: 会话缺失、浏览器启动失败或登录态已失效。
+    """
+    from .browser_auth import ensure_storage_state_login
+
+    target: Path = ensure_storage_state(log)
+    try:
+        ensure_storage_state_login(target)
+    except Exception as exc:
+        raise LoginError("登录状态校验失败：%s" % exc) from exc
     return target
 
 
