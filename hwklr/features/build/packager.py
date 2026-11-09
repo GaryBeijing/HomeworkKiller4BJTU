@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-01 12:40
-# 最后更新: 2026-11-08 14:30
+# 最后更新: 2026-11-09 19:05
 # 文件名: packager.py
 # 主要用途: 构建功能的打包实现：图标/名称/四段版本资源、源码裁剪、V3 源码归档、说明文件分发、数据库 provider 打包、插件模板分发、PyInstaller 与 python-embed zip。
-# 文件版本: 4.0.0
+# 文件版本: 4.3.0
 """构建打包实现。
 
 构建过程不依赖 UI，可独立调用 :func:`build_package`：
@@ -39,7 +39,7 @@ from typing import Any, Callable, Final, NamedTuple
 
 from hwklr.features.manifest import OFFICIAL_FEATURES, FeatureSpec
 
-__version__ = "4.0.0"
+__version__ = "4.3.0"
 __author__ = "Gary"
 __all__ = [
     "APP_EXE_NAME",
@@ -67,6 +67,12 @@ _RESERVED_NAMES: Final[frozenset[str]] = frozenset(
     | {"LPT%d" % index for index in range(1, 10)}
 )
 _ICON_MAX_BYTES: Final[int] = 8 * 1024 * 1024
+_UNBLOCK_HOOK_PATH: Final[Path] = (
+    Path(__file__).resolve().parent
+    / "runtime_hooks"
+    / "pyi_rth_unblock_motw.py"
+)
+
 
 def _resolve_project_root() -> Path:
     """定位含 ``main.py`` 的项目根目录。
@@ -416,6 +422,11 @@ def _build_executable(
         cmd.extend(["--icon", str(icon_path)])
         cmd.extend(["--add-data", _data_arg(icon_path, ".")])
     if sys.platform == "win32":
+        # #启动兼容：运行时钩子在 main.py 之前清除 DLL/EXE 的 Mark-of-the-Web，
+        # 避免 pythonnet/.NET 因 Zone.Identifier 拒绝加载 Python.Runtime.dll。
+        if not _UNBLOCK_HOOK_PATH.is_file():
+            raise BuildError("缺少 Pythonnet 解锁运行时钩子：%s" % _UNBLOCK_HOOK_PATH)
+        cmd.extend(["--runtime-hook", str(_UNBLOCK_HOOK_PATH)])
         version_file: Path = _write_version_file(
             work_root / "version_info.txt", version, display_name, exe_name
         )

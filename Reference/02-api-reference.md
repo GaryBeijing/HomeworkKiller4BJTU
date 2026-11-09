@@ -624,6 +624,8 @@ from hwklr.features.build.devenv import (app_home, create_dev_venv, dev_env_read
 
 抛 `BuildError`（可读文案）或让底层异常冒出（`BuildFeature._run_job` 会捕获并记录堆栈）。
 
+4.3.0 起 Windows 构建会追加 `--runtime-hook hwklr/features/build/runtime_hooks/pyi_rth_unblock_motw.py`；该钩子只做一件事：在 `main.py` 之前移除 `_internal` 下 `.dll`/`.exe` 的 `Zone.Identifier` 流，修复其他机器解压后 pythonnet/.NET 加载 `Python.Runtime.dll` 失败。
+
 #### `devenv`
 
 | 符号 | 签名 | 说明 |

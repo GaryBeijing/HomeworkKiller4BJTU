@@ -6,7 +6,7 @@
 
 ![Python](https://img.shields.io/badge/Python-3.15.2-3776AB?logo=python&logoColor=white)
 ![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-0078D4?logo=windows&logoColor=white)
-![Version](https://img.shields.io/badge/Version-4.2.0-5B4BFF)
+![Version](https://img.shields.io/badge/Version-4.3.0-5B4BFF)
 ![GUI](https://img.shields.io/badge/GUI-pywebview%20%2B%20WebView2-2F3AB2)
 
 [功能特性](#-功能特性) · [界面预览](#-界面预览) · [快速开始](#-快速开始) · [使用指南](#-使用指南) · [构建与分发](#-构建与分发) · [插件开发](#-插件开发) · [常见问题](#-常见问题)
@@ -375,6 +375,16 @@ HomeworkKiller4BJTU/
 - 确认已安装 Microsoft Edge WebView2 Runtime。
 - 检查端口 49152 是否被占用；应用会自动向后顺延，但防火墙可能拦截本地回环请求。
 - 尝试以源码方式运行 `.\Scripts\python.exe main.py` 查看控制台错误。
+</details>
+
+<details>
+<summary><b>解压后双击提示 <code>Failed to resolve Python.Runtime.Loader.Initialize</code></b></summary>
+
+这是 Windows 给下载的 zip 内 DLL 写入“来自网络”标记（Mark-of-the-Web），导致 .NET 拒绝加载 `Python.Runtime.dll`。
+
+- 4.3.0 及以后版本的 PyInstaller 产物自带运行时钩子，启动时会自动清除该标记。
+- 旧版本可手动解除：右键 zip → 属性 → 勾选“解除锁定” → 用 7-Zip 重新解压；或对解压目录执行 `Get-ChildItem -Recurse | Unblock-File`。
+- 若仍失败，请确认系统已启用 .NET Framework 4.8（Windows 11 默认包含）。
 </details>
 
 <details>

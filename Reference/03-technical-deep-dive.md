@@ -1365,6 +1365,7 @@ ICON_PATH = "icon.ico" / ""
 | `--add-data` | `hwklr/UI/page_data`、`hwklr/UI/tagview/view_data`、`hwklr/runtime_data` | 前端资源与知识库必须随包（`os.pathsep` 分隔源与目标） |
 | `--icon` + `--add-data icon.ico:`.` | 仅当有图标 | `--icon` 写 exe 资源；额外把 ico 放进 `_internal` 供 pywebview 设窗口图标 |
 | `--version-file` | 仅 Windows | 文件属性里的版本/产品名 |
+| `--runtime-hook` | 仅 Windows，`runtime_hooks/pyi_rth_unblock_motw.py` | 4.3.0 起：在 `main.py` 之前删除 `_internal` 下 DLL/EXE 的 `Zone.Identifier`，避免 .NET/pythonnet 因 Mark-of-the-Web 拒绝加载 |
 | `--console` | 开发构建 | 便于看日志 |
 | `--windowed --optimize 2` | 发布构建 | 无控制台 + 字节码优化 |
 | `--exclude-module` | 见 §8.4 | 减体积 |
