@@ -2,7 +2,7 @@
 
 # HomeworkKiller4BJTU · 北交作业助手
 
-面向北京交通大学学生的桌面学习辅助工具：把高铁答题、C 语言程序设计练习与插件扩展整合到一个本地桌面应用中。
+面向大学生的桌面学习辅助工具：把中国大学慕课（中国大学MOOC）刷课/题/讨论/文档、高铁答题(bjtu定制)、C 语言程序设计练习(bjtu定制)与插件扩展整合到一个本地桌面应用中。
 
 ![Python](https://img.shields.io/badge/Python-3.15.2-3776AB?logo=python&logoColor=white)
 ![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-0078D4?logo=windows&logoColor=white)
