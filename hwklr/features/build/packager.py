@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-01 12:40
-# 最后更新: 2026-11-09 19:05
+# 最后更新: 2026-11-10 10:30
 # 文件名: packager.py
 # 主要用途: 构建功能的打包实现：图标/名称/四段版本资源、源码裁剪、V3 源码归档、说明文件分发、数据库 provider 打包、插件模板分发、PyInstaller 与 python-embed zip。
-# 文件版本: 4.3.0
+# 文件版本: 4.4.0
 """构建打包实现。
 
 构建过程不依赖 UI，可独立调用 :func:`build_package`：
@@ -39,7 +39,7 @@ from typing import Any, Callable, Final, NamedTuple
 
 from hwklr.features.manifest import OFFICIAL_FEATURES, FeatureSpec
 
-__version__ = "4.3.0"
+__version__ = "4.4.0"
 __author__ = "Gary"
 __all__ = [
     "APP_EXE_NAME",
@@ -256,7 +256,7 @@ def build_package(
             spec=spec,
             included=(
                 dev_build
-                or (spec.name != "构建" and spec.name not in dev_features)
+                or (not spec.packaging.always_dev and spec.name not in dev_features)
             ),
             dev=spec.name in dev_features,
         )
@@ -453,17 +453,16 @@ def _build_executable(
         if spec.name not in included_names:
             cmd.extend(["--exclude-module", spec.module])
             # #数据库：被裁剪功能的 provider 与辅助模块也显式排除，避免被误收集。
-            package_name: str = spec.module.rsplit(".", 1)[-1]
-            for suffix in ("db", "_models", "_client", "_store"):
-                cmd.extend(
-                    ["--exclude-module", "hwklr.db.%s%s" % (package_name, suffix)]
-                )
-    # #中国大学慕课：功能内部大量惰性导入，PyInstaller 静态分析看不到，
-    # 需要收集整个子模块；浏览器自动化还依赖 Playwright 驱动。
-    if any(spec.module == "hwklr.features.icourse" for spec in included):
-        cmd.extend(["--collect-submodules", "hwklr.features.icourse"])
-        cmd.extend(["--collect-all", "playwright"])
-        for module in ("greenlet", "pyee", "cryptography", "websocket"):
+            if spec.db is not None:
+                for module_name in spec.db.provider_modules:
+                    cmd.extend(["--exclude-module", module_name])
+    # 功能可在 FeaturePackagingSpec 中声明惰性导入、子模块与第三方驱动。
+    for spec in included:
+        for module in spec.packaging.collect_submodules:
+            cmd.extend(["--collect-submodules", module])
+        for module in spec.packaging.collect_all:
+            cmd.extend(["--collect-all", module])
+        for module in spec.packaging.hidden_imports:
             cmd.extend(["--hidden-import", module])
     cmd.append(str(stage / "main.py"))
 
@@ -656,16 +655,17 @@ def _copy_app_tree(dest: Path, included: list[FeatureSpec], *, log: LogFn) -> No
         excluded_prefixes.append(
             "hwklr/UI/tagview/view_data/%s" % spec.view_dir
         )
-        excluded_file_prefixes.append(
-            "hwklr/runtime_data/%s_bank_" % package_name
-        )
-        # #数据库：功能被裁剪时同步移除它的 provider 与源描述文件。
-        excluded_prefixes.append("hwklr/db/%sdb.py" % package_name)
-        excluded_file_prefixes.append(
-            "hwklr/db/%s_sources.json" % package_name
-        )
-        # #数据库：慕课的 icourse_models/client/store 等辅助模块随功能一起裁剪。
-        excluded_file_prefixes.append("hwklr/db/%s_" % package_name)
+        if spec.assets is not None:
+            for runtime_dir in spec.assets.runtime_dirs:
+                excluded_prefixes.append(runtime_dir)
+        if spec.db is not None:
+            # #数据库：功能被裁剪时同步移除 provider、辅助模块与源描述文件。
+            for path in spec.db.excluded_paths:
+                excluded_prefixes.append(path)
+            for path in spec.db.source_files:
+                excluded_prefixes.append(path)
+            for prefix in spec.db.runtime_asset_prefixes:
+                excluded_file_prefixes.append(prefix)
     # vendor 中 python-embed 下载缓存不进入导出包，但插件工程模板必须随开发产物分发。
 
     def ignore(directory: str, names: list[str]) -> set[str]:

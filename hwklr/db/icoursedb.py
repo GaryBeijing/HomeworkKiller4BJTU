@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
+# 最后更新: 2026-11-10 11:00
 # 文件名: icoursedb.py
 # 主要用途: 中国大学慕课题库的 DbProvider：课程目录（id=0）与按 term_id 缓存的课程/测验/题目。
-# 文件版本: 4.0.0
+# 文件版本: 4.4.0
 """中国大学慕课题库提供者。
 
 - ``id=0``：``hwklr/db/icourse_sources.json`` 的课程目录快照。
@@ -35,7 +36,7 @@ from .provider import (
     DbStorageError,
 )
 
-__version__ = "4.0.0"
+__version__ = "4.4.0"
 __author__ = "Gary"
 __all__ = ["CATALOG_ID", "IcourseDb", "course_questions", "record_answer_index"]
 
@@ -248,6 +249,9 @@ class IcourseDb(DbProvider):
     def refresh_course(self, id: int, *, ttl_seconds: int = DEFAULT_TTL_SECONDS) -> dict[str, Any]:
         """重新抓取课程元信息与测验列表。
 
+        网络请求在 provider 锁外完成；合并与落盘通过 ``mutate`` 原子完成，
+        避免与并行 ``sync_test`` 互相覆盖。
+
         Args:
             id: 课程 term id。
             ttl_seconds: 写入记录中的 TTL。
@@ -264,37 +268,37 @@ class IcourseDb(DbProvider):
         course, tests = self.client.course_detail(id)
         if course is None:
             raise DbFormatError("题库返回的课程数据不完整: %s" % id)
-        existing: dict[str, Any] = self._load_existing(id) or {}
-        existing_tests: Any = existing.get("tests")
-        tests_payload: dict[str, Any] = (
-            dict(existing_tests) if isinstance(existing_tests, dict) else {}
-        )
         valid_ids: set[str] = {str(test.id) for test in tests}
-        for stale in [key for key in tests_payload if key not in valid_ids]:
-            tests_payload.pop(stale, None)
-        for test in tests:
-            entry: Any = tests_payload.get(str(test.id))
-            if not isinstance(entry, dict):
-                entry = {}
-            entry["meta"] = test.to_cache_dict()
-            entry.setdefault("questions", [])
-            entry.setdefault("question_count", len(entry.get("questions") or []))
-            entry.setdefault("fetched_at", 0.0)
-            entry.setdefault("error", "")
-            entry.setdefault("retry_after", 0.0)
-            tests_payload[str(test.id)] = entry
-        payload: dict[str, Any] = {
-            "schema": 1,
-            "base_name": self.base_name,
-            "id": id,
-            "course": course.to_cache_dict(),
-            "tests": tests_payload,
-            "fetched_at": time.time(),
-            "ttl_seconds": int(ttl_seconds),
-        }
-        with self._guard():
-            self._dump(id, payload)
-        return payload
+
+        def merge(existing: dict[str, Any]) -> dict[str, Any]:
+            existing_tests: Any = existing.get("tests")
+            tests_payload: dict[str, Any] = (
+                dict(existing_tests) if isinstance(existing_tests, dict) else {}
+            )
+            for stale in [key for key in tests_payload if key not in valid_ids]:
+                tests_payload.pop(stale, None)
+            for test in tests:
+                entry: Any = tests_payload.get(str(test.id))
+                if not isinstance(entry, dict):
+                    entry = {}
+                entry["meta"] = test.to_cache_dict()
+                entry.setdefault("questions", [])
+                entry.setdefault("question_count", len(entry.get("questions") or []))
+                entry.setdefault("fetched_at", 0.0)
+                entry.setdefault("error", "")
+                entry.setdefault("retry_after", 0.0)
+                tests_payload[str(test.id)] = entry
+            return {
+                "schema": 1,
+                "base_name": self.base_name,
+                "id": id,
+                "course": course.to_cache_dict(),
+                "tests": tests_payload,
+                "fetched_at": time.time(),
+                "ttl_seconds": int(ttl_seconds),
+            }
+
+        return self.mutate(id, merge)
 
     def sync_test(
         self,
@@ -306,7 +310,8 @@ class IcourseDb(DbProvider):
     ) -> dict[str, Any]:
         """抓取并缓存单个测验的题目。
 
-        网络请求在锁外完成；只有合并与落盘短暂持有 provider 锁。
+        网络请求在 provider 锁外完成；写回通过 ``mutate`` 基于最新记录合并，
+        避免并发同步时 last-write-wins 丢题。
 
         Args:
             id: 课程 term id。
@@ -326,44 +331,55 @@ class IcourseDb(DbProvider):
         )
         tests: Any = record.get("tests")
         entry: Any = tests.get(str(test_id)) if isinstance(tests, dict) else None
-        if not isinstance(entry, dict):
-            entry = {
-                "meta": {},
-                "questions": [],
-                "question_count": 0,
-                "fetched_at": 0.0,
-                "error": "",
-                "retry_after": 0.0,
-            }
-            record.setdefault("tests", {})[str(test_id)] = entry
-        first_fetched: float = float(entry.get("fetched_at") or 0)
-        if (
-            not force
-            and entry.get("questions")
-            and time.time() - first_fetched < max(0, ttl_seconds)
-        ):
-            return record
-        retry_after: float = float(entry.get("retry_after") or 0)
-        if not force and retry_after > time.time():
-            return record
+        if isinstance(entry, dict):
+            first_fetched: float = float(entry.get("fetched_at") or 0)
+            if (
+                not force
+                and entry.get("questions")
+                and time.time() - first_fetched < max(0, ttl_seconds)
+            ):
+                return record
+            retry_after: float = float(entry.get("retry_after") or 0)
+            if not force and retry_after > time.time():
+                return record
+
         try:
             questions: list[DbQuestion] = self.client.test_questions(test_id)
         except GinsMoocNotFound as exc:
-            entry["error"] = str(exc)
-            entry["retry_after"] = time.time() + 6 * 60 * 60
-            with self._guard():
-                self._dump(id, record)
+            def mark_error(existing: dict[str, Any]) -> dict[str, Any]:
+                existing_tests: Any = existing.get("tests")
+                if not isinstance(existing_tests, dict):
+                    existing_tests = {}
+                    existing["tests"] = existing_tests
+                target: Any = existing_tests.get(str(test_id))
+                if not isinstance(target, dict):
+                    target = {}
+                    existing_tests[str(test_id)] = target
+                target["error"] = str(exc)
+                target["retry_after"] = time.time() + 6 * 60 * 60
+                return existing
+            self.mutate(id, mark_error)
             raise
-        entry["questions"] = [question.to_cache_dict() for question in questions]
-        entry["question_count"] = len(questions)
-        entry["fetched_at"] = time.time()
-        entry["error"] = ""
-        entry["retry_after"] = 0.0
-        record["fetched_at"] = time.time()
-        record["ttl_seconds"] = int(ttl_seconds)
-        with self._guard():
-            self._dump(id, record)
-        return record
+
+        def merge(existing: dict[str, Any]) -> dict[str, Any]:
+            existing_tests: Any = existing.get("tests")
+            if not isinstance(existing_tests, dict):
+                existing_tests = {}
+                existing["tests"] = existing_tests
+            target: Any = existing_tests.get(str(test_id))
+            if not isinstance(target, dict):
+                target = {}
+                existing_tests[str(test_id)] = target
+            target["questions"] = [question.to_cache_dict() for question in questions]
+            target["question_count"] = len(questions)
+            target["fetched_at"] = time.time()
+            target["error"] = ""
+            target["retry_after"] = 0.0
+            existing["fetched_at"] = time.time()
+            existing["ttl_seconds"] = int(ttl_seconds)
+            return existing
+
+        return self.mutate(id, merge)
 
     def bank_info(self) -> list[dict[str, Any]]:
         """返回设置页展示用的题库信息。

@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
-# 最后更新: 2026-11-08 13:26
+# 最后更新: 2026-11-10 10:00
 # 文件名: base.py
-# 主要用途: 定义所有功能都必须继承的 Feature 抽象基类、统一调用协议、设置组、数据库访问与关于元信息只读属性。
-# 文件版本: 3.1.0
+# 主要用途: 定义所有功能都必须继承的 Feature 抽象基类、统一调用协议、Action 校验、设置组、数据库访问与关于元信息只读属性。
+# 文件版本: 4.4.0
 """功能抽象基类。
 
 约定：
@@ -19,41 +19,54 @@ import abc
 from typing import TYPE_CHECKING, Any, final
 
 from hwklr import db
+from hwklr.contracts import (
+    ActionRegistry,
+    ActionSpec,
+    ActionValidationError,
+    ApiResult,
+    ErrorCode,
+)
 
 if TYPE_CHECKING:  # 避免 base 与 settings/about 相互导入。
     from .about import AboutMetadataGroup
     from .settings import FeatureSettingsGroup
 
-__version__ = "3.1.0"
-__all__ = ["Feature", "success", "failure"]
-
-# 统一返回结构：ok 表示成功与否，data 放业务数据，error 放可读错误信息。
-ApiResult = dict[str, Any]
+__version__ = "4.4.0"
+__all__ = ["ApiResult", "Feature", "success", "failure"]
 
 
-def success(data: Any = None) -> ApiResult:
+def success(
+    data: Any = None, *, code: str = ErrorCode.OK.value
+) -> ApiResult:
     """构造成功结果。
 
     Args:
         data: 业务数据，必须可被 JSON 序列化。
+        code: 稳定的成功码；默认 ``ok``。
 
     Returns:
-        形如 ``{"ok": True, "data": data}`` 的字典。
+        形如 ``{"ok": True, "data": data, "code": code}`` 的字典。
     """
-    return {"ok": True, "data": data}
+    return {"ok": True, "data": data, "code": code}
 
 
-def failure(message: str, data: Any = None) -> ApiResult:
+def failure(
+    message: str,
+    data: Any = None,
+    *,
+    code: str = ErrorCode.UNKNOWN.value,
+) -> ApiResult:
     """构造失败结果。
 
     Args:
         message: 面向用户的可读错误信息。
         data: 附加的调试/上下文数据，必须可被 JSON 序列化。
+        code: 稳定的错误码；默认 ``unknown``。
 
     Returns:
-        形如 ``{"ok": False, "error": message, "data": data}`` 的字典。
+        形如 ``{"ok": False, "error": message, "data": data, "code": code}`` 的字典。
     """
-    return {"ok": False, "error": message, "data": data}
+    return {"ok": False, "error": message, "data": data, "code": code}
 
 
 class Feature(abc.ABC):
@@ -149,6 +162,42 @@ class Feature(abc.ABC):
                 "数据库 %s 的 id=%s 不是 JSON 对象" % (self._db_base_name, id)
             )
         return payload
+
+    @classmethod
+    def action_specs(cls) -> tuple[ActionSpec, ...]:
+        """返回该功能声明的动作规格。
+
+        默认空元组表示继续走旧 ``handle`` 行为；声明后由 :meth:`dispatch`
+        做宽松参数校验。
+        """
+        return ()
+
+    @final
+    def dispatch(self, action: str, params: dict[str, Any]) -> ApiResult:
+        """校验并分发一次 UI 动作。
+
+        Args:
+            action: 动作名称。
+            params: 动作参数。
+
+        Returns:
+            统一格式的结果字典。
+        """
+        if not isinstance(params, dict):
+            return failure("动作参数必须是对象", code=ErrorCode.INVALID_PARAMS.value)
+        specs = type(self).action_specs()
+        if not specs:
+            return self.handle(action, params)
+        registry = ActionRegistry(specs)
+        spec = registry.get(action)
+        if spec is None:
+            # 保留各功能原有的“未知动作”错误文案。
+            return self.handle(action, params)
+        try:
+            validated = registry.validate(spec, params)
+        except ActionValidationError as exc:
+            return failure(str(exc), code=ErrorCode.INVALID_PARAMS.value)
+        return self.handle(spec.name, validated)
 
     @abc.abstractmethod
     def handle(self, action: str, params: dict[str, Any]) -> ApiResult:

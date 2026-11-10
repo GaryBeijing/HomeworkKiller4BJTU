@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 13:26
+# 最后更新: 2026-11-10 11:00
 # 文件名: provider.py
 # 主要用途: 定义数据库提供者基类 DbProvider、外部数据库目录解析、数据库异常与源文件读取。
-# 文件版本: 3.1.0
+# 文件版本: 4.4.0
 """数据库提供者基类。
 
 数据文件统一存放在程序外侧的 ``db/`` 目录（与 ``config.json`` 同级），
@@ -19,6 +20,7 @@ from __future__ import annotations
 
 import abc
 import contextlib
+import copy
 import json
 import logging
 import os
@@ -26,13 +28,14 @@ import re
 import tempfile
 import threading
 from pathlib import Path
-from typing import Any, Final, final
+from typing import Any, Callable, Final, final
 
 from hwklr.config import app_root
 
-__version__ = "3.1.0"
+__version__ = "4.4.0"
 __author__ = "Gary"
 __all__ = [
+    "DB_LOAD_TIMEOUT",
     "DB_TIMEOUT",
     "DbError",
     "DbDisabledError",
@@ -48,6 +51,8 @@ __all__ = [
 _LOGGER: Final[logging.Logger] = logging.getLogger(__name__)
 # 单个 provider 的并发加载等待上限（秒）。
 DB_TIMEOUT: Final[int] = 15
+# 同一 id 的 fetch 可能包含网络重试；等待同 id 的 single-flight 要更久。
+DB_LOAD_TIMEOUT: Final[int] = 180
 _BASE_NAME_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[A-Za-z0-9_]+$")
 
 
@@ -144,6 +149,8 @@ class DbProvider(abc.ABC):
             Path(source_root) if source_root is not None else None
         )
         self._lock: threading.RLock = threading.RLock()
+        self._flights_lock: threading.Lock = threading.Lock()
+        self._flights: dict[int, threading.Lock] = {}
 
     @property
     @final
@@ -193,8 +200,9 @@ class DbProvider(abc.ABC):
     def load(self, id: int) -> Any:
         """读取数据库；不存在时调用 :meth:`fetch` 抓取并落盘。
 
-        流程遵循 version3.1.0 需求：``exist`` → 读取 → ``fetch`` → 重新读取。
-        损坏的缓存文件会被删除并重建，避免永久卡死。
+        缓存读取在 provider 锁内；网络 ``fetch`` 在锁外执行，并用 per-id
+        single-flight 保证同一记录只抓取一次。这样慢网络不会阻塞其他 id，
+        也不会让等待者用 15 秒的 provider 锁超时误杀。
 
         Args:
             id: 数据库记录编号。
@@ -205,29 +213,91 @@ class DbProvider(abc.ABC):
         Raises:
             DbFormatError: 数据库文件不是 JSON 对象。
             DbStorageError: ``fetch`` 未产生可读取的数据。
-            DbTimeoutError: 等待其他线程完成加载超时。
+            DbTimeoutError: 等待同一 id 的 fetch 超时。
         """
         identifier: int = _normalize_id(id)
         with self._guard():
-            if self.exist(identifier):
-                try:
-                    return self._read(identifier)
-                except DbFormatError as exc:
-                    # #缓存自愈：损坏文件按一次未命中处理，fetch 成功后覆盖重建。
-                    _LOGGER.warning(
-                        "数据库缓存损坏，将重新生成 %s: %s",
-                        self._db_path(identifier),
-                        exc,
-                    )
-                    try:
-                        self._db_path(identifier).unlink()
-                    except OSError:
-                        pass
+            cached = self._read_cached(identifier)
+            if cached is not None:
+                return cached
+
+        flight: threading.Lock = self._flight_lock(identifier)
+        if not flight.acquire(timeout=DB_LOAD_TIMEOUT):
+            raise DbTimeoutError(
+                "等待数据库 %s 的 id=%s 加载超时（%d 秒）"
+                % (self._base_name, identifier, DB_LOAD_TIMEOUT)
+            )
+        try:
+            # 等待期间可能已有其他线程完成落盘，重新检查。
+            with self._guard():
+                cached = self._read_cached(identifier)
+                if cached is not None:
+                    return cached
             payload: Any = self.fetch(identifier)
-            if not self.exist(identifier):
-                if payload is None:
-                    return None
-                self._dump(identifier, payload)
+            with self._guard():
+                if not self.exist(identifier):
+                    if payload is None:
+                        return None
+                    self._dump(identifier, payload)
+                return self._read(identifier)
+        finally:
+            flight.release()
+
+    def _read_cached(self, identifier: int) -> Any | None:
+        """在读锁内读取缓存；损坏文件自愈为未命中。"""
+        if not self.exist(identifier):
+            return None
+        try:
+            return self._read(identifier)
+        except DbFormatError as exc:
+            _LOGGER.warning(
+                "数据库缓存损坏，将重新生成 %s: %s",
+                self._db_path(identifier),
+                exc,
+            )
+            try:
+                self._db_path(identifier).unlink()
+            except OSError:
+                pass
+            return None
+
+    def _flight_lock(self, identifier: int) -> threading.Lock:
+        """返回同一 id 的 single-flight 锁。"""
+        with self._flights_lock:
+            return self._flights.setdefault(identifier, threading.Lock())
+
+    @final
+    def mutate(
+        self, id: int, mutator: Callable[[dict[str, Any]], dict[str, Any]]
+    ) -> dict[str, Any]:
+        """对记录做原子读-改-写。
+
+        ``mutator`` 必须只做内存合并，不能包含网络或长时间阻塞操作。
+
+        Args:
+            id: 数据库记录编号。
+            mutator: 接收当前记录副本并返回新记录的纯函数。
+
+        Returns:
+            更新后的数据库记录。
+
+        Raises:
+            DbFormatError: 记录或 mutator 返回值不是 JSON 对象。
+            DbStorageError: 写入失败。
+        """
+        identifier: int = _normalize_id(id)
+        with self._guard():
+            current: Any = self._read_cached(identifier)
+            base: dict[str, Any] = current if isinstance(current, dict) else {}
+            updated: Any = mutator(copy.deepcopy(base))
+            if updated is None:
+                updated = base
+            if not isinstance(updated, dict):
+                raise DbFormatError(
+                    "数据库 %s 的 id=%s 必须是 JSON 对象"
+                    % (self._base_name, identifier)
+                )
+            self._dump(identifier, updated)
             return self._read(identifier)
 
     @abc.abstractmethod

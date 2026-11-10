@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-09 20:40
+# 最后更新: 2026-11-10 12:30
 # 文件名: __init__.py
-# 主要用途: 实现“中国大学慕课”功能：登录、课程/任务展示、批量完成视频/文档/测验/讨论与题库同步。
-# 文件版本: 4.3.2
+# 主要用途: 实现“中国大学慕课”功能：登录、课程状态、任务 handler 编排、批量完成与题库同步。
+# 文件版本: 4.4.0
 """中国大学慕课功能。
 
 功能层只负责动作分发、状态缓存与 job 编排；浏览器自动化、课程解析与题库
@@ -23,12 +23,23 @@ from typing import Any, Final
 
 from hwklr import db as hwklr_db
 from hwklr.config import load_config
-from hwklr.features.about import AboutMetadataGroup
+from hwklr.contracts import (
+    ActionSpec,
+    ErrorCode,
+    ParamSpec,
+    JobKind,
+    coerce_bool,
+    coerce_int,
+)
+from hwklr.feature_specs import FEATURE_BY_ID
+from hwklr.features.about import AboutMetadataGroup, about_meta_from_spec
 from hwklr.features.base import ApiResult, Feature, failure, success
 from hwklr.features.extensions import is_feature_enabled, set_feature_enabled
+from hwklr.features.jobs import BackgroundJob
 from hwklr.features.settings import FeatureSettingsGroup, SettingsFieldSpec
 
 from . import config
+from .state import CourseState
 from .models import (
     DONE,
     Course,
@@ -38,7 +49,7 @@ from .models import (
     extract_term_id,
 )
 
-__version__ = "4.3.2"
+__version__ = "4.4.0"
 __author__ = "Gary"
 __all__ = ["IcourseFeature"]
 
@@ -47,6 +58,75 @@ _FEATURE_NAME: Final[str] = "中国大学慕课"
 _DB_NAME: Final[str] = "icourse"
 _MAX_EVENTS: Final[int] = 200
 _QUIZ_KINDS: Final[frozenset[str]] = frozenset({"测验", "随堂测验", "作业", "考试"})
+_ACTION_SPECS: Final[tuple[ActionSpec, ...]] = (
+    ActionSpec("get_state", description="读取登录、课程与 job 快照。"),
+    ActionSpec("validate_login", description="校验当前浏览器登录态。"),
+    ActionSpec("load_courses", description="刷新已选课程列表。"),
+    ActionSpec(
+        "select_course",
+        params=(
+            ParamSpec("term_id", int, required=True, coerce=coerce_int),
+        ),
+        description="选择课程并构建任务树。",
+    ),
+    ActionSpec("get_course", description="读取缓存课程树。"),
+    ActionSpec(
+        "start_login_job",
+        params=(
+            ParamSpec(
+                "mode",
+                str,
+                default="auto",
+                choices=("auto", "headless", "visible", "cookies"),
+            ),
+            ParamSpec("browser", str, default="auto"),
+        ),
+        description="启动登录后台任务。",
+        risk="write",
+    ),
+    ActionSpec(
+        "get_login_job",
+        params=(ParamSpec("job_id", str, default=""),),
+        description="读取登录任务快照。",
+    ),
+    ActionSpec(
+        "cancel_login_job",
+        params=(ParamSpec("job_id", str, default=""),),
+        description="取消登录任务。",
+        risk="write",
+    ),
+    ActionSpec("logout", description="退出登录并清空课程缓存。", risk="write"),
+    ActionSpec(
+        "start_answer_sync",
+        params=(
+            ParamSpec("term_id", int, default=0, coerce=coerce_int),
+            ParamSpec("force", bool, default=False, coerce=coerce_bool),
+        ),
+        description="启动或复用题库同步任务。",
+        risk="write",
+    ),
+    ActionSpec("get_answer_sync", description="读取题库同步快照。"),
+    ActionSpec(
+        "start_completion_job",
+        params=(
+            ParamSpec("term_id", int, required=True, coerce=coerce_int),
+            ParamSpec("task_keys", list, required=True),
+        ),
+        description="启动批量完成任务。",
+        risk="destructive",
+    ),
+    ActionSpec(
+        "get_completion_job",
+        params=(ParamSpec("job_id", str, default=""),),
+        description="读取完成任务的快照。",
+    ),
+    ActionSpec(
+        "cancel_completion_job",
+        params=(ParamSpec("job_id", str, default=""),),
+        description="取消当前完成任务。",
+        risk="write",
+    ),
+)
 _KIND_ORDER: Final[tuple[str, ...]] = (
     "视频",
     "文档",
@@ -105,6 +185,59 @@ def _task_key_base(task: Task) -> str:
 class IcourseFeature(Feature):
     """“中国大学慕课”功能。"""
 
+    @classmethod
+    def action_specs(cls) -> tuple[ActionSpec, ...]:
+        """返回慕课动作的参数声明。"""
+        return _ACTION_SPECS
+
+    @property
+    def _member(self) -> dict[str, Any]:
+        return self._state.member
+
+    @_member.setter
+    def _member(self, value: dict[str, Any]) -> None:
+        self._state.member = dict(value)
+
+    @property
+    def _course_items(self) -> list[dict[str, Any]]:
+        return self._state.course_items
+
+    @_course_items.setter
+    def _course_items(self, value: list[dict[str, Any]]) -> None:
+        self._state.course_items = list(value)
+
+    @property
+    def _courses(self) -> list[Course]:
+        return self._state.courses
+
+    @_courses.setter
+    def _courses(self, value: list[Course]) -> None:
+        self._state.courses = list(value)
+
+    @property
+    def _course(self) -> Course | None:
+        return self._state.selected
+
+    @_course.setter
+    def _course(self, value: Course | None) -> None:
+        self._state.selected = value
+
+    @property
+    def _course_payload(self) -> dict[str, Any]:
+        return self._state.payload
+
+    @_course_payload.setter
+    def _course_payload(self, value: dict[str, Any]) -> None:
+        self._state.payload = dict(value)
+
+    @property
+    def _catalog_ids(self) -> set[int] | None:
+        return self._state.catalog_ids
+
+    @_catalog_ids.setter
+    def _catalog_ids(self, value: set[int] | None) -> None:
+        self._state.catalog_ids = value
+
     def __init__(self, universal_param: dict[str, Any]) -> None:
         """初始化功能状态（不做网络/浏览器操作）。
 
@@ -113,19 +246,16 @@ class IcourseFeature(Feature):
         """
         super().__init__(universal_param)
         self._db_base_name = _DB_NAME
-        self._state_lock: threading.RLock = threading.RLock()
-        self._member: dict[str, Any] = {}
-        self._course_items: list[dict[str, Any]] = []
-        self._courses: list[Course] = []
-        self._course: Course | None = None
-        self._course_payload: dict[str, Any] = {}
-        self._catalog_ids: set[int] | None = None
+        self._state: CourseState = CourseState()
+        self._state_lock: threading.RLock = self._state.lock
         self._answer_sync: Any | None = None
         self._answer_sync_lock: threading.RLock = threading.RLock()
-        self._login_lock: threading.RLock = threading.RLock()
-        self._login_snapshot: dict[str, Any] = self._idle_login()
-        self._login_thread: threading.Thread | None = None
-        self._login_cancel: threading.Event = threading.Event()
+        self._login_job: BackgroundJob[Any] = BackgroundJob(
+            JobKind.LOGIN,
+            self._idle_login(),
+            include_job_id=True,
+            max_events=_MAX_EVENTS,
+        )
         self._job_lock: threading.RLock = threading.RLock()
         self._job: Any | None = None
         self._settings_group: FeatureSettingsGroup = self._build_settings_group()
@@ -147,16 +277,7 @@ class IcourseFeature(Feature):
         Returns:
             慕课插件元信息。
         """
-        return AboutMetadataGroup(
-            name=_FEATURE_NAME,
-            package="ICourse",
-            author="Gary",
-            version=__version__,
-            update_date="2026-11-09",
-            official=True,
-            feature_key=_FEATURE_NAME,
-            description="登录中国大学慕课，批量完成课程视频、文档、测验与讨论任务。",
-        )
+        return about_meta_from_spec(FEATURE_BY_ID["icourse"], __version__)
 
     def _build_settings_group(self) -> FeatureSettingsGroup:
         """构建设置字段。
@@ -354,7 +475,8 @@ class IcourseFeature(Feature):
                     ids.add(int(item.get("id")))
                 except (TypeError, ValueError):
                     continue
-            self._catalog_ids = ids
+            with self._state_lock:
+                self._catalog_ids = ids
             return ids
         except Exception:
             return set()
@@ -448,8 +570,7 @@ class IcourseFeature(Feature):
             courses = [self._course_summary(course) for course in self._courses]
             course_payload = copy.deepcopy(self._course_payload)
             member = dict(self._member)
-        with self._login_lock:
-            login_job = copy.deepcopy(self._login_snapshot)
+        login_job = self._login_job.snapshot()
         with self._answer_sync_lock:
             sync = (
                 self._answer_sync.snapshot()
@@ -489,9 +610,7 @@ class IcourseFeature(Feature):
         )
         built = [build_course_without_tasks(item) for item in items]
         with self._state_lock:
-            self._course_items = list(items)
-            self._courses = built
-            self._member = dict(member)
+            self._state.replace_courses(items, built, member)
         return success(
             {
                 "courses": [self._course_summary(course) for course in built],
@@ -541,9 +660,7 @@ class IcourseFeature(Feature):
             },
         }
         with self._state_lock:
-            self._course = course
-            self._course_payload = copy.deepcopy(payload)
-            self._member = dict(member)
+            self._state.select(course, payload, member)
         if (
             catalog_available
             and self._read_settings()["auto_sync_answers"]
@@ -580,30 +697,19 @@ class IcourseFeature(Feature):
             not settings["account"] or not settings["password"]
         ):
             return failure("后台登录需要先在设置中填写账号和密码；也可以使用窗口登录或导入 Cookie")
-        with self._login_lock:
-            if self._login_snapshot.get("running"):
-                return failure("已有登录任务正在运行")
-            job_id = uuid.uuid4().hex
-            self._login_cancel = threading.Event()
-            self._login_snapshot = {
-                "job_id": job_id,
-                "running": True,
-                "done": False,
-                "cancelled": False,
+        if self._login_job.running:
+            return failure("已有登录任务正在运行")
+        browser = str(params.get("browser") or "auto")
+        self._login_job.start(
+            lambda job: self._run_login_job(job.job_id, mode, browser),
+            initial={
                 "phase": "starting",
                 "message": "正在准备登录…",
-                "events": [],
                 "error": "",
                 "user": {},
-            }
-            self._login_thread = threading.Thread(
-                target=self._run_login_job,
-                args=(job_id, mode, str(params.get("browser") or "auto")),
-                name="icourse-login",
-                daemon=True,
-            )
-            self._login_thread.start()
-        return success({"job_id": job_id, "mode": mode})
+            },
+        )
+        return success({"job_id": self._login_job.job_id, "mode": mode})
 
     def _run_login_job(self, job_id: str, mode: str, browser: str) -> None:
         """登录线程主体。"""
@@ -636,7 +742,7 @@ class IcourseFeature(Feature):
                     job_id, phase="browser", message="正在导入本机 Cookie…"
                 )
                 user = login_service.import_browser_cookies(
-                    browser=browser, log=lambda m: log("info", m), cancel=self._login_cancel
+                    browser=browser, log=lambda m: log("info", m), cancel=self._login_job.cancel_event
                 )
             else:
                 self._update_login(
@@ -655,16 +761,13 @@ class IcourseFeature(Feature):
                     browser=browser,
                     headless=(mode == "headless"),
                     log=lambda m: log("info", m),
-                    cancel=self._login_cancel,
+                    cancel=self._login_job.cancel_event,
                 )
-            if self._login_cancel.is_set():
+            if self._login_job.cancel_event.is_set():
                 raise RuntimeError("登录已取消")
             with self._state_lock:
+                self._state.clear()
                 self._member = dict(user)
-                self._courses = []
-                self._course_items = []
-                self._course = None
-                self._course_payload = {}
             self._update_login(
                 job_id,
                 running=False,
@@ -724,7 +827,7 @@ class IcourseFeature(Feature):
             imported = login_service.import_browser_cookies(
                 browser="auto",
                 log=lambda m: say("info", m),
-                cancel=self._login_cancel,
+                cancel=self._login_job.cancel_event,
             )
             client, user = login_service.load_client(log=lambda m: say("info", m))
             validate(client)
@@ -744,7 +847,7 @@ class IcourseFeature(Feature):
                     browser="auto",
                     headless=True,
                     log=lambda m: say("info", m),
-                    cancel=self._login_cancel,
+                    cancel=self._login_job.cancel_event,
                 )
                 login_service.ensure_storage_state_valid(log=lambda m: say("info", m))
                 say("success", "已使用设置中的账号登录")
@@ -754,42 +857,26 @@ class IcourseFeature(Feature):
         return None
 
     def _update_login(self, job_id: str, **fields: Any) -> None:
-        with self._login_lock:
-            if self._login_snapshot.get("job_id") != job_id:
-                return
-            self._login_snapshot.update(fields)
+        self._login_job.update_if(job_id, **fields)
 
     def _append_login_event(self, job_id: str, level: str, message: str) -> None:
-        with self._login_lock:
-            if self._login_snapshot.get("job_id") != job_id:
-                return
-            events: list[dict[str, Any]] = self._login_snapshot["events"]
-            events.append(
-                {
-                    "time": time.strftime("%H:%M:%S"),
-                    "level": level,
-                    "message": str(message),
-                }
-            )
-            if len(events) > _MAX_EVENTS:
-                del events[: len(events) - _MAX_EVENTS]
+        if not job_id or self._login_job.job_id != job_id:
+            return
+        self._login_job.event(level, message)
 
     def _action_get_login_job(self, params: dict[str, Any]) -> ApiResult:
         """返回登录任务快照。"""
         job_id = str(params.get("job_id") or "")
-        with self._login_lock:
-            snapshot = copy.deepcopy(self._login_snapshot)
+        snapshot = self._login_job.snapshot()
         if job_id and snapshot.get("job_id") != job_id:
             return failure("登录任务不存在")
         return success(snapshot)
 
     def _action_cancel_login_job(self, params: dict[str, Any]) -> ApiResult:
         """取消登录任务。"""
-        with self._login_lock:
-            if not self._login_snapshot.get("running"):
-                return success({"cancelled": True})
-            self._login_cancel.set()
-            self._login_snapshot["cancelled"] = True
+        if not self._login_job.running:
+            return success({"cancelled": True})
+        self._login_job.cancel()
         return success({"cancelled": True})
 
     def _action_logout(self, params: dict[str, Any]) -> ApiResult:
@@ -797,19 +884,13 @@ class IcourseFeature(Feature):
         with self._job_lock:
             if self._job is not None and self._job.snapshot().get("running"):
                 return failure("任务运行中，暂时不能退出登录")
-        with self._login_lock:
-            if self._login_snapshot.get("running"):
-                return failure("登录任务运行中，暂时不能退出登录")
+        if self._login_job.running:
+            return failure("登录任务运行中，暂时不能退出登录")
         from . import login_service
 
         login_service.logout()
         with self._state_lock:
-            self._member = {}
-            self._courses = []
-            self._course_items = []
-            self._course = None
-            self._course_payload = {}
-            self._catalog_ids = None
+            self._state.clear(clear_catalog=True)
         return success(self._action_get_state({}).get("data", {}))
 
     # ------------------------------------------------------------------ 题库同步
@@ -829,6 +910,8 @@ class IcourseFeature(Feature):
                 ):
                     return snapshot
                 current.cancel()
+                # 避免旧同步线程在新任务落盘后继续写入。
+                current.join(1.0)
             job = AnswerSyncJob(
                 self._db_provider(),
                 term_id,
@@ -954,8 +1037,7 @@ class IcourseFeature(Feature):
                 },
             }
             with self._state_lock:
-                self._course = updated
-                self._course_payload = copy.deepcopy(payload)
+                self._state.apply_completion(updated, payload)
         return success(snapshot)
 
     def _action_cancel_completion_job(self, params: dict[str, Any]) -> ApiResult:

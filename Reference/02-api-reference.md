@@ -816,6 +816,7 @@ from hwklr.features.icourse import IcourseFeature
 - 4.2.0：新增 `validate_login` 动作，在标签激活时校验浏览器登录态且不清理课程缓存；`start_completion_job` 不再做浏览器级预检。icourse 顶栏设置左侧固定“重新登录”，底部“取消”与“开始完成”合并为运行中“终止任务”。
 - 4.3.1：新增 `ActionUnavailable`（无法继续，映射为失败/跳过）与 `ActionCancelled`（用户取消）分离；串行任务每个任务独立 Page，文档打开失败重试一次；讨论兼容新版 `article.soft-shell` 和已展开编辑器，无回复时使用默认文本；任务结束弹窗列出题库未收录/缺少 testId 的测验。
 - 4.3.2：`page_block_reason` 把 PDF/下载链接/新版讨论标记为内容，避免误判登录墙；讨论识别“回复已发布”并按选择器优先级提取真实回复；文档/讨论异常后按服务端状态复核，已 `DONE` 的任务改为完成/已发布。
+- 4.4.0：新增 `hwklr/contracts.py`、`hwklr/feature_specs.py`、`features/jobs.py`、`icourse/tasks.py`、`icourse/state.py` 与 Document/Discussion/Quiz Page Object；`ApiResult` 增加 `code`，`Feature.dispatch` 支持 ActionSpec；DB `load` 锁外 fetch + single-flight + `mutate`。
 - 依赖：`playwright`（系统 Edge，不下载 Chromium）、`cryptography`（本机 Chromium Cookie 解密）、`websocket-client`（可见登录 CDP）。
 
 ---

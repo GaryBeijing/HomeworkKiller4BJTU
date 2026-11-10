@@ -1,19 +1,21 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
+# 最后更新: 2026-11-10 11:00
 # 文件名: answer_sync.py
 # 主要用途: 后台逐测验同步 GinsMooc 题库，提供进度快照与协作式取消。
-# 文件版本: 4.0.0
+# 文件版本: 4.4.0
 """题库后台同步。"""
 from __future__ import annotations
 
-import threading
 import time
 from typing import Any, Callable
 
+from hwklr.contracts import JobKind
 from hwklr.db.icoursedb import IcourseDb
+from hwklr.features.jobs import BackgroundJob
 
-__version__ = "4.0.0"
+__version__ = "4.4.0"
 __author__ = "Gary"
 __all__ = ["AnswerSyncJob"]
 
@@ -49,10 +51,15 @@ class AnswerSyncJob:
         self._ttl: int = max(1, int(ttl_seconds))
         self._force: bool = bool(force)
         self._log: Log = log or (lambda message: None)
-        self._lock: threading.Lock = threading.Lock()
-        self._cancel: threading.Event = threading.Event()
-        self._thread: threading.Thread | None = None
-        self._snapshot: dict[str, Any] = {
+        self._job: BackgroundJob[None] = BackgroundJob(
+            JobKind.ANSWER_SYNC,
+            self._idle_snapshot(),
+            include_job_id=False,
+        )
+
+    def _idle_snapshot(self) -> dict[str, Any]:
+        """返回同步快照初始形状。"""
+        return {
             "running": False,
             "done": False,
             "cancelled": False,
@@ -69,29 +76,21 @@ class AnswerSyncJob:
 
     def start(self) -> None:
         """启动后台线程（重复调用无效果）。"""
-        with self._lock:
-            if self._thread is not None and self._thread.is_alive():
-                return
-            self._snapshot.update(
-                running=True,
-                done=False,
-                cancelled=False,
-                current=0,
-                cached=0,
-                message="正在同步题库…",
-                error="",
-                started_at=time.time(),
-                finished_at=0.0,
-            )
-            self._cancel.clear()
-            self._thread = threading.Thread(
-                target=self._run, name="icourse-answer-sync", daemon=True
-            )
-            self._thread.start()
+        self._job.start(
+            self._run,
+            initial={
+                "current": 0,
+                "cached": 0,
+                "message": "正在同步题库…",
+                "error": "",
+                "started_at": time.time(),
+                "finished_at": 0.0,
+            },
+        )
 
     def cancel(self) -> None:
         """请求取消。"""
-        self._cancel.set()
+        self._job.cancel()
 
     def snapshot(self) -> dict[str, Any]:
         """返回同步快照。
@@ -99,25 +98,22 @@ class AnswerSyncJob:
         Returns:
             进度字典副本。
         """
-        with self._lock:
-            return dict(self._snapshot)
+        return self._job.snapshot()
 
-    def _update(self, **fields: Any) -> None:
-        """更新快照字段。
+    def join(self, timeout: float | None = None) -> None:
+        """等待同步线程结束。"""
+        self._job.join(timeout)
 
-        Args:
-            **fields: 待更新字段。
-        """
-        with self._lock:
-            self._snapshot.update(fields)
-
-    def _run(self) -> None:
+    def _run(self, job: BackgroundJob[None]) -> None:
         """同步线程主体。"""
         cached: int = 0
         for index, test_id in enumerate(self._test_ids, 1):
-            if self._cancel.is_set():
+            if job.cancel_event.is_set():
                 break
-            self._update(current=index, message="正在同步测验 %d/%d" % (index, len(self._test_ids)))
+            job.update(
+                current=index,
+                message="正在同步测验 %d/%d" % (index, len(self._test_ids)),
+            )
             try:
                 self._db.sync_test(
                     self._term_id,
@@ -126,11 +122,11 @@ class AnswerSyncJob:
                     ttl_seconds=self._ttl,
                 )
                 cached += 1
-                self._update(cached=cached)
+                job.update(cached=cached)
             except Exception as exc:
                 self._log("测验 %s 同步失败：%s" % (test_id, exc))
-        cancelled: bool = self._cancel.is_set()
-        self._update(
+        cancelled: bool = job.cancel_event.is_set()
+        job.update(
             running=False,
             done=True,
             cancelled=cancelled,

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-09 20:40
+# 最后更新: 2026-11-10 13:00
 # 文件名: base.py
 # 主要用途: 动作层公共上下文：日志回调、取消检查、页面获取与安全截图；已移除终端确认与 rich 输出。
 # 文件版本: 4.3.2
@@ -35,9 +35,37 @@ class ActionUnavailable(Exception):
     """任务无法继续（页面结构、登录或缺少数据），不是用户主动取消。"""
 
 
+@dataclass(frozen=True)
+class BrowserContext:
+    """浏览器会话与页面。"""
+
+    session: BrowserSession
+    page: Any | None = None
+
+
+@dataclass(frozen=True)
+class RunContext:
+    """日志、交互与取消控制。"""
+
+    interactive: bool = False
+    log_callback: LogCallback | None = None
+    cancel_event: threading.Event | None = None
+
+
+@dataclass(frozen=True)
+class RepositoryContext:
+    """题库/答案仓储。"""
+
+    repository: Any | None = None
+
+
 @dataclass
 class ActionContext:
-    """一次动作执行所需的上下文。"""
+    """一次动作执行所需的上下文。
+
+    首版保留原有字段；新代码可继续使用 ``ctx``，也可通过 ``browser/run/
+    repository_context`` 取得更窄的上下文。
+    """
 
     session: BrowserSession
     repository: Any | None = None
@@ -45,6 +73,21 @@ class ActionContext:
     interactive: bool = False
     log_callback: LogCallback | None = None
     cancel_event: threading.Event | None = field(default_factory=threading.Event)
+
+    @property
+    def browser(self) -> BrowserContext:
+        """返回浏览器上下文视图。"""
+        return BrowserContext(self.session, self.page)
+
+    @property
+    def run(self) -> RunContext:
+        """返回运行控制视图。"""
+        return RunContext(self.interactive, self.log_callback, self.cancel_event)
+
+    @property
+    def repository_context(self) -> RepositoryContext:
+        """返回仓储视图。"""
+        return RepositoryContext(self.repository)
 
     def acquire_page(self) -> Any:
         """返回该 worker 独占的 Page。

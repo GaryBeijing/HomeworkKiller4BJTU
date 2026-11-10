@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
-# 最后更新: 2026-11-03 19:40
+# 最后更新: 2026-11-10 10:00
 # 文件名: __init__.py
 # 主要用途: 定义标签页抽象 TagView，统一管理功能实例、设置组、官方/扩展 HTML/CSS/JS 资源与桥接调用。
-# 文件版本: 3.0.0
+# 文件版本: 4.4.0
 """标签页抽象。
 
 每个标签页 = 一套前端资源（HTML/CSS/JS）+ 一个 :class:`Feature` 实例。
@@ -179,6 +179,24 @@ class TagView(TagViewBase):
             含名称、标题、HTML/CSS/JS URL 的字典。
         """
         base: str = self._param.base_url or "/view_data/"
+        actions: list[dict[str, Any]] = []
+        for spec in self._feature.action_specs():
+            actions.append(
+                {
+                    "name": spec.name,
+                    "description": spec.description,
+                    "risk": spec.risk,
+                    "params": [
+                        {
+                            "name": param.name,
+                            "required": param.required,
+                            "default": param.default,
+                            "choices": list(param.choices),
+                        }
+                        for param in spec.params
+                    ],
+                }
+            )
         return {
             "name": self.name,
             "title": self.title,
@@ -186,6 +204,7 @@ class TagView(TagViewBase):
             "html_url": base + self._param.html,
             "css_urls": [base + item for item in self._param.css],
             "js_urls": [base + item for item in self._param.js],
+            "actions": actions,
         }
 
     def start(self) -> None:
@@ -211,7 +230,7 @@ class TagView(TagViewBase):
         """
         if not method or method.startswith("_"):
             raise ValueError("非法动作: %s" % method)
-        return self._feature.handle(method, params)
+        return self._feature.dispatch(method, params)
 
     def __repr__(self) -> str:
         """返回调试用字符串表示。

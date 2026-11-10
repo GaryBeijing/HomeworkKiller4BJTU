@@ -1,10 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-10-31 20:45
-  最后更新: 2026-11-08 17:40
+  最后更新: 2026-11-10 10:00
   文件名: base.js
   主要用途: 前端公共逻辑：标签栏、设置锁定/跳转、资源加载、桥接调用、提示与加载状态。
-  文件版本: 4.1.0
+  文件版本: 4.4.0
 */
 
 (function () {
@@ -583,7 +583,10 @@
   async function callOk(method, params) {
     const result = await call(method, params);
     if (!result.ok) {
-      throw new Error(result.error || '操作失败');
+      const error = new Error(result.error || '操作失败');
+      // 4.4.0：后端返回稳定 code，UI 可优先按 code 分支；旧正则可继续兜底。
+      error.code = result.code || '';
+      throw error;
     }
     return result.data;
   }

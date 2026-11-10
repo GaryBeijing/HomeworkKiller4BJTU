@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
-# 最后更新: 2026-11-03 19:30
+# 最后更新: 2026-11-10 10:30
 # 文件名: __init__.py
 # 主要用途: 集中登记每个标签页的启动参数；支持官方功能裁剪与运行期第三方扩展注册。
-# 文件版本: 3.0.0
+# 文件版本: 4.4.0
 """标签页启动参数。
 
 ``VIEW_PARAMS`` 是标签页的注册表：新增官方功能时，在
@@ -21,10 +21,11 @@ from typing import Final, NamedTuple
 
 from hwklr.features import Feature
 from hwklr.features.about import AboutFeature
-from hwklr.features.manifest import OFFICIAL_FEATURES, FeatureSpec, load_feature_class
+from hwklr.feature_specs import feature_order
+from hwklr.features.manifest import FeatureSpec, load_feature_class
 from hwklr.features.settings import SettingsFeature
 
-__version__ = "3.0.0"
+__version__ = "4.4.0"
 __author__ = "Gary"
 __all__ = [
     "ABOUT_NAME",
@@ -84,12 +85,28 @@ def _feature_param(spec: FeatureSpec) -> ViewParam | None:
     feature_cls = load_feature_class(spec.module, spec.class_name)
     if feature_cls is None:
         return None
+    assets = spec.assets
+    html = (
+        assets.html
+        if assets is not None and assets.html
+        else "%s/index.html" % spec.view_dir
+    )
+    css = (
+        assets.css
+        if assets is not None and assets.css
+        else ("%s/css/%s.css" % (spec.view_dir, spec.view_dir),)
+    )
+    js = (
+        assets.js
+        if assets is not None and assets.js
+        else ("%s/js/%s.js" % (spec.view_dir, spec.view_dir),)
+    )
     return ViewParam(
         function_name=spec.name,
         title=spec.name,
-        html="%s/index.html" % spec.view_dir,
-        css=("%s/css/%s.css" % (spec.view_dir, spec.view_dir),),
-        js=("%s/js/%s.js" % (spec.view_dir, spec.view_dir),),
+        html=html,
+        css=css,
+        js=js,
         feature_cls=feature_cls,  # type: ignore[arg-type]
         description=spec.description,
     )
@@ -102,7 +119,7 @@ def _build_view_params() -> dict[str, ViewParam]:
         名称到标签参数的字典；设置与关于固定在最后。
     """
     params: dict[str, ViewParam] = {}
-    for spec in OFFICIAL_FEATURES:
+    for spec in feature_order():
         param: ViewParam | None = _feature_param(spec)
         if param is not None:
             params[spec.name] = param

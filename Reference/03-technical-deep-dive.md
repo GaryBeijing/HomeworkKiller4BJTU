@@ -835,6 +835,7 @@ QuizAction / PopupQuiz                 ← 按题干/选项文本匹配答案
 - 4.2.0：登录校验改为标签激活时执行（`validate_login`），开始任务不再预检；icourse 顶栏固定“重新登录”，底部按钮运行时切换为“终止任务”，总进度条加长加高。
 - 4.3.1：串行阶段每个任务独立 Playwright Page；文档打开失败换新 Page 重试一次，截图失败不再导致任务失败；`ActionUnavailable` 与 `ActionCancelled` 分离，讨论支持新版 `article.soft-shell`/已展开编辑器/无回复默认文本，任务结束后对题库未收录或缺少 testId 的测验弹出原因。
 - 4.3.2：`page_block_reason` 增加 PDF/下载链接/新版讨论内容标记，修复文档和讨论被隐藏“登录 | 注册”文本误判为登录墙；讨论识别“回复已发布”成功信号并优先提取真实回复正文；文档/讨论异常后按服务端状态复核，已 `DONE` 的任务改为完成/已发布。
+- 4.4.0：新增类型化契约与 FeatureSpec registry；`DbProvider.load` 锁外 fetch + per-id single-flight，新增 `mutate` 原子写；新增 BackgroundJob/JobStore；icourse 使用 TaskHandler registry、CourseState 与 Document/Discussion/Quiz Page Object。
 
 ---
 

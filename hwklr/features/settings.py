@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
-# 最后更新: 2026-11-08 13:26
+# 最后更新: 2026-11-10 10:00
 # 文件名: settings.py
 # 主要用途: 设置分组框架（FeatureSettingsGroup）、“设置”标签页功能实现、第三方扩展加载/启用管理与数据库信息展示。
-# 文件版本: 3.1.0
+# 文件版本: 4.4.0
 """设置分组与设置页功能。
 
 V2 起，每个功能通过 :class:`FeatureSettingsGroup` 注册自己的设置板块：
@@ -25,9 +25,10 @@ from typing import Any, Final
 from hwklr import __version__ as APP_VERSION
 from hwklr import db
 from hwklr.config import load_config, update_config
+from hwklr.contracts import ActionSpec
 from hwklr.features.base import ApiResult, Feature, failure, success
 
-__version__ = "3.1.0"
+__version__ = "4.4.0"
 __author__ = "Gary"
 __all__ = ["FeatureSettingsGroup", "SettingsFeature", "SettingsFieldSpec"]
 
@@ -382,6 +383,22 @@ class SettingsFeature(Feature):
     通用设置（用户名）由本类自己持有；其他标签通过
     :meth:`register_group` 注册各自的设置板块。
     """
+
+    @classmethod
+    def action_specs(cls) -> tuple[ActionSpec, ...]:
+        """返回设置页动作声明。"""
+        return (
+            ActionSpec("get_settings"),
+            ActionSpec("save_settings"),
+            ActionSpec("get_bank_info"),
+            ActionSpec("get_extensions"),
+            ActionSpec("pick_extension_zip"),
+            ActionSpec("load_extension_zip"),
+            ActionSpec("load_extension_git"),
+            ActionSpec("set_extension_enabled"),
+            ActionSpec("set_group_enabled"),
+            ActionSpec("pick_plugin_template"),
+        )
 
     def __init__(self, universal_param: dict[str, Any]) -> None:
         """初始化设置功能。

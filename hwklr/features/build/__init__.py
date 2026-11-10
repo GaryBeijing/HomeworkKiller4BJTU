@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-01 12:40
-# 最后更新: 2026-11-09 19:05
+# 最后更新: 2026-11-10 10:00
 # 文件名: __init__.py
 # 主要用途: 实现“构建”功能：程序构建/插件构建切换、插件工程管理、开发环境迁移、导出参数与后台构建任务。
-# 文件版本: 4.3.0
+# 文件版本: 4.4.0
 """构建功能。
 
 - 页面收集“导出显示版本号”“程序名称”“程序图标”和“是否开发构建”；
@@ -26,7 +26,9 @@ from typing import Any, Final
 
 from hwklr import APP_NAME, DEV_BUILD, __version__ as APP_VERSION
 from hwklr.config import load_config, update_config
-from hwklr.features.about import AboutMetadataGroup
+from hwklr.feature_specs import FEATURE_BY_ID
+from hwklr.features.about import AboutMetadataGroup, about_meta_from_spec
+from hwklr.contracts import ActionSpec
 from hwklr.features.base import ApiResult, Feature, failure, success
 from hwklr.features.extensions import is_feature_enabled, set_feature_enabled
 from hwklr.features.manifest import OFFICIAL_FEATURES, FeatureSpec, feature_version
@@ -49,7 +51,7 @@ from .packager import (
     resolve_output_dir,
 )
 
-__version__ = "4.3.0"
+__version__ = "4.4.0"
 __author__ = "Gary"
 __all__ = ["BuildFeature"]
 
@@ -108,6 +110,20 @@ def _default_export_version() -> str:
 class BuildFeature(Feature):
     """“构建”标签页功能。"""
 
+    @classmethod
+    def action_specs(cls) -> tuple[ActionSpec, ...]:
+        """返回构建动作声明。"""
+        return (
+            ActionSpec("get_state"),
+            ActionSpec("start_build", risk="write"),
+            ActionSpec("get_job"),
+            ActionSpec("setup_dev_venv", risk="write"),
+            ActionSpec("choose_plugin_project"),
+            ActionSpec("create_plugin_project", risk="write"),
+            ActionSpec("test_plugin"),
+            ActionSpec("start_plugin_build", risk="write"),
+        )
+
     def __init__(self, universal_param: dict[str, Any]) -> None:
         """初始化构建功能。
 
@@ -138,16 +154,7 @@ class BuildFeature(Feature):
         Returns:
             插件名、包名、作者与版本。
         """
-        return AboutMetadataGroup(
-            name="构建",
-            package="BUILD",
-            author="Gary",
-            version=__version__,
-            update_date="2026-11-03",
-            official=True,
-            feature_key="构建",
-            description="将当前程序导出为可直接运行的目录、zip 或可执行文件，并构建插件发布包。",
-        )
+        return about_meta_from_spec(FEATURE_BY_ID["build"], __version__)
 
     def _official_rows(self) -> list[dict[str, Any]]:
         """返回官方功能及其版本。

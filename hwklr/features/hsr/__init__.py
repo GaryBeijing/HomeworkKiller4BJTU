@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: PhiloK (Remaster by Gary)
 # 编写日期: 2026-10-31 20:45
-# 最后更新: 2026-11-08 13:26
+# 最后更新: 2026-11-10 10:00
 # 文件名: __init__.py
 # 主要用途: 实现“高铁纵横”功能：登录、考试列表、自动答题与提交，并注册密码与启用设置（题库通过 db 模块延迟加载）。
-# 文件版本: 3.1.0
+# 文件版本: 4.4.0
 """高铁纵横功能实现。
 
 原作者 PhiloK（``B1.0/``）；本文件是 Gary 的 Remaster 实现。
@@ -22,7 +22,9 @@ from typing import Any, Final
 
 from hwklr import db
 from hwklr.config import load_config, update_config
-from hwklr.features.about import AboutMetadataGroup
+from hwklr.feature_specs import FEATURE_BY_ID
+from hwklr.features.about import AboutMetadataGroup, about_meta_from_spec
+from hwklr.contracts import ActionSpec
 from hwklr.features.base import ApiResult, Feature, failure, success
 from hwklr.features.extensions import is_feature_enabled, set_feature_enabled
 from hwklr.features.settings import FeatureSettingsGroup, SettingsFieldSpec
@@ -30,7 +32,7 @@ from hwklr.features.settings import FeatureSettingsGroup, SettingsFieldSpec
 from .bank import Bank
 from .client import HsrApiError, HsrClient
 
-__version__ = "3.1.0"
+__version__ = "4.4.0"
 __author__ = "PhiloK (Remaster by Gary)"
 __all__ = ["HSRFeature"]
 
@@ -47,6 +49,19 @@ class HSRFeature(Feature):
     ``get_state``、``login``、``login_saved``、``logout``、
     ``list_exams``、``start_exam``、``get_bank_info``。
     """
+
+    @classmethod
+    def action_specs(cls) -> tuple[ActionSpec, ...]:
+        """返回高铁动作声明。"""
+        return (
+            ActionSpec("get_state"),
+            ActionSpec("login", risk="write"),
+            ActionSpec("login_saved", risk="write"),
+            ActionSpec("logout", risk="write"),
+            ActionSpec("list_exams"),
+            ActionSpec("start_exam", risk="write"),
+            ActionSpec("get_bank_info"),
+        )
 
     def __init__(self, universal_param: dict[str, Any]) -> None:
         """初始化题库与登录会话。
@@ -112,16 +127,7 @@ class HSRFeature(Feature):
         Returns:
             插件名、包名、作者与版本。
         """
-        return AboutMetadataGroup(
-            name="高铁纵横",
-            package="HSR",
-            author="PhiloK (Gary remastered)",
-            version=__version__,
-            update_date="2026-11-08",
-            official=True,
-            feature_key="高铁纵横",
-            description="登录高铁答题系统，按题库自动匹配答案并提交考试。",
-        )
+        return about_meta_from_spec(FEATURE_BY_ID["hsr"], __version__)
 
     def _build_settings_group(self) -> FeatureSettingsGroup:
         """构建高铁纵横设置板块。

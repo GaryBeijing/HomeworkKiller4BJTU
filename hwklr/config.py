@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
-# 最后更新: 2026-11-08 14:30
+# 最后更新: 2026-11-10 10:30
 # 文件名: config.py
 # 主要用途: 统一读写 config.json；按设置分组存放账号、密码、AI、构建与第三方扩展配置，并解析源码/虚拟环境/打包后的程序根目录。
-# 文件版本: 4.0.0
+# 文件版本: 4.4.0
 """项目配置读写。
 
 配置文件固定位于**项目根目录**（``main.py`` 同级）的 ``config.json``。
@@ -20,7 +20,12 @@ import threading
 from pathlib import Path
 from typing import Any, Final
 
-__version__ = "4.0.0"
+from hwklr.feature_specs import (
+    build_features_default,
+    feature_config_defaults,
+)
+
+__version__ = "4.4.0"
 __all__ = [
     "DEFAULT_CONFIG",
     "app_root",
@@ -35,50 +40,8 @@ _LOGGER: Final[logging.Logger] = logging.getLogger(__name__)
 _CONFIG_LOCK: Final[threading.Lock] = threading.Lock()
 
 # 所有设置的默认值；新增设置项时在此追加，旧配置文件会自动补齐缺失字段。
-DEFAULT_CONFIG: Final[dict[str, Any]] = {
+CORE_DEFAULTS: Final[dict[str, Any]] = {
     "username": "",
-    "hsr": {
-        "password": "",
-        "enabled": True,
-    },
-    "c_programming": {
-        "provider": "deepseek",
-        "model": "deepseek-flash",
-        "base_url": "https://api.deepseek.com",
-        "api_key": "",
-        "thinking_level": "auto",
-        "max_concurrency": 1,
-        "enable_solution_mode": False,
-        "last_course_id": None,
-        "enabled": True,
-    },
-    "icourse": {
-        "account": "",
-        "password": "",
-        "account_type": "auto",
-        "workers": 1,
-        "video_rate": 2.0,
-        "submit_quizzes": False,
-        "publish_discussions": False,
-        "answer_ttl_hours": 24,
-        "auto_sync_answers": True,
-        "download_documents": True,
-        "enabled": True,
-    },
-    "build": {
-        "output_dir": "",
-        "dev_format": "executable",
-        "plugin_template": "",
-        "plugin_project": "",
-        "enabled": True,
-        "features": {
-            "高铁纵横": "release",
-            "C程序设计": "release",
-            "中国大学慕课": "release",
-            "构建": "dev",
-        },
-    },
-    # 已启用的第三方扩展标签名（例如 ["我的插件"]）。
     "third-party": [],
     "ui": {
         "width": 1100,
@@ -94,6 +57,24 @@ DEFAULT_CONFIG: Final[dict[str, Any]] = {
         "preferred_port": 49152,
     },
 }
+
+
+def _build_default_config() -> dict[str, Any]:
+    """组合核心配置与各功能的 FeatureConfigSpec 默认值。"""
+    feature_defaults: dict[str, dict[str, Any]] = feature_config_defaults()
+    result: dict[str, Any] = {"username": CORE_DEFAULTS["username"]}
+    for section in ("hsr", "c_programming", "icourse", "build"):
+        result[section] = dict(feature_defaults.get(section, {}))
+    result["build"]["features"] = build_features_default()
+    result["third-party"] = copy.deepcopy(CORE_DEFAULTS["third-party"])
+    result["ui"] = copy.deepcopy(CORE_DEFAULTS["ui"])
+    result["network"] = copy.deepcopy(CORE_DEFAULTS["network"])
+    result["server"] = copy.deepcopy(CORE_DEFAULTS["server"])
+    return result
+
+
+# 所有设置的默认值；新增功能应优先在 hwklr/feature_specs.py 声明。
+DEFAULT_CONFIG: Final[dict[str, Any]] = _build_default_config()
 
 
 def app_root() -> Path:

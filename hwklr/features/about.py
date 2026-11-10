@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
-# 最后更新: 2026-11-03 17:45
+# 最后更新: 2026-11-10 10:00
 # 文件名: about.py
 # 主要用途: 实现“关于”标签页功能：注册软件与各功能/插件的元信息，并提供 AboutMetadataGroup。
-# 文件版本: 3.0.0
+# 文件版本: 4.4.0
 """关于功能与元信息组。
 
 V3 起，每个功能通过只读属性 ``about_meta`` 返回一个
@@ -16,14 +16,16 @@ from __future__ import annotations
 from typing import Any, Final
 
 from hwklr import APP_AUTHORS, APP_NAME, __version__ as APP_VERSION
+from hwklr.contracts import ActionSpec
+from hwklr.feature_specs import FeatureSpec
 from hwklr.features.base import ApiResult, Feature, failure, success
 from hwklr.features.versions import format_app_version, format_plugin_version
 
 from .settings import FeatureSettingsGroup
 
-__version__ = "3.0.0"
+__version__ = "4.4.0"
 __author__ = "Gary"
-__all__ = ["AboutFeature", "AboutMetadataGroup"]
+__all__ = ["AboutFeature", "AboutMetadataGroup", "about_meta_from_spec"]
 
 _SOFTWARE_KEY: Final[str] = "__software__"
 
@@ -117,8 +119,46 @@ class AboutMetadataGroup:
         }
 
 
+def about_meta_from_spec(spec: FeatureSpec, version: str) -> AboutMetadataGroup:
+    """用 FeatureSpec 的元信息构造官方功能 AboutMetadataGroup。
+
+    Args:
+        spec: 官方功能描述。
+        version: 功能模块版本号。
+
+    Returns:
+        关于页元信息组。
+    """
+    meta = spec.meta
+    if meta is None:
+        return AboutMetadataGroup(
+            name=spec.name,
+            package=spec.stable_id.upper(),
+            author="",
+            version=version,
+            official=True,
+            feature_key=spec.name,
+            description=spec.description,
+        )
+    return AboutMetadataGroup(
+        name=spec.name,
+        package=meta.package,
+        author=meta.author,
+        version=version,
+        update_date=meta.update_date,
+        official=meta.official,
+        feature_key=spec.name,
+        description=meta.description or spec.description,
+    )
+
+
 class AboutFeature(Feature):
     """“关于”标签页功能。"""
+
+    @classmethod
+    def action_specs(cls) -> tuple[ActionSpec, ...]:
+        """返回关于页动作声明。"""
+        return (ActionSpec("get_meta"),)
 
     def __init__(self, universal_param: dict[str, Any]) -> None:
         """初始化关于功能并注册软件本体元信息。

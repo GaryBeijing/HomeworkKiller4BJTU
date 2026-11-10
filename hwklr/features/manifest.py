@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-01 12:40
-# 最后更新: 2026-11-08 14:30
+# 最后更新: 2026-11-10 10:30
 # 文件名: manifest.py
 # 主要用途: 登记官方功能模块与标签资源目录，供 UI 注册、构建导出与开发标记共同使用。
-# 文件版本: 4.0.0
+# 文件版本: 4.4.0
 """官方功能清单。
 
 ``OFFICIAL_FEATURES`` 是新增功能时必须同步维护的唯一清单：
@@ -14,72 +14,35 @@
 from __future__ import annotations
 
 import importlib
-from typing import Any, Final, NamedTuple
+from typing import Any, Final
 
-__version__ = "4.0.0"
+from hwklr.feature_specs import (
+    FEATURE_BY_ID,
+    FEATURE_BY_NAME,
+    OFFICIAL_FEATURES,
+    FeatureSpec,
+    build_features_default,
+    feature_config_defaults,
+    feature_order,
+    feature_provider_specs,
+    official_sections,
+)
+
+__version__ = "4.4.0"
 __author__ = "Gary"
 __all__ = [
+    "FEATURE_BY_ID",
     "FEATURE_BY_NAME",
     "FeatureSpec",
     "OFFICIAL_FEATURES",
+    "build_features_default",
+    "feature_config_defaults",
+    "feature_order",
+    "feature_provider_specs",
     "feature_version",
     "load_feature_class",
+    "official_sections",
 ]
-
-
-class FeatureSpec(NamedTuple):
-    """一个官方功能的静态描述。"""
-
-    name: str
-    """标签名称，同时作为 :class:`ViewParam` 的键。"""
-
-    module: str
-    """功能实现模块的完整导入路径。"""
-
-    class_name: str
-    """模块中功能类的名称。"""
-
-    view_dir: str
-    """``view_data`` 下的资源目录名。"""
-
-    description: str
-    """标签栏提示与关于页使用的功能说明。"""
-
-
-OFFICIAL_FEATURES: Final[tuple[FeatureSpec, ...]] = (
-    FeatureSpec(
-        name="高铁纵横",
-        module="hwklr.features.hsr",
-        class_name="HSRFeature",
-        view_dir="hsr",
-        description="登录高铁答题系统，按题库自动匹配答案并提交考试。",
-    ),
-    FeatureSpec(
-        name="C程序设计",
-        module="hwklr.features.cprog",
-        class_name="CProgrammingFeature",
-        view_dir="cprog",
-        description="CITEL 课程题目辅助：启发模式逐步讲解，题解模式生成并提交参考实现。",
-    ),
-    FeatureSpec(
-        name="中国大学慕课",
-        module="hwklr.features.icourse",
-        class_name="IcourseFeature",
-        view_dir="icourse",
-        description="登录中国大学慕课，批量完成课程视频、文档、测验与讨论任务。",
-    ),
-    FeatureSpec(
-        name="构建",
-        module="hwklr.features.build",
-        class_name="BuildFeature",
-        view_dir="build",
-        description="将当前程序导出为可直接运行的分发包，或从模板创建、测试并打包第三方插件。",
-    ),
-)
-
-FEATURE_BY_NAME: Final[dict[str, FeatureSpec]] = {
-    spec.name: spec for spec in OFFICIAL_FEATURES
-}
 
 
 def load_feature_class(module_name: str, class_name: str) -> type[Any] | None:

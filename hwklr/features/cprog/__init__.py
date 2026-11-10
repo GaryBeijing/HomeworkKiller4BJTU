@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-01 00:01
-# 最后更新: 2026-11-08 17:40
+# 最后更新: 2026-11-10 10:00
 # 文件名: __init__.py
 # 主要用途: 实现“C程序设计”功能：课程/题目选择、启发模式、题解模式、启用开关与设置板块（依赖延迟加载）。
-# 文件版本: 4.1.0
+# 文件版本: 4.4.0
 """C 程序设计功能。
 
 重制自 ``B_CHelper``，主要变化：
@@ -25,7 +25,9 @@ from datetime import datetime
 from typing import Any, Final
 
 from hwklr.config import load_config, update_config
-from hwklr.features.about import AboutMetadataGroup
+from hwklr.feature_specs import FEATURE_BY_ID
+from hwklr.features.about import AboutMetadataGroup, about_meta_from_spec
+from hwklr.contracts import ActionSpec
 from hwklr.features.base import ApiResult, Feature, failure, success
 from hwklr.features.extensions import is_feature_enabled, set_feature_enabled
 from hwklr.features.settings import FeatureSettingsGroup, SettingsFieldSpec
@@ -52,7 +54,7 @@ from .models import (
 from .parsers import deterministic_structure
 from .site import MoodleError, MoodleSite, SubmitError
 
-__version__ = "4.1.0"
+__version__ = "4.4.0"
 __author__ = "Gary"
 __all__ = ["CProgrammingFeature"]
 
@@ -163,6 +165,20 @@ def _ai_complete(setting: dict[str, Any]) -> bool:
 class CProgrammingFeature(Feature):
     """“C程序设计”功能。"""
 
+    @classmethod
+    def action_specs(cls) -> tuple[ActionSpec, ...]:
+        """返回 C 程序设计动作声明。"""
+        return (
+            ActionSpec("get_state"),
+            ActionSpec("get_solution_job"),
+            ActionSpec("cancel_solution_job", risk="write"),
+            ActionSpec("load_courses"),
+            ActionSpec("select_course"),
+            ActionSpec("analyze_problem"),
+            ActionSpec("submit_problem", risk="write"),
+            ActionSpec("start_solution_job", risk="destructive"),
+        )
+
     def __init__(self, universal_param: dict[str, Any]) -> None:
         """初始化功能状态。
 
@@ -205,16 +221,7 @@ class CProgrammingFeature(Feature):
         Returns:
             插件名、包名、作者与版本。
         """
-        return AboutMetadataGroup(
-            name="C程序设计",
-            package="CPROG",
-            author="Gary",
-            version=__version__,
-            update_date="2026-11-03",
-            official=True,
-            feature_key="C程序设计",
-            description="CITEL 课程题目辅助：启发模式逐步讲解，题解模式生成并提交参考实现。",
-        )
+        return about_meta_from_spec(FEATURE_BY_ID["cprog"], __version__)
 
     def _build_settings_group(self) -> FeatureSettingsGroup:
         """构建 AI 设置板块。

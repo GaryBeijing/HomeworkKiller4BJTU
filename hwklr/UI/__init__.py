@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
-# 最后更新: 2026-11-08 17:00
+# 最后更新: 2026-11-10 10:00
 # 文件名: __init__.py
 # 主要用途: 封装 pywebview 核心窗口 WindowView、运行期扩展注册、数据库管理器初始化、关于元信息注册与 JS 桥接对象 BridgeApi。
-# 文件版本: 4.0.1
+# 文件版本: 4.4.0
 """UI 窗口层。
 
 入口只需::
@@ -36,6 +36,7 @@ from hwklr import (
 )
 from hwklr import __version__ as APP_VERSION
 from hwklr.config import load_config
+from hwklr.contracts import ErrorCode
 from hwklr.features import extensions as extension_api
 from hwklr.features import failure
 
@@ -592,7 +593,7 @@ class WindowView:
             return tagview.call(method, params)
         except Exception as exc:  # 兜底，保证前端拿到可读错误。
             _LOGGER.exception("桥接调用失败 tag=%s method=%s", tag, method)
-            return failure("调用失败: %s" % exc)
+            return failure("调用失败: %s" % exc, code=ErrorCode.INTERNAL.value)
 
     def start_server(self) -> int:
         """启动本地 UI 服务。

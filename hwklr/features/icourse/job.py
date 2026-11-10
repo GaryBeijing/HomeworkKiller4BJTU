@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-09 20:40
+# 最后更新: 2026-11-10 12:00
 # 文件名: job.py
 # 主要用途: 编排“开始完成”后台任务：视频并发、文档/测验/讨论串行、进度快照与取消。
-# 文件版本: 4.3.2
+# 文件版本: 4.4.0
 """完成任务的 job 编排。"""
 from __future__ import annotations
 
@@ -21,9 +21,6 @@ from .actions import (
     ActionCancelled,
     ActionContext,
     ActionUnavailable,
-    DiscussionAction,
-    DocumentAction,
-    QuizAction,
     run_workers,
 )
 from .actions.base import safe_screenshot
@@ -32,9 +29,10 @@ from .browser_auth import export_saved_storage_state
 from .browser_session import BrowserSession
 from .client import AuthError, MoocClient
 from .courses import reload_course
+from .tasks import TaskHandlerRegistry, TaskOutcome, TaskStatus, default_task_registry
 from .models import DONE, Course, Task
 
-__version__ = "4.3.2"
+__version__ = "4.4.0"
 __author__ = "Gary"
 __all__ = ["CompletionJob"]
 
@@ -59,6 +57,7 @@ class CompletionJob:
         db: IcourseDb,
         settings: dict[str, Any],
         log_callback: Log | None = None,
+        handlers: TaskHandlerRegistry | None = None,
     ) -> None:
         """初始化任务。
 
@@ -76,6 +75,7 @@ class CompletionJob:
         self._client: MoocClient = client
         self._db: IcourseDb = db
         self._settings: dict[str, Any] = dict(settings)
+        self._handlers: TaskHandlerRegistry = handlers or default_task_registry()
         self._log_callback: Log = log_callback or (lambda level, message: None)
         self._lock: threading.Lock = threading.Lock()
         self._cancel: threading.Event = threading.Event()
@@ -262,18 +262,17 @@ class CompletionJob:
         ttl_seconds: int = max(1, int(settings.get("answer_ttl_hours", 24))) * 3600
         store = AnswerStore(self._db, ttl_seconds)
 
-        videos: list[Task] = [task for task in self.tasks if task.kind == VIDEO_KIND]
-        documents: list[Task] = [task for task in self.tasks if task.kind == DOCUMENT_KIND]
-        discussions: list[Task] = [task for task in self.tasks if task.kind == DISCUSSION_KIND]
-        quizzes: list[Task] = [task for task in self.tasks if task.kind in QUIZ_KINDS]
-        unsupported: list[Task] = [
-            task
-            for task in self.tasks
-            if task.kind not in QUIZ_KINDS
-            and task.kind not in (VIDEO_KIND, DOCUMENT_KIND, DISCUSSION_KIND)
-        ]
-        for task in unsupported:
-            self._finish_task(task, "已跳过", message="暂不支持该任务类型")
+        batched: dict[Any, list[Task]] = {}
+        serial_tasks: list[Task] = []
+        for task in self.tasks:
+            handler = self._handlers.for_kind(task.kind)
+            if handler is None:
+                self._finish_task(task, "已跳过", message="暂不支持该任务类型")
+                continue
+            if handler.batched:
+                batched.setdefault(handler, []).append(task)
+            else:
+                serial_tasks.append(task)
 
         if self._cancel.is_set():
             raise ActionCancelled("任务已取消。")
@@ -284,16 +283,12 @@ class CompletionJob:
         except Exception as exc:
             self._event("warn", "题库检查失败，将继续执行不含答案的任务：%s" % exc)
 
-        # ---------------------------------------------------------- 视频
-        if videos:
-            self._play_videos(videos, store, ttl_seconds)
+        # 并发 handler（视频）先执行；串行 handler 再按任务顺序执行。
+        for handler in self._handlers.all():
+            tasks = batched.get(handler)
+            if tasks and handler.batched:
+                handler.run_batch(self, self.course, tasks, store, ttl_seconds)
 
-        # ---------------------------------------------------------- 串行
-        serial_tasks: list[Task] = [
-            task
-            for task in self.tasks
-            if task.kind in (DOCUMENT_KIND, DISCUSSION_KIND) or task.kind in QUIZ_KINDS
-        ]
         if serial_tasks:
             self._run_serial(serial_tasks, store)
 
@@ -476,6 +471,10 @@ class CompletionJob:
     def _run_one_serial(
         self, ctx: ActionContext, task: Task, store: AnswerStore
     ) -> None:
+        handler = self._handlers.for_kind(task.kind)
+        if handler is None:
+            self._finish_task(task, "已跳过", message="暂不支持该任务类型")
+            return
         self._set_task(
             task,
             status="进行中",
@@ -483,128 +482,12 @@ class CompletionJob:
             started_at=time.time(),
             message="正在处理",
         )
-        self._update(phase=self._phase_for(task), message="正在处理：%s" % task.name)
+        self._update(phase=handler.phase, message="正在处理：%s" % task.name)
         try:
-            if task.kind == DOCUMENT_KIND:
-                result = DocumentAction(ctx).run_one(
-                    self.course,
-                    task,
-                    download=bool(self._settings.get("download_documents", True)),
-                    dry_run=False,
-                )
-                self._finish_task(
-                    task,
-                    "完成",
-                    message=result.message,
-                    result={
-                        "url": result.url,
-                        "downloads": list(result.download_paths),
-                        "verified": result.verified,
-                    },
-                )
-                return
-            if task.kind in QUIZ_KINDS:
-                if not task.test_id:
-                    self._finish_task(task, "已跳过", message="该任务没有测验 id")
-                    return
-                if self.course.is_spoc:
-                    self._finish_task(task, "已跳过", message="刷题不支持 SPOC 课程")
-                    return
-                if not store.has_course(self.course.term_id):
-                    self._finish_task(task, "已跳过", message="题库未收录该课程")
-                    return
-                submit: bool = bool(self._settings.get("submit_quizzes", False))
-                result = QuizAction(ctx).run(
-                    self.course,
-                    task,
-                    submit=submit,
-                    apply=True,
-                    refresh_db=bool(self._settings.get("refresh_quiz_db", False)),
-                )
-                screenshot: str = str(getattr(result, "screenshot", "") or "")
-                score: float | None = getattr(result, "score", None)
-                total_score: float | None = getattr(result, "total_score", None)
-                score_text: str = str(getattr(result, "score_text", "") or "")
-                full_score: bool | None = getattr(result, "full_score", None)
-                base_result: dict[str, Any] = {
-                    "url": result.url,
-                    "matched": result.matched,
-                    "applied": result.applied,
-                    "submitted": result.submitted,
-                    "screenshot": screenshot,
-                }
-                if submit and not result.submitted:
-                    self._finish_task(task, "失败", error="测验提交失败")
-                elif result.submitted:
-                    self._finish_task(
-                        task,
-                        "完成",
-                        message="已提交",
-                        result={
-                            **base_result,
-                            "score": score,
-                            "total_score": total_score,
-                            "score_text": score_text,
-                            "full_score": full_score,
-                        },
-                        score=score,
-                        total_score=total_score,
-                        score_text=score_text,
-                        full_score=full_score,
-                        screenshot=screenshot,
-                    )
-                else:
-                    self._finish_task(
-                        task,
-                        "已填写",
-                        message="已填写，未提交",
-                        result=base_result,
-                        screenshot=screenshot,
-                    )
-                return
-            if task.kind == DISCUSSION_KIND:
-                publish: bool = bool(self._settings.get("publish_discussions", False))
-                result = DiscussionAction(ctx).run(
-                    self.course, task, submit=publish, silent=False
-                )
-                screenshot = str(getattr(result, "screenshot", "") or "")
-                message = str(getattr(result, "message", "") or "")
-                if publish and not result.submitted:
-                    self._finish_task(
-                        task, "失败", error=message or "讨论发布失败"
-                    )
-                elif result.submitted:
-                    self._finish_task(
-                        task,
-                        "已发布",
-                        message=message or "已发布",
-                        result={
-                            "url": result.url,
-                            "submitted": True,
-                            "fallback_reply": bool(
-                                getattr(result, "fallback_reply", False)
-                            ),
-                            "screenshot": screenshot,
-                        },
-                        screenshot=screenshot,
-                    )
-                else:
-                    self._finish_task(
-                        task,
-                        "已填写",
-                        message=message or "已填写，未发布",
-                        result={
-                            "url": result.url,
-                            "submitted": False,
-                            "fallback_reply": bool(
-                                getattr(result, "fallback_reply", False)
-                            ),
-                            "screenshot": screenshot,
-                        },
-                        screenshot=screenshot,
-                    )
-                return
-            self._finish_task(task, "已跳过", message="暂不支持该任务类型")
+            outcome: TaskOutcome = handler.run(
+                self, ctx, self.course, task, store
+            )
+            self._apply_outcome(task, outcome)
         except ActionCancelled as exc:
             self._finish_task(task, "已取消", message=str(exc))
         except ActionUnavailable as exc:
@@ -637,6 +520,26 @@ class CompletionJob:
                 )
             else:
                 self._finish_task(task, "失败", error=reason)
+
+    def _apply_outcome(self, task: Task, outcome: TaskOutcome) -> None:
+        """把 handler 的 TaskOutcome 写入任务状态。"""
+        status: str = (
+            outcome.status.value
+            if isinstance(outcome.status, TaskStatus)
+            else str(outcome.status)
+        )
+        self._finish_task(
+            task,
+            status,
+            message=outcome.message,
+            error=outcome.error,
+            result=outcome.result,
+            screenshot=outcome.screenshot,
+            score=outcome.score,
+            total_score=outcome.total_score,
+            score_text=outcome.score_text,
+            full_score=outcome.full_score,
+        )
 
     def _server_marked_done(self, task: Task) -> bool:
         """动作异常后向服务端复核，避免把已完成的文档/讨论误报为失败。
@@ -748,15 +651,9 @@ class CompletionJob:
             text = type(exc).__name__
         return text[:500]
 
-    @staticmethod
-    def _phase_for(task: Task) -> str:
-        if task.kind == DOCUMENT_KIND:
-            return "document"
-        if task.kind in QUIZ_KINDS:
-            return "quiz"
-        if task.kind == DISCUSSION_KIND:
-            return "discussion"
-        return "serial"
+    def _phase_for(self, task: Task) -> str:
+        handler = self._handlers.for_kind(task.kind)
+        return handler.phase if handler is not None else "serial"
 
     def _cancel_remaining(self, reason: str) -> None:
         for task in self.tasks:
