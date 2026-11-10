@@ -148,9 +148,9 @@ from hwklr.config import app_root, config_path, load_config, save_config, update
 | `app_root` | `() -> Path` | 源码运行 → 仓库根；V3 `HwklrVenv` → 虚拟环境根；`sys.frozen` → `Path(sys.executable).parent`。`db/` 与 `config.json` 都以它为根 |
 | `config_path` | `() -> Path` | `app_root()/config.json` |
 | `load_config` | `() -> dict` | 文件不存在 → 写入默认值并返回；文件损坏/非对象 → 记 warning 并返回默认值（**不覆盖损坏文件**）；成功后 `_deep_merge(DEFAULT_CONFIG, loaded)` 再 `_migrate_config` |
-| `save_config` | `(config: dict) -> None` | 原子写：先写 `config.json.tmp` 再 `replace`；全程持 `_CONFIG_LOCK`。可能抛 `OSError` |
-| `update_config` | `(patch: dict) -> dict` | `load → _deep_merge(current, patch) → save`，返回更新后的完整配置 |
-| `DEFAULT_CONFIG` | `Final[dict]` | 所有默认值；**新增配置项必须在此登记**，否则老旧配置文件不会自动补齐 |
+| `save_config` | `(config: dict) -> None` | 原子写：先写 `config.json.tmp` 再 `replace`；全程持 `_CONFIG_LOCK`（RLock）。可能抛 `OSError` |
+| `update_config` | `(patch: dict) -> dict` | 全程持 RLock 执行 `load → _deep_merge(current, patch) → save`，返回更新后的完整配置 |
+| `DEFAULT_CONFIG` | `Final[dict]` | 所有默认值；官方板块从 `feature_specs.feature_config_defaults()` 派生，核心字段仍需在 `config.py` 登记 |
 
 **语义要点**
 
@@ -229,7 +229,8 @@ from hwklr.features.base import ApiResult, Feature, failure, success
 | `started` | `@property -> bool` | — |
 | `settings_group` | `@property @abstractmethod -> FeatureSettingsGroup` | **子类必须实现** |
 | `start` | `() -> None` | 默认 `self._started = True` |
-| `stop` | `() -> None` | 默认 `self._started = False` |
+| `stop` | `() -> None` | 默认 `self._started = False`；切换标签只调用它，不取消后台 Job |
+| `shutdown` | `() -> None` | 默认 `stop()`；窗口关闭时调用，拥有后台 Job 的功能应覆盖并做有界取消/join |
 | `_db_base_name` | `str` | 功能使用的数据库名称；默认 `""` 表示不启用数据库 |
 | `_load_db` | `@final (id: int) -> dict \| None` | 通过 `DbManager` 读取记录；空名称抛 `DbDisabledError`，只在动作路径调用 |
 | `handle` | `@abstractmethod (action: str, params: dict) -> ApiResult` | 业务入口；未知动作应返回 `failure("未知动作: %s" % action)` |
@@ -240,6 +241,8 @@ from hwklr.features.base import ApiResult, Feature, failure, success
 {
   "context":  {"port": int},   # 与 WindowView._context 是同一对象；服务启动后写入真实端口
   "app_meta": {...},           # 与 WindowView._meta 是同一对象；features 列表在构造后被就地填充
+  "dialogs":  {"pick_directory": callable, "pick_file": callable},
+  "extensions": {"register_dir": callable},
 }
 ```
 
@@ -651,13 +654,13 @@ from hwklr.UI import BridgeApi, WindowView
 WindowView(title: str = APP_TITLE, width: int | None = None, height: int | None = None)
 ```
 
-构造期做 5 件事：
+构造期做 5 件事（4.4.1 起实际逻辑在 `registry.py` / `extension_runtime.py`，外部行为不变）：
 
 1. `load_config()`，取 `ui.width/height/min_width/min_height`（默认 1100×720，最小 900×620）。
-2. `self._context = {"port": 0}`；`self._meta = _build_meta()`。
-3. **按 `VIEW_PARAMS` 逐个 `TagView.load(name, universal_param)`**；`universal_param = {"context": self._context, "app_meta": self._meta}`。
-4. `_resolve_order()` 强制 `设置` 倒数第二、`关于` 最后，否则 `RuntimeError`。
-5. 把每个非 设置/关于 标签的 `settings_group`（**仅当 `field_specs` 非空**）注册进设置页；随后就地填充 `self._meta["features"]`。
+2. 初始化数据库管理器、`ExtensionRuntime` 与 `TagRegistry`；`universal_param` 除 `context/app_meta` 外还注入 `dialogs` 与 `extensions.register_dir`。
+3. 扫描 `extension/` 并登记扩展参数，再按 `all_view_params()` 逐个 `TagView.load(name, universal_param)`。
+4. `TagRegistry.refresh_order()` 强制 `构建` 倒数第三、`设置` 倒数第二、`关于` 最后，否则 `RuntimeError`。
+5. 把每个非 设置/关于 标签的 `settings_group` 注册进设置页，并注册关于元信息；`meta_payload()` 实时读取功能列表。
 
 | 成员 | 签名 | 说明 |
 |---|---|---|
@@ -670,7 +673,7 @@ WindowView(title: str = APP_TITLE, width: int | None = None, height: int | None 
 | `start_server` | `() -> int` | 幂等；返回实际端口并写入 `context["port"]` |
 | `stop_server` | `() -> None` | 端口复位为 0 |
 | `activate_tagview` | `(tagview: TagView) -> None` | 用**窗口内注册的实例**替换入参；`previous.stop()` → `start()` → `window.evaluate_js("window.App && window.App.activate(<name>)")` |
-| `run` | `() -> None` | 必须主线程：`start_server` → `webview.create_window(..., js_api=BridgeApi(self))` → 绑定 `events.loaded` → `webview.start(debug=ui.debug, icon=APP_ICON or None)`；`finally` 里停服务 |
+| `run` | `() -> None` | 必须主线程：`start_server` → `webview.create_window(..., js_api=BridgeApi(self))` → 绑定 `events.loaded` → `webview.start(debug=ui.debug, icon=APP_ICON or None)`；`finally` 里先调用 `TagRegistry.shutdown()`，再停服务 |
 
 窗口参数（写死，除尺寸外不来自配置）：`resizable=True`、`background_color="#2f3ab2"`、`text_select=True`、`min_size=(min_width, min_height)`、`url="http://127.0.0.1:<port>/"`。
 
@@ -701,9 +704,13 @@ function_name: str          # 键/标签名
 title: str                  # 标签栏文字
 html: str                   # 相对 view_data，如 "hsr/index.html"
 css: tuple[str, ...]        # 如 ("hsr/css/hsr.css",)
-js: tuple[str, ...]         # 如 ("hsr/js/hsr.js",)
+js: tuple[str, ...]         # 如 icourse 的七个按序脚本
 feature_cls: type[Feature]
 description: str
+base_url: str = "/view_data/"          # 扩展为 /extensions/<id>/
+resource_root: str = ""                # 扩展资源根目录
+order: int = 0                         # 官方按 FeatureSpec.order；扩展开启时默认 500
+actions: tuple[dict, ...] = ()         # manifest 动作元数据（仅展示）
 ```
 
 #### `TagView`
@@ -719,9 +726,9 @@ TagView.load(name: str, universal_param: dict|None = None) -> TagView   # 唯一
 | `feature` | `@property -> Feature` | 功能实例 |
 | `settings_group` | `@property -> FeatureSettingsGroup` | 直接代理 `feature.settings_group`（抽象约束在此落地） |
 | `html_path` | `@property -> Path` | 绝对路径 |
-| `describe` | `() -> dict` | `{name,title,description,html_url,css_urls,js_urls}`，URL 前缀 `/view_data/` |
-| `start` / `stop` | `() -> None` | 转发 `feature.start()/stop()` |
-| `call` | `(method, params) -> dict` | `method` 空或以 `_` 开头抛 `ValueError`，否则 `feature.handle(...)` |
+| `describe` | `() -> dict` | `{name,title,description,html_url,css_urls,js_urls,actions}`，URL 前缀 `/view_data/`；`actions` 合并 `Feature.action_specs()` 与插件 manifest 声明 |
+| `start` / `stop` | `() -> None` | 转发 `feature.start()/stop()`（后台 Job 不因切换标签自动取消） |
+| `call` | `(method, params) -> dict` | `method` 空或以 `_` 开头抛 `ValueError`，否则 `feature.dispatch(...)` |
 
 `TagView.load` 遇到 `name == SETTINGS_NAME` 且 `cls is TagView` 时返回 `SettingsTagView`。
 
@@ -735,16 +742,19 @@ register_settings_field(group: FeatureSettingsGroup) -> None
 #### `VIEW_PARAMS` 的构建规则
 
 ```python
-for spec in OFFICIAL_FEATURES:            # 顺序即标签顺序
+for spec in OFFICIAL_FEATURES:            # FeatureSpec.order 决定标签顺序
     模块可导入 → ViewParam(name=spec.name, title=spec.name,
-                          html=f"{spec.view_dir}/index.html",
-                          css=(f"{spec.view_dir}/css/{spec.view_dir}.css",),
-                          js =(f"{spec.view_dir}/js/{spec.view_dir}.js",),
-                          description=spec.description)
+                          html=spec.assets.html 或 f"{spec.view_dir}/index.html",
+                          css=spec.assets.css 或目录约定,
+                          js =spec.assets.js 或目录约定,
+                          description=spec.description,
+                          order=spec.order)
     模块不可导入 → 跳过
-VIEW_PARAMS[SETTINGS_NAME] = ...设置页固定参数...
-VIEW_PARAMS[ABOUT_NAME]    = ...关于页固定参数...
+VIEW_PARAMS[SETTINGS_NAME] = ...设置页固定参数（order=1000）...
+VIEW_PARAMS[ABOUT_NAME]    = ...关于页固定参数（order=1010）...
 ```
+
+`all_view_params()` 先合并官方与运行期扩展，再按 `order` 稳定排序；窗口层仍强制 `构建/设置/关于` 的最终位置。
 
 `SETTINGS_NAME = "设置"`、`ABOUT_NAME = "关于"`（**中文常量，前端也用字面量 "设置"/"关于" 判定**，改动会破坏 base.js 的特判）。
 
@@ -817,6 +827,8 @@ from hwklr.features.icourse import IcourseFeature
 - 4.3.1：新增 `ActionUnavailable`（无法继续，映射为失败/跳过）与 `ActionCancelled`（用户取消）分离；串行任务每个任务独立 Page，文档打开失败重试一次；讨论兼容新版 `article.soft-shell` 和已展开编辑器，无回复时使用默认文本；任务结束弹窗列出题库未收录/缺少 testId 的测验。
 - 4.3.2：`page_block_reason` 把 PDF/下载链接/新版讨论标记为内容，避免误判登录墙；讨论识别“回复已发布”并按选择器优先级提取真实回复；文档/讨论异常后按服务端状态复核，已 `DONE` 的任务改为完成/已发布。
 - 4.4.0：新增 `hwklr/contracts.py`、`hwklr/feature_specs.py`、`features/jobs.py`、`icourse/tasks.py`、`icourse/state.py` 与 Document/Discussion/Quiz Page Object；`ApiResult` 增加 `code`，`Feature.dispatch` 支持 ActionSpec；DB `load` 锁外 fetch + single-flight + `mutate`。
+- 4.4.1：`BackgroundJob` 增加 `mutate_if`/`event_if` 与自定义 job id；cprog 题解、程序构建、插件构建全部改用统一 job；`UI` 拆为 `bridge/registry/extension_runtime/window`（`from hwklr.UI import WindowView` 不变）；icourse 前端拆为八个 `window.Icourse` 脚本，`FeatureAssetSpec` 按序加载；插件 `meta.json` 新增可选 `schema/id/order/ui/assets/actions/config/db/packaging`，`config` 默认值进入 `load_config`，`db` provider 注册到 `DbManager`。
+- 4.4.2：`update_config` 全程持有可重入配置锁；`TagRegistry` 使用 leaf lock 保护读/安装，运行期插件按 `ViewParam.order` 排序；cprog 将网络/AI 移出 `_state_lock`；build 日志/阶段按 job_id 隔离；扩展扫描缓存；`CompletionJob` 统一到 `BackgroundJob`；新增 `Feature.shutdown()` 与窗口关闭清理。
 - 依赖：`playwright`（系统 Edge，不下载 Chromium）、`cryptography`（本机 Chromium Cookie 解密）、`websocket-client`（可见登录 CDP）。
 
 ---
@@ -1128,6 +1140,8 @@ App.registerPage('<标签名>', { init, onActivate, onDeactivate, highlightGroup
 
 `groupPayload` = `FeatureSettingsGroup.payload()` = `{group_id, title, description, fields, complete, missing, enabled, enabled_editable}`。
 
+**扩展扫描**：`get_extensions` 复用 `extensions.scan_installed_extensions()` 的缓存；缓存键由扩展目录签名组成，安装扩展会显式失效，启用状态仍实时读取 config。
+
 **`save_settings` 语义**
 
 1. 只处理 `groups` 里出现的分组（`group_id` 必须匹配已注册的组）。
@@ -1430,7 +1444,7 @@ function onDeactivate() {              // 切走时停掉
 | 初始/最小尺寸 | `config.json` 的 `ui.*` | 构造参数 `width`/`height` 优先级更高 |
 | 窗口标题 | `hwklr/__init__.py: APP_TITLE` | 导出时 `EXPORT_NAME` 会覆盖 |
 | 起始端口 | `config.json: server.preferred_port` | 顺延上限 100；`127.0.0.1` 绑定不可配 |
-| 窗口背景色 | `hwklr/UI/__init__.py: _WINDOW_BACKGROUND` | 是模块常量，不在配置里 |
+| 窗口背景色 | `hwklr/UI/window.py: _WINDOW_BACKGROUND` | 是模块常量，不在配置里 |
 | 开发者工具 | `config.json: ui.debug = true` | 等价 `webview.start(debug=True)` |
 | 整体配色/字体/圆角 | `page_data/css/base.css` 的 `:root` 变量 | 不要在标签页 CSS 里硬编码 |
 | 页面骨架（标签栏/加载/提示容器） | `page_data/index.html` | 改 id 会破坏 `base.js` |

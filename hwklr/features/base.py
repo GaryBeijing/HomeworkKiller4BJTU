@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
-# 最后更新: 2026-11-10 10:00
+# 最后更新: 2026-11-10 23:59
 # 文件名: base.py
 # 主要用途: 定义所有功能都必须继承的 Feature 抽象基类、统一调用协议、Action 校验、设置组、数据库访问与关于元信息只读属性。
-# 文件版本: 4.4.0
+# 文件版本: 4.4.2
 """功能抽象基类。
 
 约定：
@@ -31,7 +31,7 @@ if TYPE_CHECKING:  # 避免 base 与 settings/about 相互导入。
     from .about import AboutMetadataGroup
     from .settings import FeatureSettingsGroup
 
-__version__ = "4.4.0"
+__version__ = "4.4.2"
 __all__ = ["ApiResult", "Feature", "success", "failure"]
 
 
@@ -130,8 +130,19 @@ class Feature(abc.ABC):
         self._started = True
 
     def stop(self) -> None:
-        """停止功能。默认仅记录状态，子类可按需覆盖。"""
+        """停止功能。默认仅记录状态，子类可按需覆盖。
+
+        注意：切换标签只调用本方法；后台 Job 不应在这里取消。
+        """
         self._started = False
+
+    def shutdown(self) -> None:
+        """关闭功能持有的后台任务。
+
+        仅在窗口关闭时调用；默认 no-op，拥有后台 Job 的功能应覆盖本方法，
+        使用有界 join 取消/等待任务，避免阻塞应用退出。
+        """
+        self.stop()
 
     @final
     def _load_db(self, id: int) -> dict[str, Any] | None:

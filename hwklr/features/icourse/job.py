@@ -1,20 +1,20 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-10 12:00
+# 最后更新: 2026-11-10 23:59
 # 文件名: job.py
 # 主要用途: 编排“开始完成”后台任务：视频并发、文档/测验/讨论串行、进度快照与取消。
-# 文件版本: 4.4.0
+# 文件版本: 4.4.2
 """完成任务的 job 编排。"""
 from __future__ import annotations
 
-import copy
-import threading
 import time
 import uuid
 from typing import Any, Callable, Final
 
+from hwklr.contracts import JobKind
 from hwklr.db.icoursedb import IcourseDb
+from hwklr.features.jobs import BackgroundJob
 
 from . import config
 from .actions import (
@@ -32,7 +32,7 @@ from .courses import reload_course
 from .tasks import TaskHandlerRegistry, TaskOutcome, TaskStatus, default_task_registry
 from .models import DONE, Course, Task
 
-__version__ = "4.4.0"
+__version__ = "4.4.2"
 __author__ = "Gary"
 __all__ = ["CompletionJob"]
 
@@ -69,7 +69,6 @@ class CompletionJob:
             settings: 运行设置（workers/rate/submit 等）。
             log_callback: 日志回调 ``(level, message)``。
         """
-        self.job_id: str = uuid.uuid4().hex
         self.course: Course = course
         self.tasks: list[Task] = list(tasks)
         self._client: MoocClient = client
@@ -77,12 +76,10 @@ class CompletionJob:
         self._settings: dict[str, Any] = dict(settings)
         self._handlers: TaskHandlerRegistry = handlers or default_task_registry()
         self._log_callback: Log = log_callback or (lambda level, message: None)
-        self._lock: threading.Lock = threading.Lock()
-        self._cancel: threading.Event = threading.Event()
-        self._thread: threading.Thread | None = None
-        self._task_states: dict[str, dict[str, Any]] = {}
+        self._job_id: str = uuid.uuid4().hex
+        task_states: list[dict[str, Any]] = []
         for task in self.tasks:
-            self._task_states[task.key] = {
+            task_states.append({
                 "key": task.key,
                 "kind": task.kind,
                 "title": task.name,
@@ -103,27 +100,59 @@ class CompletionJob:
                 "score_text": "",
                 "full_score": None,
                 "screenshot": "",
-            }
-        self._snapshot: dict[str, Any] = {
-            "job_id": self.job_id,
-            "running": False,
-            "done": False,
-            "cancelled": False,
-            "phase": "idle",
-            "message": "",
-            "current": 0,
-            "total": len(self.tasks),
-            "term_id": course.term_id,
-            "course_name": course.name,
-            "workers": int(self._settings.get("workers", 1) or 1),
-            "submit_quizzes": bool(self._settings.get("submit_quizzes")),
-            "publish_discussions": bool(self._settings.get("publish_discussions")),
-            "tasks": [],
-            "events": [],
-            "result": {"done": 0, "failed": 0, "skipped": 0, "cancelled": 0},
-            "error": "",
-        }
+            })
+        self._job: BackgroundJob[None] = BackgroundJob(
+            JobKind.COMPLETION,
+            {
+                "job_id": self._job_id,
+                "running": False,
+                "done": False,
+                "cancelled": False,
+                "phase": "idle",
+                "message": "",
+                "current": 0,
+                "total": len(self.tasks),
+                "term_id": course.term_id,
+                "course_name": course.name,
+                "workers": int(self._settings.get("workers", 1) or 1),
+                "submit_quizzes": bool(self._settings.get("submit_quizzes")),
+                "publish_discussions": bool(
+                    self._settings.get("publish_discussions")
+                ),
+                "tasks": task_states,
+                "events": [],
+                "result": {"done": 0, "failed": 0, "skipped": 0, "cancelled": 0},
+                "error": "",
+            },
+            include_job_id=True,
+            max_events=MAX_EVENTS,
+            log_callback=self._log_callback,
+            job_id_factory=lambda: self._job_id,
+        )
         self._updated_course: Course | None = None
+
+    @property
+    def job_id(self) -> str:
+        """返回任务 ID。"""
+        return self._job_id
+
+    @property
+    def background_job(self) -> BackgroundJob[None]:
+        """返回底层通用 Job，供 JobStore 统一管理。"""
+        return self._job
+
+    @property
+    def _cancel(self) -> Any:
+        """兼容旧测试/调用方的取消事件访问。"""
+        return self._job.cancel_event
+
+    @property
+    def _task_states(self) -> dict[str, dict[str, Any]]:
+        """兼容旧测试/调用方：返回 key 到任务状态的映射副本。"""
+        return {
+            str(item.get("key") or ""): item
+            for item in self._job.snapshot().get("tasks", [])
+        }
 
     @property
     def updated_course(self) -> Course | None:
@@ -137,25 +166,21 @@ class CompletionJob:
         Returns:
             初始快照。
         """
-        with self._lock:
-            if self._thread is not None and self._thread.is_alive():
-                return self.snapshot()
-            self._snapshot.update(
-                running=True,
-                done=False,
-                cancelled=False,
-                phase="starting",
-                message="正在准备完成课程任务…",
-            )
-            self._thread = threading.Thread(
-                target=self._run, name="icourse-completion", daemon=True
-            )
-            self._thread.start()
-            return self._snapshot_copy_locked()
+        return self._job.start(
+            lambda job: self._run(),
+            initial={
+                "phase": "starting",
+                "message": "正在准备完成课程任务…",
+            },
+        )
 
     def cancel(self) -> None:
         """请求取消。"""
-        self._cancel.set()
+        self._job.cancel_event.set()
+
+    def join(self, timeout: float | None = None) -> None:
+        """等待任务线程结束。"""
+        self._job.join(timeout)
 
     def snapshot(self) -> dict[str, Any]:
         """返回深拷贝快照。
@@ -163,38 +188,23 @@ class CompletionJob:
         Returns:
             任务快照。
         """
-        with self._lock:
-            return self._snapshot_copy_locked()
-
-    def _snapshot_copy_locked(self) -> dict[str, Any]:
-        data = copy.deepcopy(self._snapshot)
-        data["tasks"] = [
-            copy.deepcopy(self._task_states[task.key]) for task in self.tasks
-        ]
-        return data
+        return self._job.snapshot()
 
     def _update(self, **fields: Any) -> None:
-        with self._lock:
-            self._snapshot.update(fields)
+        self._job.update_if(self.job_id, **fields)
 
     def _event(self, level: str, message: str, task: Task | None = None) -> None:
-        entry: dict[str, Any] = {
-            "time": time.strftime("%H:%M:%S"),
-            "message": message,
-            "level": level,
-        }
-        with self._lock:
-            events: list[dict[str, Any]] = self._snapshot["events"]
-            events.append(entry)
-            if len(events) > MAX_EVENTS:
-                del events[: len(events) - MAX_EVENTS]
-        self._log_callback(level, message)
+        self._job.event_if(self.job_id, level, message)
 
     def _set_task(self, task: Task, **fields: Any) -> None:
-        with self._lock:
-            state: dict[str, Any] | None = self._task_states.get(task.key)
-            if state is not None:
-                state.update(fields)
+        def update(snapshot: dict[str, Any]) -> None:
+            """在 Job 锁内更新单个任务状态。"""
+            for state in snapshot.get("tasks", []):
+                if state.get("key") == task.key:
+                    state.update(fields)
+                    return
+
+        self._job.mutate_if(self.job_id, update)
 
     def _finish_task(
         self,

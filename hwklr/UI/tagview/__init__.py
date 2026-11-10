@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
-# 最后更新: 2026-11-10 10:00
+# 最后更新: 2026-11-10 23:59
 # 文件名: __init__.py
 # 主要用途: 定义标签页抽象 TagView，统一管理功能实例、设置组、官方/扩展 HTML/CSS/JS 资源与桥接调用。
-# 文件版本: 4.4.0
+# 文件版本: 4.4.2
 """标签页抽象。
 
 每个标签页 = 一套前端资源（HTML/CSS/JS）+ 一个 :class:`Feature` 实例。
@@ -24,7 +24,7 @@ from .view_data import SETTINGS_NAME, ViewParam, get_view_param
 if TYPE_CHECKING:
     from hwklr.features.settings import FeatureSettingsGroup
 
-__version__ = "3.0.0"
+__version__ = "4.4.2"
 __author__ = "Gary"
 __all__ = ["SettingsTagView", "TagView", "TagViewBase", "ViewParam", "VIEW_DATA_DIR"]
 
@@ -152,6 +152,15 @@ class TagView(TagViewBase):
         return self._feature
 
     @property
+    def order(self) -> int:
+        """返回标签排序值。
+
+        Returns:
+            ``ViewParam.order``。
+        """
+        return int(self._param.order)
+
+    @property
     def settings_group(self) -> "FeatureSettingsGroup":
         """返回该标签必须提供的只读设置组。
 
@@ -180,7 +189,9 @@ class TagView(TagViewBase):
         """
         base: str = self._param.base_url or "/view_data/"
         actions: list[dict[str, Any]] = []
+        seen: set[str] = set()
         for spec in self._feature.action_specs():
+            seen.add(spec.name)
             actions.append(
                 {
                     "name": spec.name,
@@ -197,6 +208,13 @@ class TagView(TagViewBase):
                     ],
                 }
             )
+        # 插件 manifest 可补充动作说明；它只用于展示，不构成调用白名单。
+        for declared in self._param.actions:
+            name: str = str(declared.get("name") or "")
+            if not name or name in seen:
+                continue
+            seen.add(name)
+            actions.append(dict(declared))
         return {
             "name": self.name,
             "title": self.title,

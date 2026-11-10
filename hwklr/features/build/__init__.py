@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-01 12:40
-# 最后更新: 2026-11-10 10:00
+# 最后更新: 2026-11-10 23:59
 # 文件名: __init__.py
 # 主要用途: 实现“构建”功能：程序构建/插件构建切换、插件工程管理、开发环境迁移、导出参数与后台构建任务。
-# 文件版本: 4.4.0
+# 文件版本: 4.4.2
 """构建功能。
 
 - 页面收集“导出显示版本号”“程序名称”“程序图标”和“是否开发构建”；
@@ -26,11 +26,12 @@ from typing import Any, Final
 
 from hwklr import APP_NAME, DEV_BUILD, __version__ as APP_VERSION
 from hwklr.config import load_config, update_config
+from hwklr.contracts import ActionSpec, JobKind
 from hwklr.feature_specs import FEATURE_BY_ID
 from hwklr.features.about import AboutMetadataGroup, about_meta_from_spec
-from hwklr.contracts import ActionSpec
 from hwklr.features.base import ApiResult, Feature, failure, success
 from hwklr.features.extensions import is_feature_enabled, set_feature_enabled
+from hwklr.features.jobs import BackgroundJob, JobStore
 from hwklr.features.manifest import OFFICIAL_FEATURES, FeatureSpec, feature_version
 from hwklr.features.settings import FeatureSettingsGroup, SettingsFieldSpec
 
@@ -51,7 +52,7 @@ from .packager import (
     resolve_output_dir,
 )
 
-__version__ = "4.4.0"
+__version__ = "4.4.2"
 __author__ = "Gary"
 __all__ = ["BuildFeature"]
 
@@ -131,11 +132,22 @@ class BuildFeature(Feature):
             universal_param: 窗口层注入的通用参数。
         """
         super().__init__(universal_param)
-        self._job_lock: threading.Lock = threading.Lock()
         self._dev_lock: threading.Lock = threading.Lock()
-        self._job: dict[str, Any] = self._idle_job()
-        self._thread: threading.Thread | None = None
+        self._job: BackgroundJob[None] = BackgroundJob(
+            JobKind.BUILD,
+            self._idle_job(),
+            max_events=_MAX_LOG_LINES,
+            job_id_factory=lambda: uuid.uuid4().hex[:12],
+        )
+        self._jobs: JobStore = JobStore()
+        self._jobs.put("build", self._job)
+        self._shutting_down: bool = False
         self._settings_group: FeatureSettingsGroup = self._build_settings_group()
+
+    def shutdown(self) -> None:
+        """窗口关闭时停止接受新构建；正在进行的构建由 daemon 线程退出。"""
+        super().shutdown()
+        self._shutting_down = True
 
     # ------------------------------------------------------------------ 设置
     @property
@@ -450,40 +462,49 @@ class BuildFeature(Feature):
         Returns:
             任务状态字典。
         """
-        with self._job_lock:
-            job: dict[str, Any] = dict(self._job)
-            job["log"] = list(self._job.get("log", []))
-            result: Any = self._job.get("result")
-            job["result"] = dict(result) if isinstance(result, dict) else result
-            return job
+        return self._job.snapshot()
 
-    def _append_log(self, message: str) -> None:
+    def _append_log(self, message: str, job_id: str = "") -> None:
         """向任务日志追加一行。
 
         Args:
             message: 日志文本。
+            job_id: 目标任务 ID；空字符串保留旧的无条件日志行为。
         """
-        from datetime import datetime
-
         line: str = "[%s] %s" % (datetime.now().strftime("%H:%M:%S"), message)
-        with self._job_lock:
-            lines: list[str] = self._job.setdefault("log", [])
+
+        def append(snapshot: dict[str, Any]) -> None:
+            """在 job 锁内追加日志并裁剪长度。"""
+            lines: list[str] = snapshot.setdefault("log", [])
             lines.append(line)
             if len(lines) > _MAX_LOG_LINES:
                 del lines[: len(lines) - _MAX_LOG_LINES]
 
-    def _set_phase(self, phase: str, message: str, progress: int) -> None:
+        self._job.mutate_if(job_id, append)
+
+    def _set_phase(
+        self,
+        phase: str,
+        message: str,
+        progress: int,
+        job_id: str = "",
+    ) -> None:
         """更新任务阶段、说明与进度。
 
         Args:
             phase: 阶段标识。
             message: 面向用户的说明。
             progress: 0~100 的进度。
+            job_id: 目标任务 ID；空字符串保留旧的无条件更新行为。
         """
-        with self._job_lock:
-            self._job["phase"] = phase
-            self._job["message"] = message
-            self._job["progress"] = max(0, min(100, int(progress)))
+
+        def update(snapshot: dict[str, Any]) -> None:
+            """在 job 锁内更新阶段字段。"""
+            snapshot["phase"] = phase
+            snapshot["message"] = message
+            snapshot["progress"] = max(0, min(100, int(progress)))
+
+        self._job.mutate_if(job_id, update)
 
     def _start_build(self, params: dict[str, Any]) -> ApiResult:
         """启动一次后台构建。
@@ -495,6 +516,8 @@ class BuildFeature(Feature):
         Returns:
             新任务的 ``job_id``。
         """
+        if self._shutting_down:
+            return failure("程序正在关闭，不能启动新构建")
         if getattr(sys, "frozen", False):
             return failure("已打包的应用不能再次构建，请从源码运行本程序")
         if DEV_BUILD:
@@ -510,21 +533,8 @@ class BuildFeature(Feature):
         program_name: str = str(params.get("program_name") or "").strip()
         icon_data: str = str(params.get("icon_data") or "")
         icon_filename: str = str(params.get("icon_filename") or "")
-        with self._job_lock:
-            if self._job.get("running"):
-                return failure("已有构建任务正在运行，请等待完成")
-            job_id: str = uuid.uuid4().hex[:12]
-            self._job = {
-                "job_id": job_id,
-                "running": True,
-                "done": False,
-                "phase": "starting",
-                "message": "准备构建…",
-                "progress": 0,
-                "log": [],
-                "result": None,
-                "error": "",
-            }
+        if self._job.running:
+            return failure("已有构建任务正在运行，请等待完成")
         config: dict[str, Any] = load_config()
         setting: dict[str, Any] = (
             config.get("build") if isinstance(config.get("build"), dict) else {}
@@ -538,10 +548,9 @@ class BuildFeature(Feature):
         }
         output_dir: str = str(setting.get("output_dir") or "")
         dev_format: str = str(setting.get("dev_format") or "executable")
-        self._thread = threading.Thread(
-            target=self._run_job,
-            args=(
-                job_id,
+        snapshot, started = self._job.try_start(
+            lambda job: self._run_job(
+                job.job_id,
                 version,
                 dev_build,
                 output_dir,
@@ -551,11 +560,15 @@ class BuildFeature(Feature):
                 icon_data,
                 icon_filename,
             ),
-            name="BuildJob-%s" % job_id,
-            daemon=True,
+            initial={
+                "phase": "starting",
+                "message": "准备构建…",
+                "progress": 0,
+            },
         )
-        self._thread.start()
-        return success({"job_id": job_id})
+        if not started:
+            return failure("已有构建任务正在运行，请等待完成")
+        return success({"job_id": str(snapshot.get("job_id") or "")})
 
     def _run_job(
         self,
@@ -582,8 +595,16 @@ class BuildFeature(Feature):
             icon_data: 图标 Base64/Data URL。
             icon_filename: 图标原始文件名。
         """
+        def log(message: str) -> None:
+            """把日志绑定到当前 job，避免延迟日志污染下一个任务。"""
+            self._append_log(message, job_id)
+
+        def set_phase(phase: str, message: str, progress: int) -> None:
+            """把阶段更新绑定到当前 job。"""
+            self._set_phase(phase, message, progress, job_id)
+
         try:
-            self._append_log("开始构建任务 %s" % job_id)
+            log("开始构建任务 %s" % job_id)
             result: dict[str, Any] = build_package(
                 version=version,
                 dev_build=dev_build,
@@ -593,40 +614,40 @@ class BuildFeature(Feature):
                 program_name=program_name,
                 icon_data=icon_data,
                 icon_filename=icon_filename,
-                log=self._append_log,
-                set_phase=self._set_phase,
+                log=log,
+                set_phase=set_phase,
             )
-            with self._job_lock:
-                self._job.update({
-                    "running": False,
-                    "done": True,
-                    "phase": "done",
-                    "message": "构建完成",
-                    "progress": 100,
-                    "result": result,
-                })
-            self._append_log("产物路径：%s" % result.get("path"))
+            self._job.update_if(
+                job_id,
+                running=False,
+                done=True,
+                phase="done",
+                message="构建完成",
+                progress=100,
+                result=result,
+            )
+            log("产物路径：%s" % result.get("path"))
         except BuildError as exc:
-            self._append_log("构建失败：%s" % exc)
-            with self._job_lock:
-                self._job.update({
-                    "running": False,
-                    "done": True,
-                    "phase": "error",
-                    "message": "构建失败",
-                    "error": str(exc),
-                })
+            log("构建失败：%s" % exc)
+            self._job.update_if(
+                job_id,
+                running=False,
+                done=True,
+                phase="error",
+                message="构建失败",
+                error=str(exc),
+            )
         except Exception as exc:  # 记录完整堆栈，便于排查。
             _LOGGER.exception("构建任务异常")
-            self._append_log(traceback.format_exc())
-            with self._job_lock:
-                self._job.update({
-                    "running": False,
-                    "done": True,
-                    "phase": "error",
-                    "message": "构建失败",
-                    "error": "构建异常: %s" % exc,
-                })
+            log(traceback.format_exc())
+            self._job.update_if(
+                job_id,
+                running=False,
+                done=True,
+                phase="error",
+                message="构建失败",
+                error="构建异常: %s" % exc,
+            )
 
     # ------------------------------------------------------------------ 插件
     def _dialogs(self) -> dict[str, Any]:
@@ -792,6 +813,8 @@ class BuildFeature(Feature):
         """
         from hwklr.features.extensions import ExtensionError, read_project_metadata
 
+        if self._shutting_down:
+            return failure("程序正在关闭，不能启动新构建")
         project: str = self._current_plugin_project(params)
         if not project:
             return failure("请先选择插件工程")
@@ -799,34 +822,24 @@ class BuildFeature(Feature):
             read_project_metadata(Path(project))
         except ExtensionError as exc:
             return failure("插件工程不合法：%s" % exc)
-        with self._job_lock:
-            if self._job.get("running"):
-                return failure("已有构建任务正在运行，请等待完成")
-            job_id: str = uuid.uuid4().hex[:12]
-            self._job = {
-                "job_id": job_id,
-                "running": True,
-                "done": False,
-                "phase": "starting",
-                "message": "准备构建插件…",
-                "progress": 0,
-                "log": [],
-                "result": None,
-                "error": "",
-            }
+        if self._job.running:
+            return failure("已有构建任务正在运行，请等待完成")
         config: dict[str, Any] = load_config()
         setting: dict[str, Any] = (
             config.get("build") if isinstance(config.get("build"), dict) else {}
         )
         output_dir: str = str(setting.get("output_dir") or "")
-        self._thread = threading.Thread(
-            target=self._run_plugin_job,
-            args=(job_id, project, output_dir),
-            name="PluginBuildJob-%s" % job_id,
-            daemon=True,
+        snapshot, started = self._job.try_start(
+            lambda job: self._run_plugin_job(job.job_id, project, output_dir),
+            initial={
+                "phase": "starting",
+                "message": "准备构建插件…",
+                "progress": 0,
+            },
         )
-        self._thread.start()
-        return success({"job_id": job_id})
+        if not started:
+            return failure("已有构建任务正在运行，请等待完成")
+        return success({"job_id": str(snapshot.get("job_id") or "")})
 
     def _run_plugin_job(
         self,
@@ -841,37 +854,45 @@ class BuildFeature(Feature):
             project: 插件工程目录。
             output_dir: 输出目录配置。
         """
+        def log(message: str) -> None:
+            """把插件构建日志绑定到当前 job。"""
+            self._append_log(message, job_id)
+
+        def set_phase(phase: str, message: str, progress: int) -> None:
+            """把插件构建阶段绑定到当前 job。"""
+            self._set_phase(phase, message, progress, job_id)
+
         try:
             from hwklr.features.extensions import build_plugin_package
 
-            self._append_log("开始插件构建任务 %s" % job_id)
+            log("开始插件构建任务 %s" % job_id)
             result: dict[str, Any] = build_plugin_package(
                 project,
                 output_dir=output_dir,
-                log=self._append_log,
-                set_phase=self._set_phase,
+                log=log,
+                set_phase=set_phase,
             )
-            with self._job_lock:
-                self._job.update({
-                    "running": False,
-                    "done": True,
-                    "phase": "done",
-                    "message": "插件构建完成",
-                    "progress": 100,
-                    "result": result,
-                })
-            self._append_log("插件发布包：%s" % result.get("path"))
+            self._job.update_if(
+                job_id,
+                running=False,
+                done=True,
+                phase="done",
+                message="插件构建完成",
+                progress=100,
+                result=result,
+            )
+            log("插件发布包：%s" % result.get("path"))
         except Exception as exc:  # 记录完整堆栈，便于排查。
             _LOGGER.exception("插件构建任务异常")
-            self._append_log(traceback.format_exc())
-            with self._job_lock:
-                self._job.update({
-                    "running": False,
-                    "done": True,
-                    "phase": "error",
-                    "message": "插件构建失败",
-                    "error": "插件构建失败: %s" % exc,
-                })
+            log(traceback.format_exc())
+            self._job.update_if(
+                job_id,
+                running=False,
+                done=True,
+                phase="error",
+                message="插件构建失败",
+                error="插件构建失败: %s" % exc,
+            )
 
     def _setup_dev_venv(self, params: dict[str, Any]) -> ApiResult:
         """在开发构建包中创建 HwklrVenv。

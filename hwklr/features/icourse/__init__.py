@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-10 12:30
+# 最后更新: 2026-11-10 23:59
 # 文件名: __init__.py
 # 主要用途: 实现“中国大学慕课”功能：登录、课程状态、任务 handler 编排、批量完成与题库同步。
-# 文件版本: 4.4.0
+# 文件版本: 4.4.2
 """中国大学慕课功能。
 
 功能层只负责动作分发、状态缓存与 job 编排；浏览器自动化、课程解析与题库
@@ -18,14 +18,12 @@ import copy
 import logging
 import threading
 import time
-import uuid
 from typing import Any, Final
 
 from hwklr import db as hwklr_db
 from hwklr.config import load_config
 from hwklr.contracts import (
     ActionSpec,
-    ErrorCode,
     ParamSpec,
     JobKind,
     coerce_bool,
@@ -35,7 +33,7 @@ from hwklr.feature_specs import FEATURE_BY_ID
 from hwklr.features.about import AboutMetadataGroup, about_meta_from_spec
 from hwklr.features.base import ApiResult, Feature, failure, success
 from hwklr.features.extensions import is_feature_enabled, set_feature_enabled
-from hwklr.features.jobs import BackgroundJob
+from hwklr.features.jobs import BackgroundJob, JobStore
 from hwklr.features.settings import FeatureSettingsGroup, SettingsFieldSpec
 
 from . import config
@@ -49,7 +47,7 @@ from .models import (
     extract_term_id,
 )
 
-__version__ = "4.4.0"
+__version__ = "4.4.2"
 __author__ = "Gary"
 __all__ = ["IcourseFeature"]
 
@@ -258,7 +256,14 @@ class IcourseFeature(Feature):
         )
         self._job_lock: threading.RLock = threading.RLock()
         self._job: Any | None = None
+        self._jobs: JobStore = JobStore()
+        self._jobs.put("login", self._login_job)
         self._settings_group: FeatureSettingsGroup = self._build_settings_group()
+
+    def shutdown(self) -> None:
+        """窗口关闭时取消并等待登录、题库同步与完成任务。"""
+        super().shutdown()
+        self._jobs.cancel_all(timeout=0.5)
 
     # ------------------------------------------------------------------ 元信息
     @property
@@ -921,6 +926,7 @@ class IcourseFeature(Feature):
                 force=force,
             )
             self._answer_sync = job
+            self._jobs.put("answer_sync", job.background_job)
             job.start()
             return job.snapshot()
 
@@ -1008,6 +1014,7 @@ class IcourseFeature(Feature):
                 ),
             )
             self._job = job
+            self._jobs.put("completion", job.background_job)
             snapshot = job.start()
         return success(snapshot)
 

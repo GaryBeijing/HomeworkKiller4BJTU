@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-01 00:01
-# 最后更新: 2026-11-10 10:00
+# 最后更新: 2026-11-10 23:59
 # 文件名: __init__.py
 # 主要用途: 实现“C程序设计”功能：课程/题目选择、启发模式、题解模式、启用开关与设置板块（依赖延迟加载）。
-# 文件版本: 4.4.0
+# 文件版本: 4.4.2
 """C 程序设计功能。
 
 重制自 ``B_CHelper``，主要变化：
@@ -20,16 +20,16 @@ import copy
 import logging
 import threading
 import time
-import uuid
 from datetime import datetime
 from typing import Any, Final
 
 from hwklr.config import load_config, update_config
+from hwklr.contracts import ActionSpec, JobKind
 from hwklr.feature_specs import FEATURE_BY_ID
 from hwklr.features.about import AboutMetadataGroup, about_meta_from_spec
-from hwklr.contracts import ActionSpec
 from hwklr.features.base import ApiResult, Feature, failure, success
 from hwklr.features.extensions import is_feature_enabled, set_feature_enabled
+from hwklr.features.jobs import BackgroundJob, JobStore
 from hwklr.features.settings import FeatureSettingsGroup, SettingsFieldSpec
 
 from .ai import (
@@ -54,7 +54,7 @@ from .models import (
 from .parsers import deterministic_structure
 from .site import MoodleError, MoodleSite, SubmitError
 
-__version__ = "4.4.0"
+__version__ = "4.4.2"
 __author__ = "Gary"
 __all__ = ["CProgrammingFeature"]
 
@@ -186,8 +186,9 @@ class CProgrammingFeature(Feature):
             universal_param: 窗口层注入的通用参数。
         """
         super().__init__(universal_param)
+        # _action_lock 串行化会修改业务状态的 UI 动作；_state_lock 只保护内存字段。
+        self._action_lock: threading.Lock = threading.Lock()
         self._state_lock: threading.RLock = threading.RLock()
-        self._job_lock: threading.Lock = threading.Lock()
         self._site: MoodleSite | None = None
         self._logged_in: bool = False
         self._username: str = ""
@@ -199,10 +200,101 @@ class CProgrammingFeature(Feature):
         self._last_consequences: dict[int, Consequence] = {}
         self._attempts: dict[int, int] = {}
         self._solutions: dict[int, SolutionDraft] = {}
-        self._job: dict[str, Any] = self._idle_job()
-        self._job_thread: threading.Thread | None = None
-        self._job_cancel: threading.Event = threading.Event()
+        self._solution_job: BackgroundJob[None] = BackgroundJob(
+            JobKind.SOLUTION,
+            self._idle_job(),
+            max_events=_MAX_EVENTS,
+        )
+        self._jobs: JobStore = JobStore()
+        self._jobs.put("solution", self._solution_job)
         self._settings_group: FeatureSettingsGroup = self._build_settings_group()
+
+    @property
+    def _job_cancel(self) -> threading.Event:
+        """返回当前题解任务的协作式取消事件。
+
+        Returns:
+            取消事件；测试与内部流程沿用旧属性名。
+        """
+        return self._solution_job.cancel_event
+
+    def shutdown(self) -> None:
+        """窗口关闭时取消并等待题解任务。"""
+        super().shutdown()
+        self._jobs.cancel_all(timeout=0.5)
+
+    # ------------------------------------------------------------- 共享状态
+    def _cached_detail(self, module_id: int) -> ProblemDetail | None:
+        """线程安全地读取题目详情缓存。"""
+        with self._state_lock:
+            return self._details.get(module_id)
+
+    def _cache_detail(self, detail: ProblemDetail) -> None:
+        """线程安全地写入题目详情缓存。"""
+        with self._state_lock:
+            self._details[detail.module_id] = detail
+
+    def _cached_analysis(self, module_id: int) -> QuestionAnalysis | None:
+        """线程安全地读取启发式讲解缓存。"""
+        with self._state_lock:
+            return self._analyses.get(module_id)
+
+    def _cache_analysis(self, module_id: int, analysis: QuestionAnalysis) -> None:
+        """线程安全地写入启发式讲解缓存。"""
+        with self._state_lock:
+            self._analyses[module_id] = analysis
+
+    def _get_attempts(self, module_id: int) -> int:
+        """线程安全地读取尝试次数。"""
+        with self._state_lock:
+            return int(self._attempts.get(module_id, 0))
+
+    def _set_attempts(self, module_id: int, attempts: int) -> None:
+        """线程安全地写入尝试次数。"""
+        with self._state_lock:
+            self._attempts[module_id] = attempts
+
+    def _get_last_consequence(self, module_id: int) -> Consequence | None:
+        """线程安全地读取上次判题结果。"""
+        with self._state_lock:
+            return self._last_consequences.get(module_id)
+
+    def _set_last_consequence(
+        self, module_id: int, consequence: Consequence
+    ) -> None:
+        """线程安全地写入上次判题结果。"""
+        with self._state_lock:
+            self._last_consequences[module_id] = consequence
+
+    def _cache_solution(self, module_id: int, solution: SolutionDraft) -> None:
+        """线程安全地写入题解缓存。"""
+        with self._state_lock:
+            self._solutions[module_id] = solution
+
+    def _structure_snapshot(self) -> CourseStructure | None:
+        """读取当前课程结构引用。"""
+        with self._state_lock:
+            return self._structure
+
+    def _problem_activity(self, problem: ProblemRef) -> int | None:
+        """线程安全地读取题目 activity_id。"""
+        with self._state_lock:
+            return problem.activity_id
+
+    def _problem_result(self, problem: ProblemRef) -> str:
+        """线程安全地读取题目最近判题结果。"""
+        with self._state_lock:
+            return problem.my_result
+
+    def _set_problem_result(self, problem: ProblemRef, value: str) -> None:
+        """线程安全地写入题目最近判题结果。"""
+        with self._state_lock:
+            problem.my_result = value
+
+    def _set_problem_activity(self, problem: ProblemRef, value: int | None) -> None:
+        """线程安全地写入题目 activity_id。"""
+        with self._state_lock:
+            problem.activity_id = value
 
     # ------------------------------------------------------------------ 设置
     @property
@@ -407,7 +499,7 @@ class CProgrammingFeature(Feature):
         if action == "get_state":
             return self._get_state(params)
 
-        with self._state_lock:
+        with self._action_lock:
             try:
                 self._ensure_no_job()
                 if action == "load_courses":
@@ -459,8 +551,7 @@ class CProgrammingFeature(Feature):
         Returns:
             运行中返回 ``True``。
         """
-        with self._job_lock:
-            return bool(self._job.get("running"))
+        return self._solution_job.running
 
     def _ensure_no_job(self) -> None:
         """确保当前没有运行中的后台任务。
@@ -519,15 +610,22 @@ class CProgrammingFeature(Feature):
             状态字典。
         """
         setting: dict[str, Any] = self._read_ai_setting()
+        with self._state_lock:
+            logged_in: bool = self._logged_in
+            courses_loaded: bool = bool(self._courses)
+            course_name: str = (
+                self._structure.course_name if self._structure else ""
+            )
+            analysis_cached: int = len(self._analyses)
         return success({
-            "logged_in": self._logged_in,
+            "logged_in": logged_in,
             "username": self._read_username(),
             "ai_ready": _ai_complete(setting),
             "solution_mode_enabled": self._solution_mode_enabled(),
-            "courses_loaded": bool(self._courses),
-            "course_name": self._structure.course_name if self._structure else "",
+            "courses_loaded": courses_loaded,
+            "course_name": course_name,
             "last_course_id": setting.get("last_course_id"),
-            "analysis_cached": len(self._analyses),
+            "analysis_cached": analysis_cached,
             "job_running": self._job_running(),
         })
 
@@ -541,12 +639,17 @@ class CProgrammingFeature(Feature):
             ValueError: 用户名为空时抛出。
             MoodleError: 登录失败时抛出。
         """
-        if self._site is not None and self._logged_in:
-            return self._site
+        with self._state_lock:
+            if self._site is not None and self._logged_in:
+                return self._site
         site: MoodleSite = self._create_site()
-        self._site = site
-        self._logged_in = True
-        self._username = self._read_username()
+        username: str = self._read_username()
+        with self._state_lock:
+            if self._site is not None and self._logged_in:
+                return self._site
+            self._site = site
+            self._logged_in = True
+            self._username = username
         return site
 
     def _create_site(self) -> MoodleSite:
@@ -598,12 +701,14 @@ class CProgrammingFeature(Feature):
         """
         site: MoodleSite = self._ensure_login()
         courses: list[Course] = site.get_courses()
-        self._courses = courses
+        with self._state_lock:
+            self._courses = courses
+            username: str = self._username
         setting: dict[str, Any] = self._read_ai_setting()
         return success({
             "courses": [course.to_payload() for course in courses],
             "last_course_id": setting.get("last_course_id"),
-            "username": self._username,
+            "username": username,
         })
 
     def _select_course(self, params: dict[str, Any]) -> ApiResult:
@@ -620,9 +725,10 @@ class CProgrammingFeature(Feature):
         except (TypeError, ValueError) as exc:
             raise ValueError("课程 ID 无效") from exc
         site: MoodleSite = self._ensure_login()
-        course: Course | None = next(
-            (item for item in self._courses if item.id == course_id), None
-        )
+        with self._state_lock:
+            course: Course | None = next(
+                (item for item in self._courses if item.id == course_id), None
+            )
         if course is None:
             course = Course(id=course_id, name=str(course_id))
         title: str
@@ -654,9 +760,10 @@ class CProgrammingFeature(Feature):
         Raises:
             ValueError: 未找到时抛出。
         """
-        if self._structure is None:
+        structure: CourseStructure | None = self._structure_snapshot()
+        if structure is None:
             raise ValueError("请先选择课程")
-        for part in self._structure.parts:
+        for part in structure.parts:
             for problem in part.problems:
                 if problem.module_id == module_id:
                     return problem
@@ -671,9 +778,10 @@ class CProgrammingFeature(Feature):
         Returns:
             所属部分；未找到返回 ``None``。
         """
-        if self._structure is None:
+        structure: CourseStructure | None = self._structure_snapshot()
+        if structure is None:
             return None
-        for part in self._structure.parts:
+        for part in structure.parts:
             if any(problem.module_id == module_id for problem in part.problems):
                 return part
         return None
@@ -690,14 +798,14 @@ class CProgrammingFeature(Feature):
         Returns:
             题目详情。
         """
-        detail: ProblemDetail | None = self._details.get(problem.module_id)
+        detail: ProblemDetail | None = self._cached_detail(problem.module_id)
         if detail is not None:
             return detail
         client: MoodleSite = site or self._ensure_login()
         detail = client.get_problem(problem.module_id)
         if detail.activity_id is not None:
-            problem.activity_id = detail.activity_id
-        self._details[problem.module_id] = detail
+            self._set_problem_activity(problem, detail.activity_id)
+        self._cache_detail(detail)
         return detail
 
     def _is_solved(
@@ -712,20 +820,23 @@ class CProgrammingFeature(Feature):
         Returns:
             ``(是否已通过, 说明)``。
         """
-        if problem.my_result.startswith("AC"):
-            return True, problem.my_result
-        if not problem.my_result:
+        result_text: str = self._problem_result(problem)
+        if result_text.startswith("AC"):
+            return True, result_text
+        if not result_text:
             return False, ""
         client: MoodleSite = site or self._ensure_login()
         try:
             solved: bool
             detail: str
-            solved, detail = client.has_any_ac(problem.module_id, problem.activity_id)
+            solved, detail = client.has_any_ac(
+                problem.module_id, self._problem_activity(problem)
+            )
         except MoodleError:
-            return False, problem.my_result
+            return False, result_text
         if solved:
-            problem.my_result = "AC: Accepted"
-        return solved, detail or problem.my_result
+            self._set_problem_result(problem, "AC: Accepted")
+        return solved, detail or self._problem_result(problem)
 
     # ------------------------------------------------------------------ 启发
     def _analyze_problem(self, params: dict[str, Any]) -> ApiResult:
@@ -748,31 +859,33 @@ class CProgrammingFeature(Feature):
         solved_text: str
         solved, solved_text = self._is_solved(problem)
         if solved:
+            attempts_done: int = self._get_attempts(module_id)
             return success({
                 "already_solved": True,
                 "detail": detail.to_payload(),
                 "analysis": None,
-                "attempts": self._attempts.get(module_id, 0),
-                "remaining": max(0, _MAX_ATTEMPTS - self._attempts.get(module_id, 0)),
+                "attempts": attempts_done,
+                "remaining": max(0, _MAX_ATTEMPTS - attempts_done),
                 "problem": problem.to_payload(),
                 "message": solved_text or "该题此前已 AC",
             })
-        analysis: QuestionAnalysis | None = self._analyses.get(module_id)
+        analysis: QuestionAnalysis | None = self._cached_analysis(module_id)
         cached: bool = analysis is not None and not refresh
         ai_error: str = ""
         if analysis is None or refresh:
             ai: AIClient = self._build_ai()
             part: Part | None = self._part_of(module_id)
-            previous: Consequence | None = self._last_consequences.get(module_id)
+            previous: Consequence | None = self._get_last_consequence(module_id)
+            structure: CourseStructure | None = self._structure_snapshot()
             try:
                 analysis = analysis_question_info(
                     ai,
                     detail,
                     previous=previous if refresh else None,
-                    course_name=self._structure.course_name if self._structure else "",
+                    course_name=structure.course_name if structure else "",
                     part_name=part.name if part else "",
                 )
-                self._analyses[module_id] = analysis
+                self._cache_analysis(module_id, analysis)
             except AIError as exc:
                 # 保持原 CLI 的降级能力：AI 不可用时仍展示题面摘要，允许手动编写代码。
                 ai_error = str(exc)
@@ -787,12 +900,13 @@ class CProgrammingFeature(Feature):
                         "“大功告成”步骤提交。" % exc
                     ),
                 )
+        attempts_done = self._get_attempts(module_id)
         return success({
             "already_solved": False,
             "detail": detail.to_payload(),
             "analysis": analysis.to_payload(),
-            "attempts": self._attempts.get(module_id, 0),
-            "remaining": max(0, _MAX_ATTEMPTS - self._attempts.get(module_id, 0)),
+            "attempts": attempts_done,
+            "remaining": max(0, _MAX_ATTEMPTS - attempts_done),
             "problem": problem.to_payload(),
             "cached": cached,
             "ai_error": ai_error,
@@ -817,22 +931,27 @@ class CProgrammingFeature(Feature):
             raise ValueError("提交代码不能为空")
         problem: ProblemRef = self._find_problem(module_id)
         detail: ProblemDetail = self._ensure_detail(problem)
-        if problem.activity_id is None:
+        activity_id: int | None = self._problem_activity(problem)
+        if activity_id is None:
             if detail.activity_id is None:
                 raise ValueError("无法确定该题的提交编号")
-            problem.activity_id = detail.activity_id
-        attempts: int = self._attempts.get(module_id, 0)
+            activity_id = detail.activity_id
+            self._set_problem_activity(problem, activity_id)
+        attempts: int = self._get_attempts(module_id)
         if attempts >= _MAX_ATTEMPTS:
             raise ValueError("本题已达到 5 次提交上限")
         site: MoodleSite = self._ensure_login()
-        submit_id: int | None = site.submit(problem.activity_id, code, "gcc")
+        submit_id: int | None = site.submit(activity_id, code, "gcc")
         attempts += 1
-        self._attempts[module_id] = attempts
+        self._set_attempts(module_id, attempts)
         consequence: Consequence = site.poll_consequence(
-            problem.activity_id, submit_id, timeout=150.0
+            activity_id, submit_id, timeout=150.0
         )
-        self._last_consequences[module_id] = consequence
-        problem.my_result = "AC: Accepted" if consequence.is_ac else consequence.status
+        self._set_last_consequence(module_id, consequence)
+        self._set_problem_result(
+            problem,
+            "AC: Accepted" if consequence.is_ac else consequence.status,
+        )
         payload: dict[str, Any] = {
             "consequence": consequence.to_payload(),
             "attempts": attempts,
@@ -857,13 +976,15 @@ class CProgrammingFeature(Feature):
             "message": message,
             "level": level,
         }
-        with self._job_lock:
-            if self._job.get("job_id") != job_id:
-                return
-            events: list[dict[str, str]] = self._job.setdefault("events", [])
+
+        def append(snapshot: dict[str, Any]) -> None:
+            """在 job 锁内追加事件并裁剪长度。"""
+            events: list[dict[str, str]] = snapshot.setdefault("events", [])
             events.append(event)
             if len(events) > _MAX_EVENTS:
                 del events[: len(events) - _MAX_EVENTS]
+
+        self._solution_job.mutate_if(job_id, append)
 
     def _update_job(self, job_id: str, **fields: Any) -> None:
         """更新任务状态。
@@ -872,10 +993,7 @@ class CProgrammingFeature(Feature):
             job_id: 任务 ID。
             **fields: 要更新的字段。
         """
-        with self._job_lock:
-            if self._job.get("job_id") != job_id:
-                return
-            self._job.update(fields)
+        self._solution_job.update_if(job_id, **fields)
 
     def _start_solution_job(self, params: dict[str, Any]) -> ApiResult:
         """启动题解模式后台任务。
@@ -903,12 +1021,13 @@ class CProgrammingFeature(Feature):
             raise ValueError("题解模式未启用，请先在设置中开启")
         if not _ai_complete(self._read_ai_setting()):
             raise ValueError("请先在设置中完成 C 程序设计 AI 配置")
-        if self._structure is None:
+        structure: CourseStructure | None = self._structure_snapshot()
+        if structure is None:
             raise ValueError("请先选择课程")
 
         # 步骤 1：按课程顺序排列题目，便于并发时按顺序连续分段。
         order: dict[int, int] = {}
-        for part in self._structure.parts:
+        for part in structure.parts:
             for problem in part.problems:
                 order[problem.module_id] = len(order)
         module_ids.sort(key=lambda item: order.get(item, 10**9))
@@ -925,31 +1044,18 @@ class CProgrammingFeature(Feature):
                 "worker": None,
             })
         concurrency: int = self._read_max_concurrency()
-        self._job_cancel = threading.Event()
-
-        job_id: str = uuid.uuid4().hex
-        job: dict[str, Any] = self._idle_job()
-        job.update({
-            "job_id": job_id,
-            "running": True,
-            "phase": "starting",
-            "message": "准备题解模式...",
-            "total": len(module_ids),
-            "concurrency": concurrency,
-            "problems": problem_states,
-        })
-        with self._job_lock:
-            self._job = job
-        thread: threading.Thread = threading.Thread(
-            target=self._run_solution_job,
-            args=(job_id, module_ids),
-            name="CSolutionJob",
-            daemon=True,
+        snapshot: dict[str, Any] = self._solution_job.start(
+            lambda job: self._run_solution_job(job.job_id, module_ids),
+            initial={
+                "phase": "starting",
+                "message": "准备题解模式...",
+                "total": len(module_ids),
+                "concurrency": concurrency,
+                "problems": problem_states,
+            },
         )
-        self._job_thread = thread
-        thread.start()
         return success({
-            "job_id": job_id,
+            "job_id": str(snapshot.get("job_id") or ""),
             "concurrency": concurrency,
             "problems": copy.deepcopy(problem_states),
         })
@@ -964,8 +1070,7 @@ class CProgrammingFeature(Feature):
             任务状态副本。
         """
         requested: str = str(params.get("job_id") or "")
-        with self._job_lock:
-            job: dict[str, Any] = copy.deepcopy(self._job)
+        job: dict[str, Any] = self._solution_job.snapshot()
         if requested and job.get("job_id") != requested:
             return failure("任务不存在或已过期")
         return success(job)
@@ -980,15 +1085,18 @@ class CProgrammingFeature(Feature):
             终止结果。
         """
         requested: str = str(params.get("job_id") or "")
-        with self._job_lock:
-            if not self._job.get("running"):
-                return success({"cancelled": False})
-            if requested and self._job.get("job_id") != requested:
-                return failure("任务不存在或已过期")
-            job_id: str = str(self._job.get("job_id") or "")
-            self._job["cancelling"] = True
-            self._job["message"] = "正在终止解题…"
-            self._job_cancel.set()
+        snapshot: dict[str, Any] = self._solution_job.snapshot()
+        if not snapshot.get("running"):
+            return success({"cancelled": False})
+        if requested and snapshot.get("job_id") != requested:
+            return failure("任务不存在或已过期")
+        job_id: str = str(snapshot.get("job_id") or "")
+        self._solution_job.update_if(
+            job_id,
+            cancelling=True,
+            message="正在终止解题…",
+        )
+        self._solution_job.cancel_event.set()
         self._push_event(
             job_id,
             "用户请求终止解题，正在等待当前步骤结束…",
@@ -1013,10 +1121,9 @@ class CProgrammingFeature(Feature):
             attempts: 当前尝试次数；``None`` 表示不更新。
             worker: 处理该题的线程序号（从 0 开始）；``None`` 表示不更新。
         """
-        with self._job_lock:
-            if self._job.get("job_id") != job_id:
-                return
-            for item in self._job.get("problems", []):
+        def update(snapshot: dict[str, Any]) -> None:
+            """在 job 锁内更新目标题目的状态。"""
+            for item in snapshot.get("problems", []):
                 if item.get("module_id") == module_id:
                     item["status"] = status
                     if attempts is not None:
@@ -1025,6 +1132,8 @@ class CProgrammingFeature(Feature):
                         item["worker"] = worker
                     break
 
+        self._solution_job.mutate_if(job_id, update)
+
     def _complete_problem(self, job_id: str, title: str) -> None:
         """标记一道题处理完成并更新进度。
 
@@ -1032,14 +1141,15 @@ class CProgrammingFeature(Feature):
             job_id: 任务 ID。
             title: 完成的题目名称。
         """
-        with self._job_lock:
-            if self._job.get("job_id") != job_id:
-                return
-            total: int = int(self._job.get("total") or 0)
-            current: int = min(int(self._job.get("current") or 0) + 1, total)
-            self._job["current"] = current
-            self._job["title"] = title
-            self._job["message"] = f"已完成 {current}/{total} 题"
+        def update(snapshot: dict[str, Any]) -> None:
+            """在 job 锁内推进完成计数。"""
+            total: int = int(snapshot.get("total") or 0)
+            current: int = min(int(snapshot.get("current") or 0) + 1, total)
+            snapshot["current"] = current
+            snapshot["title"] = title
+            snapshot["message"] = f"已完成 {current}/{total} 题"
+
+        self._solution_job.mutate_if(job_id, update)
 
     def _solve_problem(
         self,
@@ -1085,11 +1195,12 @@ class CProgrammingFeature(Feature):
         # 每题独立状态：自动模式从“关闭思考 + 5000 输出上限”开始。
         level: str = ai.resolve_thinking_level()
         budget: int = INITIAL_MAX_TOKENS
-        analysis: QuestionAnalysis | None = self._analyses.get(module_id)
+        analysis: QuestionAnalysis | None = self._cached_analysis(module_id)
         previous: Consequence | None = None
-        attempts: int = self._attempts.get(module_id, 0)
+        attempts: int = self._get_attempts(module_id)
         submit_errors: int = 0
         failure_record: dict[str, Any] | None = None
+        structure: CourseStructure | None = self._structure_snapshot()
 
         self._set_problem_status(
             job_id, module_id, "生成题解", attempts=attempts, worker=worker
@@ -1115,7 +1226,7 @@ class CProgrammingFeature(Feature):
                         detail,
                         previous=previous,
                         course_name=(
-                            self._structure.course_name if self._structure else ""
+                            structure.course_name if structure else ""
                         ),
                         part_name=part_name,
                         max_tokens=budget,
@@ -1137,8 +1248,7 @@ class CProgrammingFeature(Feature):
                         job_id, f"生成思路失败：{problem.title} - {exc}", "error"
                     )
                     break
-                with self._state_lock:
-                    self._analyses[module_id] = analysis
+                self._cache_analysis(module_id, analysis)
                 self._push_event(
                     job_id,
                     f"思路已生成：{problem.title}"
@@ -1180,14 +1290,13 @@ class CProgrammingFeature(Feature):
                     job_id, f"生成题解失败：{problem.title} - {exc}", "error"
                 )
                 break
-            with self._state_lock:
-                self._solutions[module_id] = solution
+            self._cache_solution(module_id, solution)
 
             # 关键步骤：提交前确保 activity_id 已解析。
-            activity_id: int | None = problem.activity_id
+            activity_id: int | None = self._problem_activity(problem)
             if activity_id is None:
                 activity_id = site.resolve_activity_id(module_id)
-                problem.activity_id = activity_id
+                self._set_problem_activity(problem, activity_id)
             if activity_id is None:
                 failure_record = {
                     "module_id": problem.module_id,
@@ -1237,17 +1346,16 @@ class CProgrammingFeature(Feature):
                 time.sleep(1.0)
                 continue
 
-            with self._state_lock:
-                self._attempts[module_id] = attempts
+            self._set_attempts(module_id, attempts)
             consequence: Consequence = site.poll_consequence(
                 activity_id, submit_id, timeout=150.0
             )
             if self._job_cancel.is_set():
                 raise SolutionCancelled()
-            with self._state_lock:
-                self._last_consequences[module_id] = consequence
-            problem.my_result = (
-                "AC: Accepted" if consequence.is_ac else consequence.status
+            self._set_last_consequence(module_id, consequence)
+            self._set_problem_result(
+                problem,
+                "AC: Accepted" if consequence.is_ac else consequence.status,
             )
             if consequence.is_ac:
                 self._set_problem_status(
@@ -1308,20 +1416,21 @@ class CProgrammingFeature(Feature):
             analysis = None
 
         if failure_record is None:
-            last: Consequence | None = self._last_consequences.get(module_id)
+            last: Consequence | None = self._get_last_consequence(module_id)
+            recorded_attempts: int = self._get_attempts(module_id)
             failure_record = {
                 "module_id": problem.module_id,
                 "title": problem.title,
                 "status": last.status if last else "FAILED",
                 "summary": last.summary if last else "",
                 "compile_message": last.compile_message if last else "",
-                "attempts": self._attempts.get(module_id, attempts),
+                "attempts": recorded_attempts,
             }
             self._set_problem_status(
                 job_id,
                 module_id,
                 "错误：尝试次数过多",
-                attempts=self._attempts.get(module_id, attempts),
+                attempts=recorded_attempts,
                 worker=worker,
             )
         self._push_event(
@@ -1434,11 +1543,12 @@ class CProgrammingFeature(Feature):
                             title: str = self._find_problem(module_id).title
                         except Exception:
                             title = str(module_id)
+                        failed_attempts: int = self._get_attempts(module_id)
                         self._set_problem_status(
                             job_id,
                             module_id,
                             "错误：内部异常",
-                            attempts=self._attempts.get(module_id, 0),
+                            attempts=failed_attempts,
                             worker=worker_index,
                         )
                         outcome = {
@@ -1449,7 +1559,7 @@ class CProgrammingFeature(Feature):
                                 "status": "ERROR",
                                 "summary": str(exc),
                                 "compile_message": "",
-                                "attempts": self._attempts.get(module_id, 0),
+                                "attempts": failed_attempts,
                             },
                         }
                     with outcomes_lock:
@@ -1558,5 +1668,3 @@ class CProgrammingFeature(Feature):
                 message="题解模式失败：%s" % exc,
             )
             self._push_event(job_id, "任务失败：%s" % exc, "error")
-        finally:
-            self._job_thread = None

@@ -6,7 +6,7 @@
 
 ![Python](https://img.shields.io/badge/Python-3.15.2-3776AB?logo=python&logoColor=white)
 ![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-0078D4?logo=windows&logoColor=white)
-![Version](https://img.shields.io/badge/Version-4.4.0-5B4BFF)
+![Version](https://img.shields.io/badge/Version-4.4.2-5B4BFF)
 ![GUI](https://img.shields.io/badge/GUI-pywebview%20%2B%20WebView2-2F3AB2)
 
 [功能特性](#-功能特性) · [界面预览](#-界面预览) · [快速开始](#-快速开始) · [使用指南](#-使用指南) · [构建与分发](#-构建与分发) · [插件开发](#-插件开发) · [常见问题](#-常见问题)
@@ -266,6 +266,17 @@ __all__ = ["MyPluginFeature"]
 
 > 插件模板位于 `hwklr/features/build/vendor/plugin-template.zip`，开发构建会把它复制到虚拟环境 `vendor/`。
 
+`meta.json` 仍兼容最初的 7 个键（`author/name/package/version/update_date/official/description`），4.4.1 起可选追加：
+
+- `schema`、`id`、`order`、`date`：manifest 版本、稳定 id、标签排序值与更新日期；
+- `ui` / `assets`：`{html, css, js, runtime_dirs}`，覆盖 `UI/index.html` 与 `UI/css`、`UI/js` 的目录约定；
+- `actions`：动作元数据列表，供 `/api/tags` 展示，不构成调用白名单；
+- `config`：`{section, defaults}`，加载插件时把默认值登记到 `load_config()`；
+- `db`：`{base_name, provider_module, provider_class, ...}`，在窗口启动时注册到 `DbManager`；`provider_module` 必须是 `feature/` 或插件根目录下可导入的模块；
+- `packaging`：`{hidden_imports, collect_submodules, collect_all, ...}` 打包元数据。
+
+`feature/__init__.py` 中的 `__author__`、`__version__`、`__update_date__` 等 dunder 仍优先于 `meta.json`；构建插件发布包时会保留 manifest 中的未知键。
+
 ---
 
 ## 📦 构建与分发
@@ -439,7 +450,8 @@ HomeworkKiller4BJTU/
 5. **需求对齐**：功能变更需同步 `SoftwareIntro/function_requirements.md` 与 `SoftwareIntro/drction+rqrmnts(org).md`。
 6. **提交前自检**：
    ```powershell
-   .\Scripts\python.exe -m compileall -q hwklr main.py
+   .\Scripts\python.exe -m compileall -q hwklr main.py tests
+   .\Scripts\python.exe -m unittest discover -s tests -v
    ```
    前端改动建议同时运行 `node --check <file>.js`。
 
@@ -449,7 +461,10 @@ HomeworkKiller4BJTU/
 
 | 版本 | 主要内容 |
 |---|---|
-| **3.0.0** | 构建升级；程序/插件构建切换；插件工程模板与发布包；第三方扩展加载/启停；关于页元信息与版本格式；功能启用开关；开发环境新布局 |
+| **4.4.2** | P0/P1 修正：config 原子写、TagRegistry 并发安全、cprog 锁纪律、构建日志隔离；config 板块派生、插件运行时 order、扩展扫描缓存；CompletionJob 统一 BackgroundJob 与窗口关闭 shutdown |
+| 4.4.1 | M6：cprog/build Job 迁移、WindowView 与 icourse.js 拆分、插件 manifest 扩展字段 |
+| 4.4.0 | 架构重构：契约、FeatureSpec registry、DB 并发、TaskHandler/CourseState/Page Object |
+| 3.0.0 | 构建升级；程序/插件构建切换；插件工程模板与发布包；第三方扩展加载/启停；关于页元信息与版本格式；功能启用开关；开发环境新布局 |
 | 2.3.1 | 修复并发解题重复登录导致会话失效；修复标签切换后课程/部分丢失；题目状态配色 |
 | 2.3.0 | 题解模式逐题实时状态；最大并发数（1–8）；移除子窗口字体按钮 |
 | 2.2.0 | 思考等级；AI 输出预算翻倍重试；隐藏测试点处理；整数宽度约束 |

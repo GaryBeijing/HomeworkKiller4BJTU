@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-03 17:20
-# 最后更新: 2026-11-10 10:30
+# 最后更新: 2026-11-10 23:59
 # 文件名: extensions.py
 # 主要用途: 第三方扩展的扫描、校验、导入、启用状态管理，以及插件工程模板与插件发布包构建。
-# 文件版本: 4.4.0
+# 文件版本: 4.4.2
 """第三方扩展与插件工程支持。
 
 扩展目录结构（zip 解压后）：::
@@ -25,7 +25,9 @@
 from __future__ import annotations
 
 import ast
+import importlib
 import importlib.util
+import inspect
 import json
 import logging
 import re
@@ -33,22 +35,30 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import zipfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Final
 
-from hwklr.config import load_config, update_config
-from hwklr.feature_specs import official_sections
+from hwklr.config import load_config, register_config_defaults, update_config
+from hwklr.feature_specs import (
+    FeatureAssetSpec,
+    FeatureConfigSpec,
+    FeatureDbSpec,
+    FeaturePackagingSpec,
+    official_sections,
+)
 from hwklr.features.base import Feature
 from hwklr.features.versions import format_plugin_version
 
-__version__ = "4.4.0"
+__version__ = "4.4.2"
 __author__ = "Gary"
 __all__ = [
     "ExtensionError",
     "ExtensionInfo",
+    "PluginSpec",
     "app_home",
     "build_plugin_package",
     "bundled_template_zip",
@@ -57,8 +67,10 @@ __all__ = [
     "get_extensions_payload",
     "install_extension_git",
     "install_extension_zip",
+    "invalidate_extension_cache",
     "is_feature_enabled",
     "load_extension_dir",
+    "parse_plugin_spec",
     "project_extension_root",
     "read_project_metadata",
     "scan_installed_extensions",
@@ -72,12 +84,38 @@ _SAFE_NAME: Final[re.Pattern[str]] = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 _PACKAGE_NAME: Final[re.Pattern[str]] = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _GIT_TIMEOUT: Final[int] = 300
 _MODULE_SEQ: int = 0
+_SCAN_LOCK: Final[threading.RLock] = threading.RLock()
+_SCAN_CACHE: tuple[
+    tuple["ExtensionInfo", ...],
+    tuple[str, ...],
+    tuple[tuple[str, int], ...],
+] | None = None
 # 官方功能名/稳定 id -> config 中保存启用状态的板块键。
 _OFFICIAL_SECTIONS: Final[dict[str, str]] = official_sections()
 
 
 class ExtensionError(RuntimeError):
     """扩展导入/校验失败时抛出的可读异常。"""
+
+
+@dataclass(frozen=True)
+class PluginSpec:
+    """插件 ``meta.json`` 的规范化声明。
+
+    所有字段均为可选；未声明的字段回退到 3.0.0 的 7 键 manifest 行为。
+    """
+
+    schema: int = 1
+    id: str = ""
+    order: int = 0
+    update_date: str = ""
+    ui: FeatureAssetSpec | None = None
+    assets: FeatureAssetSpec | None = None
+    actions: tuple[dict[str, Any], ...] = ()
+    config: FeatureConfigSpec | None = None
+    db: FeatureDbSpec | None = None
+    packaging: FeaturePackagingSpec = field(default_factory=FeaturePackagingSpec)
+    raw: dict[str, Any] = field(default_factory=dict, compare=False, repr=False)
 
 
 @dataclass(frozen=True)
@@ -120,6 +158,37 @@ class ExtensionInfo:
     js_files: tuple[str, ...] = ()
     """相对扩展根目录的 JS 文件。"""
 
+    spec: PluginSpec = field(default_factory=PluginSpec)
+    """规范化后的插件声明。"""
+
+    db_provider: Any = None
+    """按 ``meta.db`` 实例化的数据库 provider；未声明时为 ``None``。"""
+
+    @property
+    def schema(self) -> int:
+        """返回 manifest schema 版本。"""
+        return int(self.spec.schema)
+
+    @property
+    def plugin_id(self) -> str:
+        """返回插件声明的稳定 id；未声明时使用扩展目录名。"""
+        return self.spec.id or self.id
+
+    @property
+    def order(self) -> int:
+        """返回标签排序值；未声明时为 0。"""
+        return int(self.spec.order)
+
+    @property
+    def actions(self) -> tuple[dict[str, Any], ...]:
+        """返回 manifest 中声明的动作元数据。"""
+        return self.spec.actions
+
+    @property
+    def assets(self) -> FeatureAssetSpec | None:
+        """返回 UI 资源声明。"""
+        return self.spec.assets or self.spec.ui
+
     @property
     def version_display(self) -> str:
         """返回插件展示版本号。
@@ -150,6 +219,17 @@ class ExtensionInfo:
             "enabled": bool(enabled),
             "path": str(self.path),
             "description": self.description,
+            "schema": self.schema,
+            "plugin_id": self.plugin_id,
+            "order": self.order,
+            "actions": [dict(item) for item in self.actions],
+            "config_section": (
+                self.spec.config.section if self.spec.config is not None else ""
+            ),
+            "database": (
+                self.spec.db.base_name if self.spec.db is not None else ""
+            ),
+            "has_ui_override": bool(self.assets is not None),
         }
 
 
@@ -388,6 +468,255 @@ def _ast_str(node: ast.AST | None) -> str:
     return ""
 
 
+def _relative_asset(value: Any, field_name: str) -> str:
+    """校验并规范化插件内的相对资源路径。
+
+    Args:
+        value: 原始路径。
+        field_name: 出错时展示的字段名。
+
+    Returns:
+        POSIX 风格的相对路径；空值返回空串。
+
+    Raises:
+        ExtensionError: 路径为绝对路径或包含 ``..``。
+    """
+    text: str = str(value or "").strip().replace("\\", "/")
+    if not text:
+        return ""
+    parts: list[str] = [part for part in text.split("/") if part not in ("", ".")]
+    if text.startswith("/") or ".." in parts or (parts and ":" in parts[0]):
+        raise ExtensionError("%s 必须是插件目录内的相对路径：%s" % (field_name, text))
+    return "/".join(parts)
+
+
+def _string_tuple(value: Any, field_name: str) -> tuple[str, ...]:
+    """把字符串/列表规范化为相对路径元组。
+
+    Args:
+        value: 原始值。
+        field_name: 出错时展示的字段名。
+
+    Returns:
+        去空后的相对路径元组。
+    """
+    raw_items: list[Any] = [value] if isinstance(value, str) else (
+        list(value) if isinstance(value, (list, tuple)) else []
+    )
+    result: list[str] = []
+    for item in raw_items:
+        path: str = _relative_asset(item, field_name)
+        if path:
+            result.append(path)
+    return tuple(result)
+
+
+def _asset_spec(value: Any, field_name: str) -> FeatureAssetSpec | None:
+    """解析 ``ui`` / ``assets`` 声明。
+
+    Args:
+        value: manifest 中的对象。
+        field_name: 出错时展示的字段名。
+
+    Returns:
+        资源声明；对象为空时返回 ``None``。
+    """
+    if not isinstance(value, dict):
+        return None
+    html: str = _relative_asset(
+        value.get("html") or value.get("index") or "", field_name + ".html"
+    )
+    css: tuple[str, ...] = _string_tuple(value.get("css"), field_name + ".css")
+    js: tuple[str, ...] = _string_tuple(value.get("js"), field_name + ".js")
+    runtime_dirs: tuple[str, ...] = _string_tuple(
+        value.get("runtime_dirs"), field_name + ".runtime_dirs"
+    )
+    if not (html or css or js or runtime_dirs):
+        return None
+    return FeatureAssetSpec(
+        html=html,
+        css=css,
+        js=js,
+        runtime_dirs=runtime_dirs,
+    )
+
+
+def _action_specs(value: Any) -> tuple[dict[str, Any], ...]:
+    """解析插件声明的动作元数据。
+
+    Args:
+        value: manifest 中的 ``actions``。
+
+    Returns:
+        规范化动作列表；非法条目不参与校验，只保留可读字段。
+    """
+    if not isinstance(value, (list, tuple)):
+        return ()
+    result: list[dict[str, Any]] = []
+    for item in value:
+        if isinstance(item, str):
+            name: str = item.strip()
+            payload: dict[str, Any] = {"name": name}
+        elif isinstance(item, dict):
+            payload = dict(item)
+            name = str(payload.get("name") or "").strip()
+        else:
+            continue
+        if not name:
+            continue
+        payload["name"] = name
+        payload.setdefault("description", "")
+        payload.setdefault("risk", "read")
+        params: Any = payload.get("params")
+        payload["params"] = list(params) if isinstance(params, (list, tuple)) else []
+        result.append(payload)
+    return tuple(result)
+
+
+def _config_spec(value: Any) -> FeatureConfigSpec | None:
+    """解析插件配置声明。
+
+    Args:
+        value: manifest 中的 ``config``。
+
+    Returns:
+        配置声明；缺少 section 时返回 ``None``。
+    """
+    if not isinstance(value, dict):
+        return None
+    section: str = str(value.get("section") or value.get("name") or "").strip()
+    if not section:
+        return None
+    raw_defaults: Any = value.get("defaults")
+    defaults: tuple[tuple[str, Any], ...] = ()
+    if isinstance(raw_defaults, dict):
+        defaults = tuple((str(key), item) for key, item in raw_defaults.items())
+    legacy: tuple[str, ...] = tuple(
+        str(item) for item in value.get("legacy_sections", [])
+        if str(item).strip()
+    )
+    return FeatureConfigSpec(
+        section=section,
+        defaults=defaults,
+        legacy_sections=legacy,
+    )
+
+
+def _db_spec(value: Any, fallback_name: str) -> FeatureDbSpec | None:
+    """解析插件数据库声明。
+
+    Args:
+        value: manifest 中的 ``db`` / ``database``。
+        fallback_name: 未声明 base_name 时使用的名称。
+
+    Returns:
+        数据库声明；缺少 provider 类时返回 ``None``。
+    """
+    if not isinstance(value, dict):
+        return None
+    provider_module: str = str(
+        value.get("provider_module") or value.get("module") or ""
+    ).strip()
+    provider_class: str = str(
+        value.get("provider_class") or value.get("class") or ""
+    ).strip()
+    if not provider_module or not provider_class:
+        return None
+    return FeatureDbSpec(
+        base_name=str(value.get("base_name") or value.get("name") or fallback_name),
+        provider_module=provider_module,
+        provider_class=provider_class,
+        source_files=_string_tuple(value.get("source_files"), "db.source_files"),
+        provider_modules=_string_tuple(
+            value.get("provider_modules"), "db.provider_modules"
+        ),
+        runtime_asset_prefixes=_string_tuple(
+            value.get("runtime_asset_prefixes"), "db.runtime_asset_prefixes"
+        ),
+        excluded_paths=_string_tuple(
+            value.get("excluded_paths"), "db.excluded_paths"
+        ),
+    )
+
+
+def _packaging_spec(value: Any) -> FeaturePackagingSpec:
+    """解析插件打包声明。
+
+    Args:
+        value: manifest 中的 ``packaging``。
+
+    Returns:
+        打包声明；缺失字段使用默认值。
+    """
+    if not isinstance(value, dict):
+        return FeaturePackagingSpec()
+    return FeaturePackagingSpec(
+        hidden_imports=_string_tuple(
+            value.get("hidden_imports"), "packaging.hidden_imports"
+        ),
+        collect_submodules=_string_tuple(
+            value.get("collect_submodules"), "packaging.collect_submodules"
+        ),
+        collect_all=_string_tuple(value.get("collect_all"), "packaging.collect_all"),
+        extra_modules=_string_tuple(
+            value.get("extra_modules"), "packaging.extra_modules"
+        ),
+        extra_excludes=_string_tuple(
+            value.get("extra_excludes"), "packaging.extra_excludes"
+        ),
+        dev_default=str(value.get("dev_default") or "release"),
+        always_dev=bool(value.get("always_dev")),
+        plugin_template=str(value.get("plugin_template") or ""),
+    )
+
+
+def parse_plugin_spec(meta: dict[str, Any], fallback_id: str = "") -> PluginSpec:
+    """把插件 ``meta.json`` 解析为 :class:`PluginSpec`。
+
+    所有新字段都是可选的；旧 7 键 manifest 解析后只得到 schema=1 与原始
+    ``raw``，不改变既有加载行为。
+
+    Args:
+        meta: 已读取的 meta 对象。
+        fallback_id: 未声明 id 时使用的扩展目录名。
+
+    Returns:
+        规范化插件声明。
+
+    Raises:
+        ExtensionError: 资源路径越过插件目录，或字段类型明显错误。
+    """
+    raw: dict[str, Any] = dict(meta) if isinstance(meta, dict) else {}
+    try:
+        schema: int = int(raw.get("schema") or 1)
+    except (TypeError, ValueError):
+        schema = 1
+    try:
+        order: int = int(raw.get("order") or 0)
+    except (TypeError, ValueError):
+        order = 0
+    ui: FeatureAssetSpec | None = _asset_spec(raw.get("ui"), "ui")
+    assets: FeatureAssetSpec | None = _asset_spec(raw.get("assets"), "assets")
+    plugin_id: str = str(raw.get("id") or fallback_id or "").strip()
+    db: FeatureDbSpec | None = _db_spec(
+        raw.get("db") if "db" in raw else raw.get("database"),
+        plugin_id or fallback_id,
+    )
+    return PluginSpec(
+        schema=max(1, schema),
+        id=plugin_id,
+        order=order,
+        update_date=str(raw.get("update_date") or raw.get("date") or ""),
+        ui=ui,
+        assets=assets,
+        actions=_action_specs(raw.get("actions")),
+        config=_config_spec(raw.get("config")),
+        db=db,
+        packaging=_packaging_spec(raw.get("packaging")),
+        raw=raw,
+    )
+
+
 def read_project_metadata(project_dir: Path) -> dict[str, Any]:
     """读取插件工程的结构与元信息（不执行插件代码）。
 
@@ -406,9 +735,14 @@ def read_project_metadata(project_dir: Path) -> dict[str, Any]:
     ui_dir: Path = base / "UI"
     if not feature_file.is_file():
         raise ExtensionError("缺少 feature/__init__.py")
-    if not (ui_dir / "index.html").is_file():
-        raise ExtensionError("缺少 UI/index.html")
     meta: dict[str, Any] = _read_json(base / "meta.json")
+    spec: PluginSpec = parse_plugin_spec(meta, base.name)
+    html_path: str = (
+        spec.assets.html if spec.assets is not None and spec.assets.html
+        else (spec.ui.html if spec.ui is not None and spec.ui.html else "UI/index.html")
+    )
+    if not (base / html_path).is_file():
+        raise ExtensionError("缺少 UI 入口：%s" % html_path)
     try:
         tree: ast.Module = ast.parse(feature_file.read_text(encoding="utf-8-sig"))
     except (OSError, SyntaxError) as exc:
@@ -444,7 +778,10 @@ def read_project_metadata(project_dir: Path) -> dict[str, Any]:
     author: str = str(values.get("__author__") or meta.get("author") or "Unknown")
     version: str = str(values.get("__version__") or meta.get("version") or "0.0.0")
     update_date: str = str(
-        values.get("__update_date__") or meta.get("update_date") or ""
+        values.get("__update_date__")
+        or meta.get("update_date")
+        or meta.get("date")
+        or ""
     )
     official_raw: Any = values.get("__official__", meta.get("official", False))
     official: bool = (
@@ -457,6 +794,7 @@ def read_project_metadata(project_dir: Path) -> dict[str, Any]:
         "feature_file": feature_file,
         "ui_dir": ui_dir,
         "meta": meta,
+        "spec": spec,
         "name": name,
         "tab_name": name,
         "package": package,
@@ -526,15 +864,21 @@ def _load_module(feature_dir: Path, module_name: str) -> Any:
                 pass
 
 
-def _discover_assets(base: Path) -> tuple[tuple[str, ...], tuple[str, ...]]:
+def _discover_assets(
+    base: Path,
+    declared: FeatureAssetSpec | None = None,
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """发现扩展 UI 下的 CSS/JS 文件。
 
     Args:
         base: 扩展根目录。
+        declared: manifest 中显式声明的资源；存在时完全取代目录约定。
 
     Returns:
         ``(css 相对路径, js 相对路径)``，均相对扩展根目录。
     """
+    if declared is not None and (declared.css or declared.js):
+        return declared.css, declared.js
     css_files: list[str] = []
     js_files: list[str] = []
     for sub, bucket in (("UI/css", css_files), ("UI/js", js_files)):
@@ -547,6 +891,50 @@ def _discover_assets(base: Path) -> tuple[tuple[str, ...], tuple[str, ...]]:
             ):
                 bucket.append(file_path.relative_to(base).as_posix())
     return tuple(css_files), tuple(js_files)
+
+
+def _load_plugin_db_provider(base: Path, spec: FeatureDbSpec | None) -> Any:
+    """按插件声明的数据库路径实例化 provider。
+
+    Args:
+        base: 扩展根目录。
+        spec: 数据库声明。
+
+    Returns:
+        provider 实例；未声明或加载失败时返回 ``None``。
+    """
+    if spec is None:
+        return None
+    search_dirs: tuple[Path, ...] = (base / "feature", base)
+    inserted: list[str] = []
+    try:
+        for directory in search_dirs:
+            text: str = str(directory)
+            if directory.is_dir() and text not in sys.path:
+                sys.path.insert(0, text)
+                inserted.append(text)
+        # 不同插件可能声明同名 provider 模块；先移除缓存，避免加载到上一个插件。
+        sys.modules.pop(spec.provider_module, None)
+        module: Any = importlib.import_module(spec.provider_module)
+        provider_cls: Any = getattr(module, spec.provider_class)
+        parameters = inspect.signature(provider_cls).parameters
+        if "base_name" in parameters:
+            return provider_cls(base_name=spec.base_name)
+        return provider_cls()
+    except Exception as exc:
+        _LOGGER.warning(
+            "插件数据库 provider 加载失败 %s.%s: %s",
+            spec.provider_module,
+            spec.provider_class,
+            exc,
+        )
+        return None
+    finally:
+        for text in inserted:
+            try:
+                sys.path.remove(text)
+            except ValueError:
+                pass
 
 
 def load_extension_dir(project_dir: Path, *, validate: bool = True) -> ExtensionInfo:
@@ -564,8 +952,21 @@ def load_extension_dir(project_dir: Path, *, validate: bool = True) -> Extension
     """
     metadata: dict[str, Any] = read_project_metadata(project_dir)
     base: Path = Path(metadata["base"]).resolve()
-    if validate and not (base / "UI" / "index.html").is_file():
-        raise ExtensionError("缺少 UI/index.html")
+    spec: PluginSpec = metadata.get("spec") or PluginSpec()
+    if validate:
+        declared: FeatureAssetSpec | None = spec.assets or spec.ui
+        html: str = (
+            declared.html if declared is not None and declared.html
+            else "UI/index.html"
+        )
+        if not (base / html).is_file():
+            raise ExtensionError("缺少 UI 入口：%s" % html)
+        for asset in (
+            *(declared.css if declared is not None else ()),
+            *(declared.js if declared is not None else ()),
+        ):
+            if not (base / asset).is_file():
+                raise ExtensionError("缺少 UI 资源：%s" % asset)
     module: Any = _load_module(base / "feature", _module_name(base.name))
     all_names: Any = getattr(module, "__all__", None)
     if not isinstance(all_names, (list, tuple)) or len(all_names) != 1:
@@ -579,8 +980,11 @@ def load_extension_dir(project_dir: Path, *, validate: bool = True) -> Extension
         feature_cls({"context": {"port": 0}, "app_meta": {}})
     except Exception as exc:
         raise ExtensionError("插件初始化失败：%s" % exc) from exc
-    css_files, js_files = _discover_assets(base)
+    css_files, js_files = _discover_assets(base, spec.assets or spec.ui)
     meta: dict[str, Any] = metadata["meta"]
+    if spec.config is not None:
+        register_config_defaults(spec.config.section, dict(spec.config.defaults))
+    db_provider: Any = _load_plugin_db_provider(base, spec.db)
     return ExtensionInfo(
         id=base.name,
         path=base,
@@ -602,36 +1006,91 @@ def load_extension_dir(project_dir: Path, *, validate: bool = True) -> Extension
         description=str(meta.get("description") or ""),
         css_files=css_files,
         js_files=js_files,
+        spec=spec,
+        db_provider=db_provider,
     )
 
 
-def scan_installed_extensions() -> tuple[list[ExtensionInfo], list[str]]:
+def invalidate_extension_cache() -> None:
+    """清空已安装扩展扫描缓存。"""
+    global _SCAN_CACHE
+    with _SCAN_LOCK:
+        _SCAN_CACHE = None
+
+
+def _extension_signature(root: Path) -> tuple[tuple[str, int], ...]:
+    """计算扩展目录签名，用于判断缓存是否失效。
+
+    Args:
+        root: ``extension/`` 根目录。
+
+    Returns:
+        排序后的 ``(相对路径, mtime_ns)`` 元组；目录不存在时为空元组。
+    """
+    if not root.is_dir():
+        return ()
+    entries: list[tuple[str, int]] = []
+    for child in sorted(root.iterdir(), key=lambda item: item.name.lower()):
+        if not child.is_dir():
+            continue
+        for file_path in child.rglob("*"):
+            if not file_path.is_file():
+                continue
+            if "__pycache__" in file_path.parts or file_path.suffix in (".pyc", ".pyo"):
+                continue
+            try:
+                mtime: int = file_path.stat().st_mtime_ns
+            except OSError:
+                mtime = 0
+            entries.append((file_path.relative_to(root).as_posix(), mtime))
+    return tuple(entries)
+
+
+def scan_installed_extensions(
+    *, force: bool = False
+) -> tuple[list[ExtensionInfo], list[str]]:
     """扫描 ``extension/`` 下所有可用扩展。
+
+    Args:
+        force: 忽略缓存并重新加载插件。
 
     Returns:
         ``(扩展列表, 错误信息列表)``。
     """
+    global _SCAN_CACHE
     root: Path = extension_root()
     if not root.is_dir():
+        with _SCAN_LOCK:
+            _SCAN_CACHE = None
         return [], []
-    infos: list[ExtensionInfo] = []
-    errors: list[str] = []
-    seen: set[str] = set()
-    for child in sorted(root.iterdir(), key=lambda item: item.name.lower()):
-        if not child.is_dir():
-            continue
-        try:
-            info: ExtensionInfo = load_extension_dir(child)
-        except ExtensionError as exc:
-            errors.append("%s：%s" % (child.name, exc))
-            _LOGGER.warning("扩展加载失败 %s: %s", child.name, exc)
-            continue
-        if info.tab_name in seen:
-            errors.append("%s：标签名与已加载扩展重复" % child.name)
-            continue
-        seen.add(info.tab_name)
-        infos.append(info)
-    return infos, errors
+    signature: tuple[tuple[str, int], ...] = _extension_signature(root)
+    with _SCAN_LOCK:
+        cached: tuple[
+            tuple[ExtensionInfo, ...],
+            tuple[str, ...],
+            tuple[tuple[str, int], ...],
+        ] | None = _SCAN_CACHE
+        if not force and cached is not None and cached[2] == signature:
+            return list(cached[0]), list(cached[1])
+        infos: list[ExtensionInfo] = []
+        errors: list[str] = []
+        seen: set[str] = set()
+        for child in sorted(root.iterdir(), key=lambda item: item.name.lower()):
+            if not child.is_dir():
+                continue
+            try:
+                info: ExtensionInfo = load_extension_dir(child)
+            except ExtensionError as exc:
+                errors.append("%s：%s" % (child.name, exc))
+                _LOGGER.warning("扩展加载失败 %s: %s", child.name, exc)
+                continue
+            if info.tab_name in seen:
+                errors.append("%s：标签名与已加载扩展重复" % child.name)
+                continue
+            seen.add(info.tab_name)
+            infos.append(info)
+        _SCAN_CACHE = (tuple(infos), tuple(errors), signature)
+        return list(infos), list(errors)
 
 
 def get_extensions_payload() -> dict[str, Any]:
@@ -721,7 +1180,9 @@ def _install_from_directory(source_dir: Path, *, record: bool = True) -> Extensi
         info: ExtensionInfo = load_extension_dir(target)
     except Exception:
         shutil.rmtree(target, ignore_errors=True)
+        invalidate_extension_cache()
         raise
+    invalidate_extension_cache()
     if record:
         names: list[str] = _config_enabled_names()
         if info.tab_name not in names:
@@ -900,7 +1361,8 @@ def create_plugin_project(
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(base, target)
     metadata: dict[str, Any] = read_project_metadata(target)
-    meta: dict[str, Any] = {
+    meta: dict[str, Any] = dict(metadata.get("meta") or {})
+    meta.update({
         "author": str(metadata["author"]),
         "name": display_name,
         "package": package_name,
@@ -908,7 +1370,7 @@ def create_plugin_project(
         "update_date": str(metadata["update_date"] or time.strftime("%Y-%m-%d")),
         "official": False,
         "description": str(metadata["description"]),
-    }
+    })
     (target / "meta.json").write_text(
         json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
@@ -948,7 +1410,9 @@ def build_plugin_package(
     info: ExtensionInfo = load_extension_dir(base)
     version: str = str(info.version)
     update_date: str = info.update_date or time.strftime("%Y-%m-%d")
-    meta: dict[str, Any] = {
+    # 保留 4.4.1 新增的 schema/id/config/db/packaging 等未知键。
+    meta: dict[str, Any] = dict(info.spec.raw)
+    meta.update({
         "author": info.author,
         "name": info.tab_name,
         "package": info.package,
@@ -956,7 +1420,7 @@ def build_plugin_package(
         "update_date": update_date,
         "official": info.official,
         "description": info.description,
-    }
+    })
     (base / "meta.json").write_text(
         json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )

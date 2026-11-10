@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
-# 最后更新: 2026-11-10 10:30
+# 最后更新: 2026-11-10 23:59
 # 文件名: config.py
 # 主要用途: 统一读写 config.json；按设置分组存放账号、密码、AI、构建与第三方扩展配置，并解析源码/虚拟环境/打包后的程序根目录。
-# 文件版本: 4.4.0
+# 文件版本: 4.4.2
 """项目配置读写。
 
 配置文件固定位于**项目根目录**（``main.py`` 同级）的 ``config.json``。
@@ -25,19 +25,53 @@ from hwklr.feature_specs import (
     feature_config_defaults,
 )
 
-__version__ = "4.4.0"
+__version__ = "4.4.2"
 __all__ = [
     "DEFAULT_CONFIG",
     "app_root",
     "config_path",
+    "plugin_config_defaults",
     "load_config",
+    "register_config_defaults",
     "save_config",
     "update_config",
 ]
 
 _LOGGER: Final[logging.Logger] = logging.getLogger(__name__)
-# 多个桥接线程可能同时保存配置，用锁避免临时文件互相覆盖。
-_CONFIG_LOCK: Final[threading.Lock] = threading.Lock()
+# 多个桥接线程可能同时保存配置；RLock 允许 load_config 缺文件时重入 save_config。
+_CONFIG_LOCK = threading.RLock()
+# 插件在加载时按 meta.config 注册的默认值；不回写 DEFAULT_CONFIG。
+_PLUGIN_DEFAULTS: dict[str, dict[str, Any]] = {}
+_PLUGIN_DEFAULTS_LOCK: Final[threading.Lock] = threading.Lock()
+
+
+def register_config_defaults(section: str, defaults: dict[str, Any]) -> None:
+    """登记插件配置板块的默认值。
+
+    只影响后续 :func:`load_config` 的合并结果，不写入磁盘；用户配置始终
+    优先于插件默认值。
+
+    Args:
+        section: 配置板块名。
+        defaults: 默认值字典。
+    """
+    name: str = str(section or "").strip()
+    if not name or not isinstance(defaults, dict):
+        return
+    with _PLUGIN_DEFAULTS_LOCK:
+        bucket: dict[str, Any] = _PLUGIN_DEFAULTS.setdefault(name, {})
+        for key, value in defaults.items():
+            bucket.setdefault(str(key), copy.deepcopy(value))
+
+
+def plugin_config_defaults() -> dict[str, dict[str, Any]]:
+    """返回已登记插件默认值的深拷贝。
+
+    Returns:
+        板块名到默认值字典的映射。
+    """
+    with _PLUGIN_DEFAULTS_LOCK:
+        return copy.deepcopy(_PLUGIN_DEFAULTS)
 
 # 所有设置的默认值；新增设置项时在此追加，旧配置文件会自动补齐缺失字段。
 CORE_DEFAULTS: Final[dict[str, Any]] = {
@@ -63,9 +97,10 @@ def _build_default_config() -> dict[str, Any]:
     """组合核心配置与各功能的 FeatureConfigSpec 默认值。"""
     feature_defaults: dict[str, dict[str, Any]] = feature_config_defaults()
     result: dict[str, Any] = {"username": CORE_DEFAULTS["username"]}
-    for section in ("hsr", "c_programming", "icourse", "build"):
-        result[section] = dict(feature_defaults.get(section, {}))
-    result["build"]["features"] = build_features_default()
+    for section, defaults in feature_defaults.items():
+        result[str(section)] = dict(defaults)
+    build_section: dict[str, Any] = result.setdefault("build", {})
+    build_section["features"] = build_features_default()
     result["third-party"] = copy.deepcopy(CORE_DEFAULTS["third-party"])
     result["ui"] = copy.deepcopy(CORE_DEFAULTS["ui"])
     result["network"] = copy.deepcopy(CORE_DEFAULTS["network"])
@@ -75,6 +110,23 @@ def _build_default_config() -> dict[str, Any]:
 
 # 所有设置的默认值；新增功能应优先在 hwklr/feature_specs.py 声明。
 DEFAULT_CONFIG: Final[dict[str, Any]] = _build_default_config()
+
+
+def _defaults_with_plugins() -> dict[str, Any]:
+    """返回包含运行期插件默认值的配置基准。
+
+    Returns:
+        默认配置深拷贝；插件默认值只补缺失键。
+    """
+    defaults: dict[str, Any] = copy.deepcopy(DEFAULT_CONFIG)
+    for section, values in plugin_config_defaults().items():
+        bucket: Any = defaults.get(section)
+        if not isinstance(bucket, dict):
+            bucket = {}
+            defaults[section] = bucket
+        for key, value in values.items():
+            bucket.setdefault(key, value)
+    return defaults
 
 
 def app_root() -> Path:
@@ -140,7 +192,7 @@ def load_config() -> dict[str, Any]:
     """
     path: Path = config_path()
     if not path.exists():
-        default_config: dict[str, Any] = copy.deepcopy(DEFAULT_CONFIG)
+        default_config: dict[str, Any] = _defaults_with_plugins()
         save_config(default_config)
         return default_config
 
@@ -149,12 +201,13 @@ def load_config() -> dict[str, Any]:
             loaded: Any = json.load(fp)
     except (OSError, json.JSONDecodeError) as exc:
         _LOGGER.warning("读取配置文件失败，将使用默认配置: %s", exc)
-        return copy.deepcopy(DEFAULT_CONFIG)
+        return _defaults_with_plugins()
 
     if not isinstance(loaded, dict):
         _LOGGER.warning("配置文件内容不是对象，将使用默认配置。")
-        return copy.deepcopy(DEFAULT_CONFIG)
-    return _migrate_config(_deep_merge(DEFAULT_CONFIG, loaded))
+        return _defaults_with_plugins()
+    # 插件默认值只补缺失键，不覆盖核心/官方默认值，也不覆盖用户配置。
+    return _migrate_config(_deep_merge(_defaults_with_plugins(), loaded))
 
 
 def _migrate_config(config: dict[str, Any]) -> dict[str, Any]:
@@ -249,7 +302,8 @@ def update_config(patch: dict[str, Any]) -> dict[str, Any]:
     Returns:
         更新后的完整配置字典。
     """
-    current: dict[str, Any] = load_config()
-    updated: dict[str, Any] = _deep_merge(current, patch)
-    save_config(updated)
-    return updated
+    with _CONFIG_LOCK:
+        current: dict[str, Any] = load_config()
+        updated: dict[str, Any] = _deep_merge(current, patch)
+        save_config(updated)
+        return updated

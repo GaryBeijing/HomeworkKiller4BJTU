@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-10 11:00
+# 最后更新: 2026-11-10 23:59
 # 文件名: answer_sync.py
 # 主要用途: 后台逐测验同步 GinsMooc 题库，提供进度快照与协作式取消。
-# 文件版本: 4.4.0
+# 文件版本: 4.4.2
 """题库后台同步。"""
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from hwklr.contracts import JobKind
 from hwklr.db.icoursedb import IcourseDb
 from hwklr.features.jobs import BackgroundJob
 
-__version__ = "4.4.0"
+__version__ = "4.4.2"
 __author__ = "Gary"
 __all__ = ["AnswerSyncJob"]
 
@@ -56,6 +56,11 @@ class AnswerSyncJob:
             self._idle_snapshot(),
             include_job_id=False,
         )
+
+    @property
+    def background_job(self) -> BackgroundJob[None]:
+        """返回底层通用 Job，供 JobStore 统一管理。"""
+        return self._job
 
     def _idle_snapshot(self) -> dict[str, Any]:
         """返回同步快照初始形状。"""

@@ -54,11 +54,12 @@
 
 | 锁 | 位置 | 保护对象 | 粒度 |
 |---|---|---|---|
-| `_CONFIG_LOCK`（模块级 `threading.Lock`） | `hwklr/config.py:34` | `save_config` 的临时文件写入与替换 | 全局，仅写 |
+| `_CONFIG_LOCK`（模块级 `RLock`） | `hwklr/config.py` | `update_config` 的 load+merge+save 与 `save_config` 写入 | 全局 leaf lock |
 | `_lock`（`RLock`） | `HSRFeature` | 整个 `handle()`（含所有动作与 `_client`/`_records`/`_bank_cache`） | 极粗，把高铁功能完全串行化 |
-| `_state_lock`（`RLock`） | `CProgrammingFeature` | 课程/结构/缓存/次数等业务状态 | 中，包住除两个只读动作外的所有动作 |
-| `_job_lock`（`Lock`） | `CProgrammingFeature` | 题解任务 `_job`、`_job_thread` | 细，仅任务快照与事件追加 |
-| `_job_lock`（`Lock`） | `BuildFeature` | 构建任务 `_job` | 细 |
+| `_action_lock`（`Lock`） | `CProgrammingFeature` | 串行化修改业务状态的 UI 动作 | 中；不覆盖 `get_state`/job 查询 |
+| `_state_lock`（`RLock`） | `CProgrammingFeature` | 课程/结构/缓存/次数与 `ProblemRef` 可变字段 | 细，只保护短临界区 |
+| `BackgroundJob._lock` / `_job_lock`（`RLock`） | `features/jobs.py`、`CProgrammingFeature` | Job 快照/事件与当前 job 指针 | 细 |
+| `_lock`/`_mutation_lock`（`RLock`） | `TagRegistry` | 标签映射、顺序、安装串行化 | leaf；不在锁内调用 Feature/插件 I/O |
 | `_dev_lock`（`Lock`） | `BuildFeature` | `setup_dev_venv` 单飞 | 细，`acquire(blocking=False)` |
 
 #### 1.2 为什么高铁用"一把大锁"
@@ -69,15 +70,16 @@
 
 题解模式是长时间后台任务（可能几分钟）。如果后台也去抢 `_state_lock`，UI 就无法在任务运行时刷新进度。因此：
 
-- **业务动作**走 `_state_lock`，并在入口调用 `_ensure_no_job()` —— 有任务在跑就直接拒绝，避免"改课程的同时后台还在解题"。
-- **只读动作** `get_state` / `get_solution_job` **不拿 `_state_lock`**（`get_solution_job` 只拿 `_job_lock`），保证任务运行时 UI 仍能轮询。
-- **后台线程**只改 `_job`（用 `_job_lock`）和少量业务缓存（短暂用 `_state_lock` 保护写入 `_analyses`/`_solutions`/`_attempts`/`_last_consequences`）。
+- **业务动作**走 `_action_lock`，并在入口调用 `_ensure_no_job()`，保持“同一时间只做一个修改动作”的旧语义。
+- **`_state_lock` 只保护共享字段**：网络、登录、AI、提交和轮询都在锁外；读写 `_details/_analyses/_attempts/_last_consequences/_solutions` 与 `ProblemRef` 可变字段通过辅助方法完成。
+- **只读动作** `get_state` / `get_solution_job` 不拿 `_action_lock`（`get_solution_job` 只走 Job 快照），保证任务运行时 UI 仍能轮询。
+- **后台线程**只改 `_job` 和短临界区内的业务缓存，不得在 `_state_lock` 内调用 `_set_problem_status()` 等 Job 方法。
 
 #### 1.4 死锁不可达性论证
 
-加锁顺序只存在一种嵌套：`handle()` 内 `_state_lock` → `_job_lock`（`_ensure_no_job` 读 `_job`）。后台线程要么只拿 `_job_lock`，要么只拿 `_state_lock`（`with self._state_lock:` 的临界区内**不**申请 `_job_lock`）。因此不存在反向嵌套，无环形等待。
+锁顺序固定为 `_action_lock → _state_lock`；`_state_lock` 内部不再申请 Job 锁。Job 线程只使用自身 Job 锁与短暂的 `_state_lock`，不反向获取 `_action_lock`。因此不存在环形等待。
 
-> **改动警告**：若你将来在 `_solve_problem` 里把 `_set_problem_status()`（拿 `_job_lock`）写进 `with self._state_lock:` 块，就构造出了 `job → state` 的反向依赖，**会死锁**。
+> **改动警告**：不要在 `with self._state_lock:` 内调用 `_set_problem_status()`（Job 锁），否则会重新引入 `state → job` 的反向依赖。
 
 #### 1.5 跨线程数据传递
 
@@ -91,7 +93,7 @@
 
 #### 1.7 退出路径
 
-`WindowView.run()` 的 `finally` 只做两件事：`self._window = None`、`stop_server()`。所有后台线程都是 `daemon=True`，不阻止进程退出 —— 因此**窗口关闭时正在跑的构建/解题任务会被直接终止**，产物可能不完整（构建的 `.work` 目录会残留，见 §13）。
+`WindowView.run()` 的 `finally` 先调用 `TagRegistry.shutdown()`（4.4.2 起，各 Feature 可有界取消/join 后台任务），再 `self._window = None`、`stop_server()`。构建线程仍为 daemon，无法中断正在执行的 PyInstaller，构建 `.work` 仍可能残留（见 §13）。
 
 ---
 
@@ -129,7 +131,7 @@ main.py
 
 #### 2.2 启动期真正被导入的东西（重要）
 
-`hwklr/UI/__init__.py` 在模块顶部 `from .tagview.view_data import ...`，而 `view_data/__init__.py` 在导入时执行 `_build_view_params()` → `load_feature_class()` → `importlib.import_module()`。**因此三个功能包（`hsr`/`cprog`/`build`）在应用启动时就被完整导入**，包括它们的子模块（`bank`、`client`、`aes`、`captcha`、`ai`、`models`、`parsers`、`site`、`packager`、`devenv`）。
+`hwklr/UI/window.py` / `registry.py` 在模块顶部 `from .tagview.view_data import ...`，而 `view_data/__init__.py` 在导入时执行 `_build_view_params()` → `load_feature_class()` → `importlib.import_module()`。**因此三个功能包（`hsr`/`cprog`/`build`）在应用启动时就被完整导入**，包括它们的子模块（`bank`、`client`、`aes`、`captcha`、`ai`、`models`、`parsers`、`site`、`packager`、`devenv`）。
 
 那"惰性"体现在哪？
 
@@ -639,7 +641,7 @@ cmd += ["--exclude-module", "PyInstaller"]
 
 #### 8.7 第三方扩展（v3 已实现）
 
-> 实现位置：`hwklr/features/extensions.py`（扫描/校验/导入/启停/插件工程）、`hwklr/UI/__init__.py`（运行期 `register_extension_dir`）、`hwklr/UI/tagview/view_data/__init__.py`（可变扩展参数）、`hwklr/UI/server.py`（`/extensions/<id>/...`）。以下为 v3 动手前的架构分析，保留作为设计依据。
+> 实现位置：`hwklr/features/extensions.py`（扫描/校验/导入/启停/插件工程）、`hwklr/UI/extension_runtime.py`（运行期扩展参数/DB 注册）、`hwklr/UI/registry.py`（运行期安装标签）、`hwklr/UI/window.py`（`register_extension_dir` 门面）、`hwklr/UI/tagview/view_data/__init__.py`（可变扩展参数）、`hwklr/UI/server.py`（`/extensions/<id>/...`）。以下为 v3 动手前的架构分析，保留作为设计依据。
 
 出处：`function_requirements.md` 末尾 `version 铺垫更新`（未打勾）；摘要见 `01 §5.3`。
 
@@ -836,6 +838,8 @@ QuizAction / PopupQuiz                 ← 按题干/选项文本匹配答案
 - 4.3.1：串行阶段每个任务独立 Playwright Page；文档打开失败换新 Page 重试一次，截图失败不再导致任务失败；`ActionUnavailable` 与 `ActionCancelled` 分离，讨论支持新版 `article.soft-shell`/已展开编辑器/无回复默认文本，任务结束后对题库未收录或缺少 testId 的测验弹出原因。
 - 4.3.2：`page_block_reason` 增加 PDF/下载链接/新版讨论内容标记，修复文档和讨论被隐藏“登录 | 注册”文本误判为登录墙；讨论识别“回复已发布”成功信号并优先提取真实回复正文；文档/讨论异常后按服务端状态复核，已 `DONE` 的任务改为完成/已发布。
 - 4.4.0：新增类型化契约与 FeatureSpec registry；`DbProvider.load` 锁外 fetch + per-id single-flight，新增 `mutate` 原子写；新增 BackgroundJob/JobStore；icourse 使用 TaskHandler registry、CourseState 与 Document/Discussion/Quiz Page Object。
+- 4.4.1：BackgroundJob 覆盖 cprog/build/plugin-build，新增 `mutate_if`/`event_if` 与 job id 工厂；`WindowView` 拆为 `bridge.py`/`registry.py`/`extension_runtime.py`/`window.py`，门面 API 不变；`icourse.js` 拆为 8 个 `window.Icourse` 命名空间脚本；插件 manifest 以 `parse_plugin_spec()` 解析可选字段，资源路径禁止越出插件目录，未知键在打包时原样保留。
+- 4.4.2：配置写入使用 RLock 覆盖读改写；`TagRegistry.payload` 锁内取快照、锁外读 Feature；TagRegistry 以稳定 `ViewParam.order` 排序；扩展扫描增加目录签名缓存；cprog 使用 `_action_lock` 串行动作、`_state_lock` 只保护字段；CompletionJob 复用 BackgroundJob，`Feature.shutdown()` 在窗口关闭时取消/join 后台任务。
 
 ---
 
@@ -1590,7 +1594,7 @@ path 不存在 → 深拷贝 DEFAULT_CONFIG → save_config(...) → 返回
 #### 15.3 原子写入
 
 ```python
-with _CONFIG_LOCK:
+with _CONFIG_LOCK:  # RLock；update_config 的 load+merge+save 也在同一锁内
     with (path.with_suffix(".json.tmp")).open("w", encoding="utf-8") as fp:
         json.dump(config, fp, ensure_ascii=False, indent=2); fp.write("\n")
     temp_path.replace(path)
@@ -1711,11 +1715,11 @@ B: save {…, x:1, a:true, b:true}      ← 若 B 的 patch 含 a 之外的新�
 
 | # | 问题 | 现象/影响 | 建议 |
 |---|---|---|---|
-| 1 | `update_config` 读改写非原子（§15.6） | 并发写配置时可能丢一次更新 | 在 `update_config` 内也持 `_CONFIG_LOCK`（把 load+merge+save 包起来） |
+| 1 | `update_config` 读改写非原子（§15.6） | **4.4.2 已修复**：`update_config` 全程持 `_CONFIG_LOCK`（RLock） | 保持 load+merge+save 在锁内，不要再拆分 |
 | 2 | `load_feature_class` 吞 `ImportError` | 新功能模块写坏 → 标签页**静默消失**，无日志 | 在 `except ImportError` 分支加 `_LOGGER.warning(..., exc_info=True)`；或在开发模式（`not DEV_BUILD` 且源码运行）下改为抛出 |
 | 3 | `AboutFeature.get_meta` 的 `port` 恒 0 | "关于"页看不到真实端口（设置页能看到） | `meta_payload()` 也可注入到 `_meta["port"]`，或在 `AboutFeature` 里改用 `context["port"]` |
 | 4 | 高铁走明文 HTTP | 密码/token 可被同网嗅探 | 无法客户端修复；建议在文档/UI 里提示"勿在不可信网络使用" |
-| 5 | 关闭窗口会杀掉后台任务 | 构建/解题被 `daemon=True` 直接终止，构建留下 `.work` | 关闭前若有任务，弹确认对话框（`window.events.closing`） |
+| 5 | 关闭窗口会杀掉后台任务 | **4.4.2 已增加 `Feature.shutdown()`**：icourse/cprog 取消并有限 join；构建只禁止新任务 | 仍需在 `events.closing` 加用户确认；构建 `.work` 清理未改变 |
 
 #### 17.2 中优先级（体验/维护性）
 

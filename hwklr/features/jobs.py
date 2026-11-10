@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-10 11:00
+# 最后更新: 2026-11-10 21:30
 # 文件名: jobs.py
 # 主要用途: 通用后台 Job 基础设施：线程生命周期、快照深拷贝、事件环形缓冲与协作式取消。
-# 文件版本: 4.4.0
+# 文件版本: 4.4.1
 """后台 Job 基础设施。
 
 各功能保留自己的 start/get/cancel 返回形状；本模块只统一内部生命周期，
@@ -19,12 +20,13 @@ from typing import Any, Callable, Generic, TypeVar
 
 from hwklr.contracts import JobKind
 
-__version__ = "4.4.0"
+__version__ = "4.4.1"
 __author__ = "Gary"
 __all__ = ["BackgroundJob", "JobStore"]
 
 R = TypeVar("R")
 Runner = Callable[["BackgroundJob[Any]"], R]
+JobIdFactory = Callable[[], str]
 
 
 class BackgroundJob(Generic[R]):
@@ -38,6 +40,7 @@ class BackgroundJob(Generic[R]):
         include_job_id: bool = True,
         max_events: int = 200,
         log_callback: Callable[[str, str], None] | None = None,
+        job_id_factory: JobIdFactory | None = None,
     ) -> None:
         """初始化 job。
 
@@ -47,12 +50,16 @@ class BackgroundJob(Generic[R]):
             include_job_id: 是否在快照中加入 ``job_id``。
             max_events: events 上限。
             log_callback: 可选 ``(level, message)`` 日志回调。
+            job_id_factory: 可选 job id 生成器；默认 32 位十六进制。
         """
         self.kind: JobKind = kind
         self._idle: dict[str, Any] = copy.deepcopy(idle_snapshot)
         self._include_job_id: bool = bool(include_job_id)
         self._max_events: int = max(1, int(max_events))
         self._log_callback = log_callback or (lambda level, message: None)
+        self._job_id_factory: JobIdFactory = job_id_factory or (
+            lambda: uuid.uuid4().hex
+        )
         self._lock: threading.RLock = threading.RLock()
         self._snapshot: dict[str, Any] = copy.deepcopy(self._idle)
         self._job_id: str = ""
@@ -91,10 +98,28 @@ class BackgroundJob(Generic[R]):
         Returns:
             启动后的快照副本。
         """
+        return self.try_start(runner, initial=initial)[0]
+
+    def try_start(
+        self,
+        runner: Runner,
+        *,
+        initial: dict[str, Any] | None = None,
+    ) -> tuple[dict[str, Any], bool]:
+        """尝试启动线程，并原子地报告是否真正启动。
+
+        Args:
+            runner: 接收本 job 的运行函数。
+            initial: 本次运行的初始快照字段。
+
+        Returns:
+            ``(快照副本, 是否启动新线程)``；已有线程运行时返回当前快照与
+            ``False``。
+        """
         with self._lock:
             if self._thread is not None and self._thread.is_alive():
-                return copy.deepcopy(self._snapshot)
-            self._job_id = uuid.uuid4().hex
+                return copy.deepcopy(self._snapshot), False
+            self._job_id = str(self._job_id_factory())
             self._snapshot = copy.deepcopy(self._idle)
             if self._include_job_id:
                 self._snapshot["job_id"] = self._job_id
@@ -109,7 +134,7 @@ class BackgroundJob(Generic[R]):
                 daemon=True,
             )
             self._thread.start()
-            return copy.deepcopy(self._snapshot)
+            return copy.deepcopy(self._snapshot), True
 
     def _run(self, runner: Runner) -> None:
         """线程入口；未捕获异常写成 error 并结束。"""
@@ -151,6 +176,50 @@ class BackgroundJob(Generic[R]):
                 return False
             self._snapshot.update(fields)
             return True
+
+    def mutate_if(self, job_id: str, mutator: Callable[[dict[str, Any]], None]) -> bool:
+        """仅当 job id 匹配时在锁内修改快照。
+
+        Args:
+            job_id: 期望的 job id；空字符串表示不校验。
+            mutator: 接收可变快照的同步回调，不能调用本 job 的其它加锁方法。
+
+        Returns:
+            成功修改返回 ``True``；job 已过期返回 ``False``。
+        """
+        with self._lock:
+            if job_id and self._snapshot.get("job_id") != job_id:
+                return False
+            mutator(self._snapshot)
+            return True
+
+    def event_if(self, job_id: str, level: str, message: str) -> bool:
+        """仅当 job id 匹配时追加事件。
+
+        Args:
+            job_id: 期望的 job id；空字符串表示不校验。
+            level: 级别。
+            message: 事件文本。
+
+        Returns:
+            成功追加返回 ``True``；job 已过期返回 ``False``。
+        """
+        with self._lock:
+            if job_id and self._snapshot.get("job_id") != job_id:
+                return False
+            events: Any = self._snapshot.get("events")
+            if isinstance(events, list):
+                events.append(
+                    {
+                        "time": time.strftime("%H:%M:%S"),
+                        "level": str(level),
+                        "message": str(message),
+                    }
+                )
+                if len(events) > self._max_events:
+                    del events[: len(events) - self._max_events]
+        self._log_callback(str(level), str(message))
+        return True
 
     def event(self, level: str, message: str) -> None:
         """追加事件；快照没有 events 时忽略。"""
