@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-08 17:00
+# 最后更新: 2026-11-11 10:00
 # 文件名: workers.py
 # 主要用途: 并发视频 worker 调度与状态记录；已移除 rich 控制台渲染，改为回调与取消事件。
-# 文件版本: 4.0.0
+# 文件版本: 4.4.3
 """并发视频 worker。
 
 调度规则：所有 worker 共享一个从上到下的扫描器，每次领取「已勾选且未完成」
@@ -260,6 +260,7 @@ def run_workers(
     answer_index: AnswerIndex | None = None,
     storage_state: Path | str | None = None,
     rate: float = 2.0,
+    retain_data: bool = True,
     max_seconds: float | None = None,
     start_delay: float = 0.0,
     dashboard: WorkerDashboard | None = None,
@@ -279,6 +280,7 @@ def run_workers(
         answer_index: 弹题答案索引。
         storage_state: 无头登录态文件。
         rate: 播放倍速。
+        retain_data: 是否保存任务截图。
         max_seconds: 单个视频最长等待秒数。
         start_delay: worker 启动错峰秒数。
         dashboard: 状态表。
@@ -326,6 +328,7 @@ def run_workers(
                     interactive=False,
                     log_callback=log_callback,
                     cancel_event=cancel_event,
+                    retain_data=bool(retain_data),
                 )
                 while True:
                     if cancel_event is not None and cancel_event.is_set():

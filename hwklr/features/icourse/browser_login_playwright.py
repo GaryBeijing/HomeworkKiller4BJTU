@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
+# 最后更新: 2026-11-11 10:00
 # 文件名: browser_login_playwright.py
-# 主要用途: 通过无头 Playwright + 系统 Edge 完成 icourse163 登录。
-# 文件版本: 4.0.0
+# 主要用途: 通过无头 Playwright 完成 icourse163 登录；Edge 启动失败时依次回退 Chrome/内置 Chromium。
+# 文件版本: 4.4.3
 """无窗口（headless）浏览器登录。
 
 `browser_login` 的可见窗口流程使用 CDP + 系统 Edge；无窗口模式若继续用
@@ -250,17 +251,44 @@ def playwright_login(
         kind = "aiketang"
 
     with sync_playwright() as playwright:
-        channel = {
-            "chrome": "chrome",
-            "edge": "msedge",
-            "auto": "msedge",
-            "": "msedge",
-        }.get((browser or "auto").lower(), "msedge")
-        browser_engine = playwright.chromium.launch(
-            channel=channel,
-            headless=True,
-            args=["--autoplay-policy=no-user-gesture-required", "--mute-audio"],
-        )
+        requested: str = (browser or "auto").lower()
+        if requested == "chrome":
+            channels: list[str | None] = ["chrome", "msedge", None]
+        elif requested == "edge":
+            channels = ["msedge", "chrome", None]
+        else:
+            channels = ["msedge", "chrome", None]
+        # 去重但保留顺序；None 表示 Playwright 自带的 Chromium。
+        unique_channels: list[str | None] = []
+        for item in channels:
+            if item not in unique_channels:
+                unique_channels.append(item)
+        browser_engine = None
+        last_error: Exception | None = None
+        launch_args: list[str] = [
+            "--autoplay-policy=no-user-gesture-required",
+            "--mute-audio",
+            "--no-first-run",
+            "--no-default-browser-check",
+        ]
+        for channel in unique_channels:
+            try:
+                browser_engine = playwright.chromium.launch(
+                    channel=channel,
+                    headless=True,
+                    args=launch_args,
+                )
+                if channel:
+                    say(f"无头浏览器通道：{channel}")
+                break
+            except Exception as exc:
+                last_error = exc
+                say(f"无头浏览器通道 {channel or 'chromium'} 启动失败：{exc}")
+        if browser_engine is None:
+            raise PlaywrightLoginError(
+                "无法启动无头浏览器（已尝试 Edge / Chrome / 内置 Chromium）：%s"
+                % last_error
+            )
         context = browser_engine.new_context(
             locale="zh-CN",
             user_agent=USER_AGENT,

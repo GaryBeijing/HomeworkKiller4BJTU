@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-01 12:40
-# 最后更新: 2026-11-10 23:59
+# 最后更新: 2026-11-11 10:00
 # 文件名: __init__.py
 # 主要用途: 实现“构建”功能：程序构建/插件构建切换、插件工程管理、开发环境迁移、导出参数与后台构建任务。
-# 文件版本: 4.4.2
+# 文件版本: 4.4.3
 """构建功能。
 
 - 页面收集“导出显示版本号”“程序名称”“程序图标”和“是否开发构建”；
@@ -52,7 +52,7 @@ from .packager import (
     resolve_output_dir,
 )
 
-__version__ = "4.4.2"
+__version__ = "4.4.3"
 __author__ = "Gary"
 __all__ = ["BuildFeature"]
 
@@ -259,6 +259,10 @@ class BuildFeature(Feature):
                     placeholder="/build/",
                     is_necessary=False,
                     help="选填；留空使用项目根目录 /build/，相对路径以项目根目录为基准。",
+                    tooltip=(
+                        "导出的默认目录；留空使用项目根目录 /build/，"
+                        "相对路径以项目根目录为基准。"
+                    ),
                 ),
                 SettingsFieldSpec(
                     key="dev_format",
@@ -266,6 +270,10 @@ class BuildFeature(Feature):
                     kind="select",
                     options=_DEV_FORMAT_OPTIONS,
                     help="仅在构建页勾选“开发构建”时生效。",
+                    tooltip=(
+                        "开发构建的产物格式：可执行目录或带 python-embed 的 zip；"
+                        "仅在勾选“开发构建”时生效。"
+                    ),
                 ),
                 SettingsFieldSpec(
                     key="plugin_template",
@@ -277,6 +285,10 @@ class BuildFeature(Feature):
                         "选择“新建插件工程”时使用的 zip 模板；留空时使用 "
                         "hwklr/features/build/vendor/plugin-template.zip。"
                     ),
+                    tooltip=(
+                        "新建插件工程时使用的 zip 模板；"
+                        "留空使用随程序分发的模板。"
+                    ),
                 ),
                 SettingsFieldSpec(
                     key="features",
@@ -287,6 +299,10 @@ class BuildFeature(Feature):
                     ),
                     alert=True,
                     help="勾选后该功能在 config.json 中标记为 dev，发布构建将跳过该功能。",
+                    tooltip=(
+                        "勾选后该功能在 config.json 中标记为 dev，"
+                        "发布构建会跳过该功能。"
+                    ),
                 ),
             ),
             values_getter=values_getter,

@@ -1,16 +1,22 @@
 /*
   作者: Gary
   编写日期: 2026-10-31 20:45
-  最后更新: 2026-11-03 21:50
+  最后更新: 2026-11-11 10:00
   文件名: about.js
-  主要用途: “关于”页面逻辑：填充软件信息、插件元信息表、功能列表与声明。
-  文件版本: 3.0.0
+  主要用途: “关于”页面逻辑：填充软件信息、插件元信息表、功能列表、发布页链接与声明。
+  文件版本: 4.4.3
 */
 
 (function () {
   'use strict';
 
   const PAGE_NAME = '关于';
+
+  /** 项目发布页地址。 */
+  const RELEASE_URLS = {
+    github: 'https://github.com/GaryBeijing/HomeworkKiller4BJTU/releases/',
+    gitcode: 'https://gitcode.com/weixin_68744568/HomeworkKiller4BJTU/releases',
+  };
 
   /** 页面元素缓存。 */
   const els = {};
@@ -28,6 +34,31 @@
     els.features = document.getElementById('about-features');
     els.disclaimer = document.getElementById('about-disclaimer');
     els.plugins = document.getElementById('about-plugins');
+    els.github = document.getElementById('about-github');
+    els.gitcode = document.getElementById('about-gitcode');
+  }
+
+  /**
+   * 用系统浏览器打开项目发布页。
+   * @param {'github'|'gitcode'} kind 发布页类型。
+   * @returns {void}
+   */
+  function openRelease(kind) {
+    const url = RELEASE_URLS[kind];
+    const bridge = window.pywebview && window.pywebview.api;
+    if (!url || !bridge || typeof bridge.open_url !== 'function') {
+      App.toast('当前环境无法打开外部链接', 'error');
+      return;
+    }
+    Promise.resolve(bridge.open_url(url))
+      .then((result) => {
+        if (!result || !result.ok) {
+          App.toast(String((result && result.error) || '打开链接失败'), 'error');
+        }
+      })
+      .catch((error) => {
+        App.toast(`打开链接失败: ${error.message}`, 'error');
+      });
   }
 
   /**
@@ -157,6 +188,12 @@
    */
   function init(container) {
     cacheElements();
+    if (els.github) {
+      els.github.addEventListener('click', () => openRelease('github'));
+    }
+    if (els.gitcode) {
+      els.gitcode.addEventListener('click', () => openRelease('gitcode'));
+    }
   }
 
   /**

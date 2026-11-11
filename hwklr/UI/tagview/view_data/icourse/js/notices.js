@@ -1,10 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-11-08 14:30
-  最后更新: 2026-11-10 23:40
+  最后更新: 2026-11-11 10:00
   文件名: notices.js
-  主要用途: “中国大学慕课”页面提示条、日志与截图提醒。
-  文件版本: 4.4.1
+  主要用途: “中国大学慕课”页面提示条、日志与截图提醒（留存数据关闭时不显示路径）。
+  文件版本: 4.4.3
 */
 (function (global) {
   'use strict';
@@ -123,13 +123,14 @@
         return;
       }
       state.notifiedKeys.add(task.key);
-      const label = task.kind === '讨论' ? '讨论截图' : '答案截图';
+      // #关闭“留存数据”后不显示截图路径，避免给出不存在的文件。
       const path = task.screenshot
         || (task.result && task.result.screenshot)
-        || 'artifacts/icourse/';
+        || '';
+      const label = task.kind === '讨论' ? '讨论截图' : '答案截图';
       showTagNotice(
-        (task.kind || '任务') + '「' + (task.title || '') + '」已填写，'
-        + label + '已保存至 ' + path
+        (task.kind || '任务') + '「' + (task.title || '') + '」已填写'
+        + (path ? '，' + label + '已保存至 ' + path : '。')
       );
     });
   };

@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-10 23:59
+# 最后更新: 2026-11-11 10:00
 # 文件名: job.py
 # 主要用途: 编排“开始完成”后台任务：视频并发、文档/测验/讨论串行、进度快照与取消。
-# 文件版本: 4.4.2
+# 文件版本: 4.4.3
 """完成任务的 job 编排。"""
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ from .courses import reload_course
 from .tasks import TaskHandlerRegistry, TaskOutcome, TaskStatus, default_task_registry
 from .models import DONE, Course, Task
 
-__version__ = "4.4.2"
+__version__ = "4.4.3"
 __author__ = "Gary"
 __all__ = ["CompletionJob"]
 
@@ -409,6 +409,7 @@ class CompletionJob:
                 answer_index=answer_index,
                 storage_state=storage_state,
                 rate=float(self._settings.get("video_rate", 2.0) or 2.0),
+                retain_data=bool(self._settings.get("retain_data", True)),
                 log_callback=self._log_callback,
                 cancel_event=self._cancel,
                 on_task_start=on_start,
@@ -458,6 +459,7 @@ class CompletionJob:
                         interactive=False,
                         log_callback=self._log_callback,
                         cancel_event=self._cancel,
+                        retain_data=bool(self._settings.get("retain_data", True)),
                     )
                     try:
                         self._run_one_serial(ctx, task, store)

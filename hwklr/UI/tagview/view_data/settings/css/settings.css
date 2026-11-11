@@ -1,10 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-10-31 20:45
-  最后更新: 2026-11-03 20:55
+  最后更新: 2026-11-11 10:00
   文件名: settings.css
-  主要用途: “设置”标签页样式：动态设置分组、功能启用开关、第三方扩展加载器、开发标记表、高亮与弹窗。
-  文件版本: 3.0.0
+  主要用途: “设置”标签页样式：动态设置分组、功能启用开关、tooltip 气泡、分组折叠、第三方扩展加载器、开发标记表、高亮与弹窗。
+  文件版本: 4.4.3
 */
 
 .tag-settings .settings-layout {
@@ -51,6 +51,55 @@
   font-size: 16px;
   color: var(--ink);
   transition: color 0.2s ease;
+}
+
+/* 可折叠分组标题：整块可点击，右侧箭头指示展开状态。 */
+.tag-settings .settings-group-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.tag-settings .settings-group-toggle:hover .settings-group-title {
+  color: var(--accent-strong);
+}
+
+.tag-settings .settings-group-chevron {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1;
+  transition: transform var(--transition-duration, 0.19s) ease;
+}
+
+.tag-settings .settings-group.collapsed .settings-group-chevron {
+  transform: rotate(-90deg);
+}
+
+/* 折叠时隐藏说明与字段，头部启用开关、状态与文字仍显示。 */
+.tag-settings .settings-group.collapsed .settings-group-desc,
+.tag-settings .settings-group.collapsed .settings-fields {
+  display: none;
+}
+
+.tag-settings .group-enabled-text {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.tag-settings .group-enabled-text.on {
+  color: var(--ok);
+}
+
+.tag-settings .group-enabled-text.off {
+  color: var(--muted);
 }
 
 .tag-settings .settings-group-head-actions {
@@ -114,22 +163,87 @@
   font-weight: 600;
 }
 
-/* 可选填字段：灰字 + 左上角灰色星号。 */
-.tag-settings .settings-field.optional {
+/* 设置项名称行与 (i) 帮助气泡。 */
+.tag-settings .settings-label-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.tag-settings .settings-info-wrap {
   position: relative;
-  padding-left: 12px;
+  display: inline-flex;
+  align-items: center;
 }
 
-.tag-settings .settings-field.optional::before {
-  content: "*";
-  position: absolute;
-  top: -3px;
-  left: 0;
+.tag-settings .settings-info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  padding: 0;
+  border: 1px solid var(--panel-border);
+  border-radius: 50%;
+  background: #ffffff;
   color: var(--muted);
-  font-size: 15px;
+  font-size: 11px;
+  font-weight: 700;
   line-height: 1;
+  cursor: help;
 }
 
+.tag-settings .settings-info:hover,
+.tag-settings .settings-info:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+.tag-settings .settings-tooltip {
+  position: absolute;
+  top: calc(100% + 7px);
+  left: 0;
+  z-index: 45;
+  display: none;
+  width: max-content;
+  max-width: min(320px, 80vw);
+  padding: 9px 11px;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  box-shadow: 0 10px 24px rgba(20, 22, 50, 0.16);
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: normal;
+  text-align: left;
+}
+
+/* 悬浮、键盘聚焦或点击固定时显示气泡。 */
+.tag-settings .settings-info-wrap:hover .settings-tooltip,
+.tag-settings .settings-info-wrap:focus-within .settings-tooltip,
+.tag-settings .settings-info-wrap.pinned .settings-tooltip {
+  display: block;
+}
+
+.tag-settings .settings-tooltip-title {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.tag-settings .settings-tooltip-title.alert {
+  color: #8a5a00;
+}
+
+.tag-settings .settings-tooltip-title.optional {
+  color: var(--muted);
+}
+
+.tag-settings .settings-tooltip-body {
+  color: var(--muted);
+}
+
+/* 可选填字段：仅以灰字提示；不再绘制星号，避免整组可选设置时满屏“*”。 */
 .tag-settings .settings-field.optional .settings-field-label,
 .tag-settings .settings-field.optional .settings-field-help {
   color: var(--muted);

@@ -1,10 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-10-31 20:45
-  最后更新: 2026-11-03 20:40
+  最后更新: 2026-11-11 20:00
   文件名: settings.js
-  主要用途: “设置”页面逻辑：动态分组、功能启用开关、第三方扩展加载/启停、自动保存、alert 字段二次确认与知识库信息。
-  文件版本: 3.0.0
+  主要用途: “设置”页面逻辑：动态分组、功能启用开关、tooltip 气泡、分组折叠、第三方扩展加载/启停、自动保存、alert 字段二次确认与知识库信息。
+  文件版本: 4.4.3
 */
 
 (function () {
@@ -29,6 +29,8 @@
     extensionList: null,
     extensionLocal: null,
     extensionGit: null,
+    // 用户展开的分组；通用分组默认展开，其余分组默认折叠，均可手动切换。
+    expandedGroups: new Set(['general']),
   };
 
   /**
@@ -75,6 +77,63 @@
       item.textContent = text;
     }
     return item;
+  }
+
+  /**
+   * 构建设置项名称行：名称 + 可选 (i) 帮助按钮与气泡。
+   * @param {Object} field 字段定义。
+   * @returns {HTMLElement} 名称行。
+   */
+  function buildFieldLabel(field) {
+    const row = node('div', 'settings-label-row');
+    row.appendChild(node('span', 'settings-field-label', field.label || field.key));
+    const tooltip = String(field.tooltip || '').trim();
+    if (!tooltip) {
+      return row;
+    }
+    // #气泡标题使用设置项名称；alert 深黄、非必填浅灰，正文始终浅灰。
+    const wrap = node('span', 'settings-info-wrap');
+    const info = node('button', 'settings-info', 'i');
+    info.type = 'button';
+    info.setAttribute('aria-label', '查看设置说明');
+    info.setAttribute('aria-expanded', 'false');
+    const bubble = node('span', 'settings-tooltip');
+    const title = node(
+      'strong',
+      'settings-tooltip-title',
+      (field.label || field.key) + '：'
+    );
+    if (field.alert) {
+      title.classList.add('alert');
+    } else if (field.is_necessary === false) {
+      title.classList.add('optional');
+    }
+    bubble.appendChild(title);
+    bubble.appendChild(node('span', 'settings-tooltip-body', tooltip));
+    wrap.appendChild(info);
+    wrap.appendChild(bubble);
+    info.addEventListener('click', (event) => {
+      event.preventDefault();
+      const pinned = wrap.classList.toggle('pinned');
+      info.setAttribute('aria-expanded', String(pinned));
+    });
+    row.appendChild(wrap);
+    return row;
+  }
+
+  /**
+   * 更新功能分组头部的“启用 / 停用”文字状态。
+   * @param {HTMLElement} card 分组卡片。
+   * @param {boolean} enabled 是否启用。
+   * @returns {void}
+   */
+  function syncGroupEnabledText(card, enabled) {
+    const text = card.querySelector('.group-enabled-text');
+    if (!text) {
+      return;
+    }
+    text.className = 'group-enabled-text ' + (enabled ? 'on' : 'off');
+    text.textContent = enabled ? '启用' : '停用';
   }
 
   /**
@@ -359,6 +418,9 @@
         badge.className = 'group-status ' + (group.complete ? 'ok' : 'missing');
         badge.textContent = group.complete ? '已完整' : '缺少设置';
       }
+      if (group.enabled_editable && typeof group.enabled === 'boolean') {
+        syncGroupEnabledText(card, group.enabled);
+      }
     });
   }
 
@@ -499,6 +561,10 @@
         enabled,
       });
       updateGroupStatuses(data.groups || []);
+      const card = input.closest('.settings-group');
+      if (card) {
+        syncGroupEnabledText(card, enabled);
+      }
       await App.refreshTags();
       const stillActive = App.tags.some((tag) => tag.name === App.active);
       if (!stillActive && App.tags.length > 0) {
@@ -507,6 +573,10 @@
       App.toast(enabled ? '功能已启用' : '功能已停用', 'success');
     } catch (error) {
       input.checked = !enabled;
+      const card = input.closest('.settings-group');
+      if (card) {
+        syncGroupEnabledText(card, !enabled);
+      }
       App.toast(`切换失败: ${error.message}`, 'error');
     } finally {
       input.disabled = false;
@@ -684,7 +754,7 @@
    */
   function buildExtensionField(group, field) {
     const wrapper = node('div', 'settings-field extension-field');
-    wrapper.appendChild(node('span', 'settings-field-label', field.label || '加载扩展'));
+    wrapper.appendChild(buildFieldLabel(field));
     const panel = node('div', 'extension-panel');
     const buttons = node('div', 'extension-buttons');
     const local = node('button', 'btn extension-local', '从本地加载');
@@ -740,11 +810,10 @@
       classes.push('alert-field');
     }
     const wrapper = node('div', classes.join(' '));
-    const label = node('span', 'settings-field-label', field.label || field.key);
 
     // Feature 开发标记：只读显示功能与版本，复选框写入 dev / release。
     if (field.kind === 'features') {
-      wrapper.appendChild(label);
+      wrapper.appendChild(buildFieldLabel(field));
       const table = node('div', 'settings-feature-table');
       const head = node('div', 'settings-feature-row head');
       head.appendChild(node('span', 'feature-name', 'Feature'));
@@ -790,7 +859,7 @@
     if (field.kind === 'switch') {
       const row = node('div', 'switch-field');
       const text = node('div', 'switch-text');
-      text.appendChild(label);
+      text.appendChild(buildFieldLabel(field));
       if (field.help) {
         text.appendChild(node('p', 'settings-field-help', field.help));
       }
@@ -814,7 +883,7 @@
       return wrapper;
     }
 
-    wrapper.appendChild(label);
+    wrapper.appendChild(buildFieldLabel(field));
     let input;
     if (field.kind === 'select') {
       input = document.createElement('select');
@@ -913,8 +982,29 @@
   function buildGroup(group) {
     const card = node('section', 'settings-group');
     card.dataset.group = group.group_id;
+    // 所有分组都可折叠；通用默认展开，其余默认折叠，只保留头部开关与状态。
+    const collapsed = !state.expandedGroups.has(group.group_id);
+    if (collapsed) {
+      card.classList.add('collapsed');
+    }
     const head = node('div', 'settings-group-head');
-    head.appendChild(node('h3', 'settings-group-title', group.title || group.group_id));
+    const titleText = group.title || group.group_id;
+    const toggle = node('button', 'settings-group-toggle');
+    toggle.type = 'button';
+    toggle.setAttribute('aria-expanded', String(!collapsed));
+    toggle.appendChild(node('span', 'settings-group-title', titleText));
+    toggle.appendChild(node('span', 'settings-group-chevron', '▾'));
+    toggle.addEventListener('click', () => {
+      const nextCollapsed = !card.classList.contains('collapsed');
+      card.classList.toggle('collapsed', nextCollapsed);
+      if (nextCollapsed) {
+        state.expandedGroups.delete(group.group_id);
+      } else {
+        state.expandedGroups.add(group.group_id);
+      }
+      toggle.setAttribute('aria-expanded', String(!nextCollapsed));
+    });
+    head.appendChild(toggle);
     const actions = node('div', 'settings-group-head-actions');
     // #每个功能板块右上角的启用开关（设置/关于板块不会注册到这里）。
     if (group.enabled_editable) {
@@ -931,6 +1021,13 @@
       switchLabel.appendChild(input);
       switchLabel.appendChild(node('span', 'slider'));
       actions.appendChild(switchLabel);
+      actions.appendChild(
+        node(
+          'span',
+          'group-enabled-text ' + (group.enabled !== false ? 'on' : 'off'),
+          group.enabled !== false ? '启用' : '停用'
+        )
+      );
     }
     const status = node(
       'span',
@@ -1094,6 +1191,13 @@
     if (!target) {
       return;
     }
+    // #从功能页跳转过来时自动展开目标分组，再滚动并高亮。
+    state.expandedGroups.add(groupId);
+    target.classList.remove('collapsed');
+    const toggle = target.querySelector('.settings-group-toggle');
+    if (toggle) {
+      toggle.setAttribute('aria-expanded', 'true');
+    }
     cards.forEach((card) => card.classList.remove('group-highlight'));
     target.classList.add('group-highlight');
     target.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1161,9 +1265,14 @@
    */
   async function onActivate() {
     try {
+      // 每次进入设置页只展开“通用”和本次跳转来源，其余分组保持折叠。
+      state.expandedGroups = new Set(['general']);
+      const target = App.takeSettingsTarget ? App.takeSettingsTarget() : '';
+      if (target) {
+        state.expandedGroups.add(target);
+      }
       await loadSettings();
       await loadBanks();
-      const target = App.takeSettingsTarget ? App.takeSettingsTarget() : '';
       if (target) {
         window.setTimeout(() => highlightGroup(target), 60);
       }

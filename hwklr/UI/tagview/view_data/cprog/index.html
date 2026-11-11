@@ -1,10 +1,10 @@
 <!--
   作者: Gary
   编写日期: 2026-11-01 00:01
-  最后更新: 2026-11-01 20:02
+  最后更新: 2026-11-11 10:30
   文件名: index.html
-  主要用途: “C程序设计”标签页结构：课程/题目选择、左侧进度、模式切换、启发弹窗与题解结果弹窗。
-  文件版本: 2.3.0
+  主要用途: “C程序设计”标签页结构：课程/题目选择、左侧进度、模式切换、设置入口、启发弹窗与题解结果弹窗。
+  文件版本: 4.4.3
 -->
 <section class="tag-page tag-cprog" id="cprog-page">
   <div class="hero">
@@ -12,7 +12,10 @@
       <h1>C程序设计</h1>
       <p>登录 CITEL，选择课程与题目。启发模式逐步给出思路，最后一步再提交代码；题解模式会直接生成并提交完整代码，请谨慎使用。</p>
     </div>
-    <div class="hero-badge" id="c-account-badge">未连接</div>
+    <div class="c-hero-actions">
+      <div class="hero-badge" id="c-account-badge">未连接</div>
+      <button id="c-open-settings" class="btn small c-settings-btn" type="button">设置</button>
+    </div>
   </div>
 
   <div class="c-layout">

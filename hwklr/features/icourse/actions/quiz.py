@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-10 13:00
+# 最后更新: 2026-11-11 10:00
 # 文件名: quiz.py
-# 主要用途: 测验任务：读取题目、匹配题库、填答与提交。
-# 文件版本: 4.4.0
+# 主要用途: 测验任务：读取题目、匹配题库、填答与提交；截图受留存数据开关控制。
+# 文件版本: 4.4.3
 """测验/作业：从 GinsMooc 取答案，填入页面并可选提交。
 
 默认 dry-run（只计算并展示将填的答案），只有 ``submit=True`` 才点击提交。
@@ -20,7 +20,7 @@ from hwklr.db.icourse_models import AnswerIndex, DbQuestion, QuestionType
 from ..pages.quiz_page import QuizPage
 from ..models import Course, Task
 from ..pages import close_modals, is_spoc_url, learn_url, open_route, page_block_reason
-from .base import ActionContext, ActionUnavailable
+from .base import ActionContext, ActionUnavailable, safe_screenshot
 
 @dataclass
 class QuestionPlan:
@@ -108,8 +108,8 @@ class QuizAction:
         self._wait_ready(page, task)
         page_questions = QuizPage(self.ctx, page).read_questions()
         if not page_questions:
-            self.ctx.session.screenshot(
-                page, f".artifacts/quiz-noquestions-{task.test_id}.png"
+            safe_screenshot(
+                self.ctx, page, f".artifacts/quiz-noquestions-{task.test_id}.png"
             )
             raise ActionUnavailable("测验页面没有解析出任何题目。")
 
@@ -150,10 +150,11 @@ class QuizAction:
         # 提交后站点常弹「并发限制」提示，截图前先关掉，保留真实成绩页。
         close_modals(page)
         self.ctx.info("保存截图…")
-        shot = self.ctx.session.screenshot(
-            page, f".artifacts/quiz-{task.test_id}-{'submitted' if submit else 'dryrun'}.png"
+        result.screenshot = safe_screenshot(
+            self.ctx,
+            page,
+            f".artifacts/quiz-{task.test_id}-{'submitted' if submit else 'dryrun'}.png",
         )
-        result.screenshot = str(shot)
         return result
 
     # ------------------------------------------------------------------ 匹配

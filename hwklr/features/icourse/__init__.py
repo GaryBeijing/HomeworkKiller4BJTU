@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-10 23:59
+# 最后更新: 2026-11-11 10:00
 # 文件名: __init__.py
 # 主要用途: 实现“中国大学慕课”功能：登录、课程状态、任务 handler 编排、批量完成与题库同步。
-# 文件版本: 4.4.2
+# 文件版本: 4.4.3
 """中国大学慕课功能。
 
 功能层只负责动作分发、状态缓存与 job 编排；浏览器自动化、课程解析与题库
@@ -47,7 +47,7 @@ from .models import (
     extract_term_id,
 )
 
-__version__ = "4.4.2"
+__version__ = "4.4.3"
 __author__ = "Gary"
 __all__ = ["IcourseFeature"]
 
@@ -148,6 +148,7 @@ _DEFAULT_SETTINGS: Final[dict[str, Any]] = {
     "answer_ttl_hours": 24,
     "auto_sync_answers": True,
     "download_documents": True,
+    "retain_data": True,
 }
 
 
@@ -296,6 +297,10 @@ class IcourseFeature(Feature):
                 label="账号",
                 placeholder="爱课程 / 网易邮箱 / 网易手机号",
                 help="账号类型可在下方选择，默认自动识别。",
+                tooltip=(
+                    "爱课程、网易邮箱或网易手机号；账号类型可在下方选择，"
+                    "默认自动识别。"
+                ),
                 is_necessary=False,
             ),
             SettingsFieldSpec(
@@ -305,6 +310,10 @@ class IcourseFeature(Feature):
                 secret=True,
                 strip=False,
                 help="仅保存在本机 config.json，不会写入日志。",
+                tooltip=(
+                    "登录中国大学慕课的密码，仅保存在本机 config.json，"
+                    "不会写入日志。"
+                ),
                 is_necessary=False,
             ),
             SettingsFieldSpec(
@@ -318,6 +327,10 @@ class IcourseFeature(Feature):
                     ("phone", "网易手机号"),
                 ),
                 help="爱课堂账号即使使用手机号注册，也应选择“爱课程”。",
+                tooltip=(
+                    "选择账号所属类型；爱课堂账号即使使用手机号注册也应选择"
+                    "“爱课程”。"
+                ),
                 is_necessary=False,
             ),
             SettingsFieldSpec(
@@ -329,6 +342,7 @@ class IcourseFeature(Feature):
                 step=1,
                 alert=True,
                 help="仅用于视频；并发过高可能触发站点限流。",
+                tooltip="仅用于视频的并发播放数；并发过高可能触发站点限流。",
                 is_necessary=False,
             ),
             SettingsFieldSpec(
@@ -339,6 +353,7 @@ class IcourseFeature(Feature):
                 max_value=2,
                 step=0.25,
                 help="1–2 倍速。",
+                tooltip="视频播放倍速，范围 1–2 倍。",
                 is_necessary=False,
             ),
             SettingsFieldSpec(
@@ -347,6 +362,10 @@ class IcourseFeature(Feature):
                 kind="switch",
                 alert=True,
                 help="关闭时只填写答案，由用户自行检查并提交。",
+                tooltip=(
+                    "开启后自动提交测验并读取分数；关闭时只填写答案，"
+                    "由你自行检查提交。"
+                ),
                 is_necessary=False,
             ),
             SettingsFieldSpec(
@@ -355,6 +374,10 @@ class IcourseFeature(Feature):
                 kind="switch",
                 alert=True,
                 help="关闭时只复制上一条回复并填入编辑器，不发布。",
+                tooltip=(
+                    "开启后自动发布讨论回复；关闭时只复制并填入编辑器，"
+                    "不发布。"
+                ),
                 is_necessary=False,
             ),
             SettingsFieldSpec(
@@ -365,6 +388,7 @@ class IcourseFeature(Feature):
                 max_value=168,
                 step=1,
                 help="超过有效期后后台同步会重新抓取题目。",
+                tooltip="题库缓存的保留时长；超过后后台同步会重新抓取题目。",
                 is_necessary=False,
             ),
             SettingsFieldSpec(
@@ -372,6 +396,10 @@ class IcourseFeature(Feature):
                 label="自动同步题库",
                 kind="switch",
                 help="选择课程后在后台同步该课程的答案。",
+                tooltip=(
+                    "选择课程后在后台自动同步该课程题库；关闭后需手动点"
+                    "“同步”。"
+                ),
                 is_necessary=False,
             ),
             SettingsFieldSpec(
@@ -379,6 +407,21 @@ class IcourseFeature(Feature):
                 label="下载课件",
                 kind="switch",
                 help="刷文档时同时下载 PDF/附件。",
+                tooltip=(
+                    "刷文档任务时同时下载 PDF/附件到 documents/icourse。"
+                ),
+                is_necessary=False,
+            ),
+            SettingsFieldSpec(
+                key="retain_data",
+                label="留存数据",
+                kind="switch",
+                alert=True,
+                help="关闭后不再自动保存讨论、测验等任务截图。",
+                tooltip=(
+                    "关闭后不再自动保存讨论、测验等任务截图；"
+                    "已有截图不会被删除。"
+                ),
                 is_necessary=False,
             ),
         )
@@ -433,6 +476,7 @@ class IcourseFeature(Feature):
             "publish_discussions",
             "auto_sync_answers",
             "download_documents",
+            "retain_data",
         ):
             values[key] = bool(values.get(key))
         values["account"] = str(values.get("account") or "").strip()

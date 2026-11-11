@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-01 00:01
-# 最后更新: 2026-11-10 23:59
+# 最后更新: 2026-11-11 10:00
 # 文件名: __init__.py
 # 主要用途: 实现“C程序设计”功能：课程/题目选择、启发模式、题解模式、启用开关与设置板块（依赖延迟加载）。
-# 文件版本: 4.4.2
+# 文件版本: 4.4.3
 """C 程序设计功能。
 
 重制自 ``B_CHelper``，主要变化：
@@ -54,7 +54,7 @@ from .models import (
 from .parsers import deterministic_structure
 from .site import MoodleError, MoodleSite, SubmitError
 
-__version__ = "4.4.2"
+__version__ = "4.4.3"
 __author__ = "Gary"
 __all__ = ["CProgrammingFeature"]
 
@@ -409,18 +409,24 @@ class CProgrammingFeature(Feature):
                     kind="select",
                     options=_PROVIDER_OPTIONS,
                     help="本地服务可留空 API Key。",
+                    tooltip="选择大模型服务商；本地服务可留空 API Key。",
                 ),
                 SettingsFieldSpec(
                     key="model",
                     label="模型名称",
                     kind="text",
                     placeholder="例如 deepseek-flash",
+                    tooltip=(
+                        "填写服务商支持的模型名，例如 deepseek-flash；"
+                        "名称错误会导致请求失败。"
+                    ),
                 ),
                 SettingsFieldSpec(
                     key="base_url",
                     label="API Base URL",
                     kind="text",
                     placeholder="例如 https://api.deepseek.com",
+                    tooltip="API 服务地址；使用官方服务时保持默认地址即可。",
                 ),
                 SettingsFieldSpec(
                     key="api_key",
@@ -430,6 +436,7 @@ class CProgrammingFeature(Feature):
                     strip=False,
                     alert=True,
                     placeholder="仅保存在本机 config.json",
+                    tooltip="服务商提供的 API Key，仅保存在本机；本地服务可留空。",
                 ),
                 SettingsFieldSpec(
                     key="thinking_level",
@@ -447,6 +454,10 @@ class CProgrammingFeature(Feature):
                         "判题出现逻辑失败（如 WA/TLE/MLE/RE）时逐级提高思考等级，"
                         "PE/CE 只重写代码（上限 20000）。仅对 DeepSeek 服务商生效。"
                     ),
+                    tooltip=(
+                        "控制模型思考等级；自动模式会在解析失败或判题逻辑失败时"
+                        "逐级提高。"
+                    ),
                 ),
                 SettingsFieldSpec(
                     key="max_concurrency",
@@ -460,6 +471,10 @@ class CProgrammingFeature(Feature):
                         "默认 1（单线程顺序解题）。大于 1 时按题目顺序平均分配给"
                         "多个线程同时解题；并发过高可能触发平台或 AI 限流。"
                     ),
+                    tooltip=(
+                        "同时解题的线程数；大于 1 可加速，但过高可能触发平台或 "
+                        "AI 限流。"
+                    ),
                 ),
                 SettingsFieldSpec(
                     key="enable_solution_mode",
@@ -469,6 +484,9 @@ class CProgrammingFeature(Feature):
                     help=(
                         "默认关闭。关闭时，C程序设计标签页中的题解模式不可选，"
                         "并显示锁头标志。"
+                    ),
+                    tooltip=(
+                        "开启后可在题解模式直接生成并提交完整代码；请谨慎使用。"
                     ),
                 ),
             ),

@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
-# 最后更新: 2026-11-10 23:59
+# 最后更新: 2026-11-11 10:00
 # 文件名: config.py
 # 主要用途: 统一读写 config.json；按设置分组存放账号、密码、AI、构建与第三方扩展配置，并解析源码/虚拟环境/打包后的程序根目录。
-# 文件版本: 4.4.2
+# 文件版本: 4.4.3
 """项目配置读写。
 
 配置文件固定位于**项目根目录**（``main.py`` 同级）的 ``config.json``。
@@ -25,7 +25,7 @@ from hwklr.feature_specs import (
     feature_config_defaults,
 )
 
-__version__ = "4.4.2"
+__version__ = "4.4.3"
 __all__ = [
     "DEFAULT_CONFIG",
     "app_root",
@@ -90,6 +90,8 @@ CORE_DEFAULTS: Final[dict[str, Any]] = {
     "server": {
         "preferred_port": 49152,
     },
+    # 启动时是否检查并提示新版本；实际下载/安装仍由用户确认。
+    "update_notice": True,
 }
 
 
@@ -105,6 +107,8 @@ def _build_default_config() -> dict[str, Any]:
     result["ui"] = copy.deepcopy(CORE_DEFAULTS["ui"])
     result["network"] = copy.deepcopy(CORE_DEFAULTS["network"])
     result["server"] = copy.deepcopy(CORE_DEFAULTS["server"])
+    # 新增顶层键放在末尾，保持现有前五个键的顺序不变。
+    result["update_notice"] = bool(CORE_DEFAULTS["update_notice"])
     return result
 
 

@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-10 10:30
-# 最后更新: 2026-11-10 23:45
+# 最后更新: 2026-11-11 10:00
 # 文件名: feature_specs.py
 # 主要用途: 官方功能的单一元数据来源：显示名/稳定 id、配置默认值、关于信息、资源、数据库与打包声明。
-# 文件版本: 4.4.1
+# 文件版本: 4.4.3
 """官方功能元数据 registry。
 
 本模块只依赖标准库，放在 ``hwklr`` 根包而不是 ``hwklr.features`` 下，
@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Final
 
-__version__ = "4.4.1"
+__version__ = "4.4.3"
 __author__ = "Gary"
 __all__ = [
     "FEATURE_BY_ID",
@@ -198,6 +198,7 @@ OFFICIAL_FEATURES: Final[tuple[FeatureSpec, ...]] = (
                 ("answer_ttl_hours", 24),
                 ("auto_sync_answers", True),
                 ("download_documents", True),
+                ("retain_data", True),
                 ("enabled", True),
             ),
         ),

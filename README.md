@@ -6,7 +6,7 @@
 
 ![Python](https://img.shields.io/badge/Python-3.15.2-3776AB?logo=python&logoColor=white)
 ![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-0078D4?logo=windows&logoColor=white)
-![Version](https://img.shields.io/badge/Version-4.4.2-5B4BFF)
+![Version](https://img.shields.io/badge/Version-4.4.3-5B4BFF)
 ![GUI](https://img.shields.io/badge/GUI-pywebview%20%2B%20WebView2-2F3AB2)
 
 [功能特性](#-功能特性) · [界面预览](#-界面预览) · [快速开始](#-快速开始) · [使用指南](#-使用指南) · [构建与分发](#-构建与分发) · [插件开发](#-插件开发) · [常见问题](#-常见问题)
@@ -42,6 +42,7 @@ HomeworkKiller4BJTU（简称 HWKLR）是一个基于 **pywebview + 本地 HTTP �
 - **多标签桌面 UI**：标签顺序固定为“功能标签 → 设置 → 关于”，支持窗口尺寸自适应。
 - **统一设置中心**：账号、密码、AI 配置、构建配置、扩展管理全部集中在“设置”标签页，不再在每个功能页重复登录。
 - **自动保存**：设置字段失焦或开关变化时自动保存；高风险设置（API Key、题解模式、并发数等）会先弹出二次确认。
+- **设置项说明与折叠**：每个设置项名称旁的 `(i)` 可悬浮查看说明；所有设置板块均可折叠，每次进入设置页只展开“通用”和本次跳转来源，其余保持折叠；折叠时启用开关与“启用/停用”文字仍显示。
 - **必要设置门禁**：功能缺少必要设置时显示灰白色遮罩，并提供“去设置”快捷跳转与板块高亮。
 - **功能启用开关**：每个功能设置板块右上角可启用/停用该功能，状态持久化到 `config.json`。
 
@@ -60,6 +61,7 @@ HomeworkKiller4BJTU（简称 HWKLR）是一个基于 **pywebview + 本地 HTTP �
 - **隐藏测试点识别**：Secure test 不公开输入/期望/实际输出时，只告知 AI“隐藏测试点”，避免误判。
 - **状态可视化**：未提交、等待队列、生成题解、提交中、AC、错误等状态有独立配色。
 - **终止解题**：题解任务运行中，原“开始学习”按钮变为红色描边、白底的“终止解题”，点击后在当前题目/AI 步骤结束时协作终止任务。
+- **快速设置**：顶栏“设置”按钮直接跳转到 C 程序设计对应的设置板块并展开高亮。
 
 ### 中国大学慕课
 
@@ -72,6 +74,8 @@ HomeworkKiller4BJTU（简称 HWKLR）是一个基于 **pywebview + 本地 HTTP �
 - **任务状态**：测验自动提交后显示分数（满分绿色、非满分红色），未自动提交显示黄色“已填写”并在标签内提示截图路径；讨论自动发布显示绿色“已发布”，否则同样为“已填写”。任务默认不勾选。
 - **终止任务**：任务运行时底部“开始完成”变为红框红字白底“终止任务”，同时放大总任务进度条。
 - **题库**：内置 `hwklr/db/icourse_sources.json` 课程目录（422 门），从 GinsMooc 下载的课程/测验/题目缓存到程序同级的 `db/icourse<termId>.json`；默认 TTL 24 小时。
+- **留存数据**：设置中可关闭自动截图留存；关闭后讨论、测验等任务不再写入 `artifacts/icourse/`，已有截图不会被删除。
+- **登录容错**：窗口登录会清理失效的旧调试窗口并在必要时使用独立临时配置目录；本机 Cookie 导入会跳过不可用的浏览器配置继续尝试其他来源。
 
 ### 构建与插件
 
@@ -86,7 +90,16 @@ HomeworkKiller4BJTU（简称 HWKLR）是一个基于 **pywebview + 本地 HTTP �
 
 - 展示软件版本、作者、功能列表、使用声明。
 - 展示所有插件/功能的元信息：插件名、包名、作者、版本、更新日期、启用状态。
+- 展示“北交奇妙软件交流群”QQ 群号，以及 GitHub / GitCode 项目发布页按钮。
 - 版本显示规则：软件 `vA.B.PatchC-bD`，插件 `前缀A.BpC-bD`；官方包名追加 `(Offical)`。
+
+### 自动更新
+
+- “设置 → 通用”中的“更新提示”默认开启；每次启动同时请求 GitHub 与 GitCode 的 latest release，首个成功响应生效并终止另一方请求。
+- 发现新版本时显示发布日志与“现在安装！/ 观望中...”选择；下载完成后可“现在安装并重启软件”或“稍后安装”，后者在下次启动时由独立脚本解压更新包。
+- 发行版的单文件 `.exe` 是 7z 自解压包（推荐用 `7zCon.sfx` 控制台模块生成）；更新脚本优先调用本机 `7z.exe` 解压，必要时执行 SFX 自身，再把文件复制到程序目录。
+- 更新前会探测 PowerShell 能否执行脚本；被组策略/AppLocker 等禁用时自动回退到 `apply_update.cmd`（cmd.exe）。两种脚本都不可用时不会退出程序，而是提示手动安装；启动阶段的 pending 连续失败 3 次后停止自动重试，保证程序仍可正常打开。
+- 下载仅允许 HTTPS 与受信任的 release 域名，并在提供摘要时校验 sha256；安装脚本会保留 `config.json`、`auth/`、`db/`、`extension/` 等用户数据。源码运行只下载不安装。
 
 ---
 
@@ -461,7 +474,8 @@ HomeworkKiller4BJTU/
 
 | 版本 | 主要内容 |
 |---|---|
-| **4.4.2** | P0/P1 修正：config 原子写、TagRegistry 并发安全、cprog 锁纪律、构建日志隔离；config 板块派生、插件运行时 order、扩展扫描缓存；CompletionJob 统一 BackgroundJob 与窗口关闭 shutdown |
+| **4.4.3** | 设置页 tooltip / 折叠 / 启用文字；通用“更新提示”与 GitHub+GitCode 自动更新（7z SFX 解压安装）；慕课课程列表滚动、留存数据开关、登录容错与 CDP 403 修复；关于页交流群与发布页入口 |
+| 4.4.2 | P0/P1 修正：config 原子写、TagRegistry 并发安全、cprog 锁纪律、构建日志隔离；config 板块派生、插件运行时 order、扩展扫描缓存；CompletionJob 统一 BackgroundJob 与窗口关闭 shutdown |
 | 4.4.1 | M6：cprog/build Job 迁移、WindowView 与 icourse.js 拆分、插件 manifest 扩展字段 |
 | 4.4.0 | 架构重构：契约、FeatureSpec registry、DB 并发、TaskHandler/CourseState/Page Object |
 | 3.0.0 | 构建升级；程序/插件构建切换；插件工程模板与发布包；第三方扩展加载/启停；关于页元信息与版本格式；功能启用开关；开发环境新布局 |

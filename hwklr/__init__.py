@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
-# 最后更新: 2026-11-10 23:59
+# 最后更新: 2026-11-11 10:00
 # 文件名: __init__.py
 # 主要用途: hwklr 主包元数据与全局应用信息（V4.0.0，支持导出时注入版本、名称、图标与开发标记）。
-# 文件版本: 4.4.2
+# 文件版本: 4.4.3
 """HomeworkKiller4BJTU 主包。
 
 本包只声明项目级元数据，具体功能拆分为：
@@ -19,7 +19,7 @@ from pathlib import Path
 
 # 导出构建会在打包前生成 _build_info.py，用于覆盖版本、名称、图标与开发标记；
 # 源码运行时该文件不存在，使用项目默认值。
-__version__: str = "4.4.2"
+__version__: str = "4.4.3"
 DEV_BUILD: bool = False
 _EXPORT_NAME: str = ""
 _ICON_RELATIVE: str = ""

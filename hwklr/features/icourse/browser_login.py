@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
+# 最后更新: 2026-11-11 20:00
 # 文件名: browser_login.py
-# 主要用途: 通过可见 Edge + CDP 完成 icourse163 登录。
-# 文件版本: 4.0.0
+# 主要用途: 通过可见 Edge + CDP 完成 icourse163 登录；失效窗口清理、临时配置目录重试、超时关闭与无 Origin 的 CDP 连接。
+# 文件版本: 4.4.3
 """通过真实浏览器完成 icourse163 登录。
 
 流程与人工登录一致：打开首页 → 点击「登录/注册」→ 切到「邮箱登录」
@@ -14,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import socket
 import subprocess
 import sys
@@ -26,6 +28,12 @@ from requests.cookies import RequestsCookieJar, create_cookie
 
 from .config import LOGIN_PAGE, browser_port_file, browser_profile_dir
 from .browser import TARGET_DOMAIN
+
+__version__ = "4.4.3"
+# 端口文件超过该时长视为上一次失败留下的旧窗口。
+_PORT_FILE_TTL_SECONDS: int = 15 * 60
+# CDP 启动等待上限（秒）。
+_CDP_START_TIMEOUT: int = 20
 
 Log = Callable[[str], None]
 
@@ -166,7 +174,11 @@ class CDP:
     def __init__(self, ws_url: str) -> None:
         import websocket
 
-        self.ws = websocket.create_connection(ws_url, timeout=30)
+        # Chrome/Edge 111+ 的 DevTools 端点会拒绝带 Origin 的 WebSocket；
+        # websocket-client 默认会发送 http://host:port，导致窗口登录 403。
+        self.ws = websocket.create_connection(
+            ws_url, timeout=30, suppress_origin=True
+        )
         self._id = 0
 
     def call(self, method: str, params: dict | None = None, session: str | None = None) -> dict:
@@ -221,31 +233,85 @@ class BrowserLogin:
         self.port: int | None = None
         self.cdp: CDP | None = None
         self.reused = False
+        # 重试时使用的临时配置目录；关闭窗口后删除。
+        self._temp_profile: Path | None = None
 
     # ------------------------------------------------------------- 启动/复用
-    def _reuse_existing(self) -> bool:
+    def _discard_port_file(self) -> None:
+        """删除旧的调试端口文件。"""
         try:
-            port = int(browser_port_file().read_text(encoding="utf-8").strip())
+            browser_port_file().unlink()
+        except OSError:
+            pass
+
+    def _reuse_existing(self) -> bool:
+        """复用本程序上一次打开的登录窗口。
+
+        只有端口文件未过期、CDP 可连接且窗口中存在慕课页面时才复用；
+        否则关闭旧窗口并重新启动，避免失效窗口导致登录一直等到超时。
+        """
+        path: Path = browser_port_file()
+        try:
+            if time.time() - path.stat().st_mtime > _PORT_FILE_TTL_SECONDS:
+                self._discard_port_file()
+                return False
+            port = int(path.read_text(encoding="utf-8").strip())
         except (OSError, ValueError):
             return False
         version = _cdp_version(port)
         if not version:
+            self._discard_port_file()
             return False
         try:
-            self.cdp = CDP(version["webSocketDebuggerUrl"])
+            cdp = CDP(version["webSocketDebuggerUrl"])
         except Exception:
+            self._discard_port_file()
             return False
+        try:
+            targets = cdp.call("Target.getTargets").get("targetInfos", [])
+            usable = any(
+                item.get("type") == "page"
+                and "icourse163" in str(item.get("url") or "")
+                for item in targets
+            )
+        except Exception:
+            usable = False
+        if not usable:
+            self.log("检测到失效的旧登录窗口，正在关闭并重新启动…")
+            try:
+                cdp.call("Browser.close")
+            except Exception:
+                pass
+            try:
+                cdp.disconnect()
+            except Exception:
+                pass
+            self._discard_port_file()
+            return False
+        self.cdp = cdp
         self.port = port
         self.reused = True
         self.log(f"复用已打开的浏览器窗口（端口 {port}）")
         return True
 
-    def launch(self) -> None:
-        if self._reuse_existing():
-            return
+    def _cleanup_failed_process(self) -> None:
+        """终止启动失败的浏览器进程并清理端口文件。"""
+        if self.proc is not None:
+            try:
+                if self.proc.poll() is None:
+                    self.proc.terminate()
+                    try:
+                        self.proc.wait(timeout=3)
+                    except subprocess.TimeoutExpired:
+                        self.proc.kill()
+            except Exception:
+                pass
+            self.proc = None
+        self._discard_port_file()
 
+    def _launch_with_profile(self, profile: Path, temporary: bool) -> None:
+        """使用指定配置目录启动浏览器并连接 CDP。"""
         exe = find_browser_executable(self.browser)
-        profile = browser_profile_dir()
         profile.mkdir(parents=True, exist_ok=True)
         port = _free_port()
         mode = "后台" if self.headless else ""
@@ -257,6 +323,8 @@ class BrowserLogin:
             "--no-first-run",
             "--no-default-browser-check",
         ]
+        if temporary:
+            args.append("--disable-extensions")
         if self.headless:
             args += [
                 "--headless=new",
@@ -277,22 +345,46 @@ class BrowserLogin:
         )
 
         version = None
-        for _ in range(60):
+        deadline: float = time.time() + _CDP_START_TIMEOUT
+        while time.time() < deadline:
             time.sleep(0.5)
             if self.proc.poll() is not None:
+                self.proc = None
+                self._discard_port_file()
                 raise BrowserLoginError(
-                    "浏览器启动后立即退出。可能已存在使用同一配置目录的窗口，请先关闭它。"
+                    "浏览器启动后立即退出。可能已存在使用同一配置目录的窗口。"
                 )
             version = _cdp_version(port)
             if version:
                 break
         if not version:
+            self._cleanup_failed_process()
             raise BrowserLoginError("无法连接到浏览器调试端口，请重试。")
 
         browser_port_file().parent.mkdir(parents=True, exist_ok=True)
         browser_port_file().write_text(str(port), encoding="utf-8")
         self.port = port
         self.cdp = CDP(version["webSocketDebuggerUrl"])
+
+    def launch(self) -> None:
+        """启动或复用可见登录窗口；常规配置失败时用临时目录重试。"""
+        if self._reuse_existing():
+            return
+
+        try:
+            self._launch_with_profile(browser_profile_dir(), temporary=False)
+            return
+        except BrowserLoginError as exc:
+            self._cleanup_failed_process()
+            self.log(
+                "常规登录窗口启动失败（%s），改用临时配置目录重试…" % exc
+            )
+        # 独立临时配置目录不会与用户已打开的浏览器争用 profile 锁。
+        profile: Path = browser_profile_dir().parent / (
+            "edge-profile-%d-%d" % (os.getpid(), int(time.time()))
+        )
+        self._temp_profile = profile
+        self._launch_with_profile(profile, temporary=True)
 
     # ------------------------------------------------------------- 页面操作
     def _page_session(self) -> str:
@@ -611,6 +703,9 @@ class BrowserLogin:
             except subprocess.TimeoutExpired:
                 self.proc.terminate()
             self.proc = None
+        if self._temp_profile is not None:
+            shutil.rmtree(self._temp_profile, ignore_errors=True)
+            self._temp_profile = None
 
 
 WRONG_PASSWORD_HINTS = (
@@ -667,51 +762,18 @@ def browser_login(
     session = BrowserLogin(
         browser=browser, log=log, headless=headless, start_url=start_url
     )
-    session.launch()
+    # 任何失败（密码错误、超时、CDP 断开）都关闭本次拉起的窗口，
+    # 避免旧窗口和端口文件污染下一次登录。
+    try:
+        session.launch()
 
-    # 该配置目录此前已登录过：直接复用，无需再弹登录框
-    for _ in range(8):
-        time.sleep(0.8)
-        jar = session.cookies()
-        if not has_cookie(jar, "STUDY_SESS"):
-            continue
-        # 优先用 STUDY_INFO 解析，避免 getMocMember RPC 破坏 SPOC 上下文。
-        member = member_from_cookies(jar)
-        if not member:
-            try:
-                member = verify(jar)
-            except Exception:
-                member = None
-        if member:
-            if needs_spoc_warmup(jar):
-                try:
-                    page = session._page_session()
-                    session.warm_up_spoc(page, page)
-                    jar = session.cookies()
-                except Exception:
-                    pass
-            say("浏览器配置中已有有效登录态，直接复用。")
-            session.close()
-            return jar, member
-
-    page = session._page_session()
-    session.open_login_dialog(page, account_kind=account_kind)
-
-    if not (email and password) and get_credentials is not None:
-        try:
-            email, password = get_credentials()
-        except Exception:
-            email = password = None
-
-    if email and password:
-        session.fill_and_submit(page, email, password, account_kind=account_kind)
-    else:
-        say("请在打开的浏览器窗口中手动完成登录。")
-
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        jar = session.cookies()
-        if has_cookie(jar, "STUDY_SESS"):
+        # 该配置目录此前已登录过：直接复用，无需再弹登录框
+        for _ in range(8):
+            time.sleep(0.8)
+            jar = session.cookies()
+            if not has_cookie(jar, "STUDY_SESS"):
+                continue
+            # 优先用 STUDY_INFO 解析，避免 getMocMember RPC 破坏 SPOC 上下文。
             member = member_from_cookies(jar)
             if not member:
                 try:
@@ -720,16 +782,52 @@ def browser_login(
                     member = None
             if member:
                 if needs_spoc_warmup(jar):
-                    session.warm_up_spoc(page, page)
-                    jar = session.cookies()
-                session.close()
+                    try:
+                        page = session._page_session()
+                        session.warm_up_spoc(page, page)
+                        jar = session.cookies()
+                    except Exception:
+                        pass
+                say("浏览器配置中已有有效登录态，直接复用。")
                 return jar, member
-        text = session.read_iframe_text(page)
-        for hint in WRONG_PASSWORD_HINTS:
-            if hint in text:
-                raise BrowserLoginError(f"登录失败：{hint}。")
-        time.sleep(2)
 
-    raise BrowserLoginError(
-        "等待登录超时。浏览器窗口保持打开，你可以完成登录后重新运行本命令。"
-    )
+        page = session._page_session()
+        session.open_login_dialog(page, account_kind=account_kind)
+
+        if not (email and password) and get_credentials is not None:
+            try:
+                email, password = get_credentials()
+            except Exception:
+                email = password = None
+
+        if email and password:
+            session.fill_and_submit(page, email, password, account_kind=account_kind)
+        else:
+            say("请在打开的浏览器窗口中手动完成登录。")
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            jar = session.cookies()
+            if has_cookie(jar, "STUDY_SESS"):
+                member = member_from_cookies(jar)
+                if not member:
+                    try:
+                        member = verify(jar)
+                    except Exception:
+                        member = None
+                if member:
+                    if needs_spoc_warmup(jar):
+                        session.warm_up_spoc(page, page)
+                        jar = session.cookies()
+                    return jar, member
+            text = session.read_iframe_text(page)
+            for hint in WRONG_PASSWORD_HINTS:
+                if hint in text:
+                    raise BrowserLoginError(f"登录失败：{hint}。")
+            time.sleep(2)
+
+        raise BrowserLoginError(
+            "等待登录超时，已关闭登录窗口，请重试。"
+        )
+    finally:
+        session.close()

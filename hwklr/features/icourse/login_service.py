@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
+# 最后更新: 2026-11-11 10:00
 # 文件名: login_service.py
-# 主要用途: 编排慕课账号登录、窗口/无头浏览器登录、本机 Cookie 导入与已保存会话加载。
-# 文件版本: 4.1.1
+# 主要用途: 编排慕课账号登录、窗口/无头浏览器登录、本机 Cookie 导入（容错多来源）与已保存会话加载。
+# 文件版本: 4.4.3
 """慕课登录与会话服务。
 
 - 账号登录统一走 icourse163 登录页（Playwright/系统 Edge），
@@ -30,7 +31,7 @@ from .session_store import (
     save_session,
 )
 
-__version__ = "4.1.1"
+__version__ = "4.4.3"
 __author__ = "Gary"
 __all__ = [
     "LoginError",
@@ -290,12 +291,16 @@ def import_browser_cookies(
     """
     if log:
         log("正在读取本机浏览器 Cookie…")
+    read_errors: list[str] = []
     try:
-        sources = list(iter_browser_cookies(browser))
+        sources = list(iter_browser_cookies(browser, errors=read_errors))
     except BrowserCookieError as exc:
         raise LoginError(str(exc)) from exc
     except Exception as exc:
         raise LoginError("读取本机 Cookie 失败：%s" % exc) from exc
+    for reason in read_errors:
+        if log:
+            log("已跳过不可用的浏览器配置：%s" % reason)
 
     for source, jar in sources:
         if cancel is not None and cancel.is_set():
@@ -320,8 +325,10 @@ def import_browser_cookies(
         if log:
             log("已从 %s 导入登录 Cookie。" % source.label)
         return summary
+    detail: str = ("；" + read_errors[0]) if read_errors else ""
     raise LoginError(
-        "未在浏览器中找到中国大学慕课登录 Cookie，请先在该浏览器登录 icourse163.org。"
+        "未在浏览器中找到中国大学慕课登录 Cookie，请先在该浏览器登录 "
+        "icourse163.org。" + detail
     )
 
 

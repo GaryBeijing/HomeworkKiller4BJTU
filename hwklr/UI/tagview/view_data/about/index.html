@@ -1,10 +1,10 @@
 <!--
   作者: Gary
   编写日期: 2026-10-31 20:45
-  最后更新: 2026-11-03 21:45
+  最后更新: 2026-11-11 10:00
   文件名: index.html
-  主要用途: “关于”标签页结构：软件信息、插件元信息表、功能列表与使用声明。
-  文件版本: 3.0.0
+  主要用途: “关于”标签页结构：软件信息、插件元信息表、功能列表、交流群、项目发布页与使用声明。
+  文件版本: 4.4.3
 -->
 <section class="tag-page tag-about" id="about-page">
   <div class="hero">
@@ -60,6 +60,37 @@
         </tbody>
       </table>
     </div>
+  </section>
+
+  <section class="card about-community-card">
+    <h2>北交奇妙软件交流群</h2>
+    <p class="about-community-text">
+      如果有问题需要反馈、有新功能建议、想加入开发，或者单纯喜好 VibeCoding，
+      都欢迎加入交流群。
+    </p>
+    <p class="about-qq">QQ 群：<strong>463664965</strong></p>
+  </section>
+
+  <section class="card about-release-card">
+    <h2>项目发布页</h2>
+    <div class="about-release-row">
+      <button id="about-github" class="btn about-release-btn github" type="button">
+        <svg viewBox="0 0 16 16" width="17" height="17" aria-hidden="true">
+          <path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
+        </svg>
+        <span>GitHub Releases</span>
+      </button>
+      <button id="about-gitcode" class="btn about-release-btn gitcode" type="button">
+        <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+          <rect x="2" y="2" width="20" height="20" rx="6" fill="currentColor"/>
+          <path d="M8 7.5v9M8 12c0-2 1.4-3.2 3.4-3.2H16M16 7.5v9"
+                fill="none" stroke="#e5484d" stroke-width="1.8"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span>GitCode Releases</span>
+      </button>
+    </div>
+    <p class="about-star">· 觉得好用的话别忘了点亮一颗小星星哦~⭐</p>
   </section>
 
   <section class="card disclaimer-card">

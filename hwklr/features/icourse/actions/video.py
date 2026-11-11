@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-08 17:00
+# 最后更新: 2026-11-11 10:00
 # 文件名: video.py
-# 主要用途: 视频任务：播放、进度高水位、弹题与完成判定。
-# 文件版本: 4.0.0
+# 主要用途: 视频任务：播放、进度高水位、弹题与完成判定；截图受留存数据开关控制。
+# 文件版本: 4.4.3
 """视频任务：从选中的一节开始，按顺序 2 倍速播放未完成视频。"""
 
 from __future__ import annotations
@@ -25,7 +25,12 @@ from ..pages import (
     set_video_rate,
     video_state,
 )
-from .base import ActionCancelled, ActionContext, SILENT_VIDEO_WARNING
+from .base import (
+    ActionCancelled,
+    ActionContext,
+    SILENT_VIDEO_WARNING,
+    safe_screenshot,
+)
 from .popup import PopupQuiz
 
 VIDEO_KIND = "视频"
@@ -195,14 +200,16 @@ class VideoAction:
         close_modals(page)
         blocked = page_block_reason(page)
         if blocked:
-            self.ctx.session.screenshot(
-                page, f".artifacts/video-blocked-{task.unit_id}.png"
+            safe_screenshot(
+                self.ctx, page, f".artifacts/video-blocked-{task.unit_id}.png"
             )
             raise ActionCancelled(f"视频页无法访问：{blocked}。当前 URL：{page.url}")
         try:
             page.wait_for_selector("video", timeout=30_000)
         except Exception:
-            self.ctx.session.screenshot(page, f".artifacts/video-missing-{task.unit_id}.png")
+            safe_screenshot(
+                self.ctx, page, f".artifacts/video-missing-{task.unit_id}.png"
+            )
             return VideoProgress(task, url, False, "未找到 video 元素", time.monotonic() - started)
 
         if self.progress_callback is not None:
@@ -221,7 +228,9 @@ class VideoAction:
                 break
             page.wait_for_timeout(1000)
         else:
-            self.ctx.session.screenshot(page, f".artifacts/video-notready-{task.unit_id}.png")
+            safe_screenshot(
+                self.ctx, page, f".artifacts/video-notready-{task.unit_id}.png"
+            )
             return VideoProgress(task, url, False, "视频未就绪", time.monotonic() - started)
 
         finished, reason, max_current = self._wait_silent(

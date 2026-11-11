@@ -272,12 +272,13 @@ from hwklr.features.settings import FeatureSettingsGroup, SettingsFeature, Setti
 | `kind` | `str` | `"text"` | `text` / `password` / `number` / `select` / `switch` / `features` |
 | `placeholder` | `str` | `""` | 占位符 |
 | `help` | `str` | `""` | 字段下方说明 |
+| `tooltip` | `str` | `""` | 4.4.3：名称旁 `(i)` 的悬浮气泡内容；为空不显示按钮 |
 | `options` | `tuple[tuple[str, str], ...]` | `()` | `(value, label)`；`select` 与 `features` 用 |
 | `secret` | `bool` | `False` | 输入框用 `password` 类型 + "显示/隐藏"按钮 |
 | `min_value` / `max_value` | `float \| None` | `None` | `number` 的取值范围校验 |
 | `step` | `float \| None` | `None` | `number` 的步长 |
 | `strip` | `bool` | `True` | 文本是否 `strip()` |
-| `is_necessary` | `bool` | `True` | 仅影响前端灰字"可选填"标记，**不阻止离开页面** |
+| `is_necessary` | `bool` | `True` | 仅影响前端灰字提示（4.4.3 起不再绘制星号），**不阻止离开页面** |
 | `alert` | `bool` | `False` | 高级设置；修改并保存时前端弹二次确认 |
 
 **`kind` 的处理矩阵**（后端 `normalize()` / 前端 `buildField()` 必须一致）：
@@ -673,7 +674,10 @@ WindowView(title: str = APP_TITLE, width: int | None = None, height: int | None 
 | `start_server` | `() -> int` | 幂等；返回实际端口并写入 `context["port"]` |
 | `stop_server` | `() -> None` | 端口复位为 0 |
 | `activate_tagview` | `(tagview: TagView) -> None` | 用**窗口内注册的实例**替换入参；`previous.stop()` → `start()` → `window.evaluate_js("window.App && window.App.activate(<name>)")` |
-| `run` | `() -> None` | 必须主线程：`start_server` → `webview.create_window(..., js_api=BridgeApi(self))` → 绑定 `events.loaded` → `webview.start(debug=ui.debug, icon=APP_ICON or None)`；`finally` 里先调用 `TagRegistry.shutdown()`，再停服务 |
+| `check_update` / `update_state` / `start_update_download` / `install_update` | `(…) -> dict` | 4.4.3 起委托 `hwklr.update_service.UpdateService`；仅供 `BridgeApi` 与前端更新弹窗使用 |
+| `request_exit` | `() -> None` | 安装更新后关闭窗口，让解压脚本继续 |
+| `open_external_url` | `(url: str) -> dict` | 只允许 GitHub/GitCode 项目发布页，使用系统默认浏览器打开 |
+| `run` | `() -> None` | 必须主线程：`start_server` → `webview.create_window(..., js_api=BridgeApi(self))` → 绑定 `events.loaded` → `webview.start(debug=ui.debug, icon=APP_ICON or None)`；`finally` 里先调用 `update_service.shutdown()` 与 `TagRegistry.shutdown()`，再停服务 |
 
 窗口参数（写死，除尺寸外不来自配置）：`resizable=True`、`background_color="#2f3ab2"`、`text_select=True`、`min_size=(min_width, min_height)`、`url="http://127.0.0.1:<port>/"`。
 
@@ -684,9 +688,16 @@ BridgeApi(window_view: WindowView)
     call(tag: str, method: str, params: dict|None = None) -> dict   # → window_view.bridge_call
     get_tags() -> list[dict]                                        # → window_view.tags_payload()
     get_meta() -> dict                                              # → window_view.meta_payload()
+    check_update() -> dict                                          # 4.4.3：启动版本检查
+    get_update_state() -> dict                                      # 4.4.3：轮询更新状态
+    start_update_download() -> dict                                 # 4.4.3：后台下载 release
+    install_update(restart: bool = True) -> dict                    # 4.4.3：写 pending / 解压重启
+    open_url(url: str) -> dict                                      # 4.4.3：受信任发布页
 ```
 
-> 桥接对象上**只有这三个公开方法**。任何"新增桥接方法"的想法都应该改成"在某个 Feature 里加 action"。
+> 业务动作仍应通过某个 `Feature` 的 action 暴露；只有跨标签的全局能力（更新、外部链接）才直接加在 `BridgeApi`。
+
+更新状态机：`disabled`（更新提示关闭）、`idle`、`checking`、`none`、`available`、`downloading`、`ready`、`error`。`available/ready` 状态包含 `latest/notes/asset_name/asset_size/can_install/download_path/release_url`；`progress` 为 0–100。
 
 ---
 
@@ -829,6 +840,7 @@ from hwklr.features.icourse import IcourseFeature
 - 4.4.0：新增 `hwklr/contracts.py`、`hwklr/feature_specs.py`、`features/jobs.py`、`icourse/tasks.py`、`icourse/state.py` 与 Document/Discussion/Quiz Page Object；`ApiResult` 增加 `code`，`Feature.dispatch` 支持 ActionSpec；DB `load` 锁外 fetch + single-flight + `mutate`。
 - 4.4.1：`BackgroundJob` 增加 `mutate_if`/`event_if` 与自定义 job id；cprog 题解、程序构建、插件构建全部改用统一 job；`UI` 拆为 `bridge/registry/extension_runtime/window`（`from hwklr.UI import WindowView` 不变）；icourse 前端拆为八个 `window.Icourse` 脚本，`FeatureAssetSpec` 按序加载；插件 `meta.json` 新增可选 `schema/id/order/ui/assets/actions/config/db/packaging`，`config` 默认值进入 `load_config`，`db` provider 注册到 `DbManager`。
 - 4.4.2：`update_config` 全程持有可重入配置锁；`TagRegistry` 使用 leaf lock 保护读/安装，运行期插件按 `ViewParam.order` 排序；cprog 将网络/AI 移出 `_state_lock`；build 日志/阶段按 job_id 隔离；扩展扫描缓存；`CompletionJob` 统一到 `BackgroundJob`；新增 `Feature.shutdown()` 与窗口关闭清理。
+- 4.4.3：`SettingsFieldSpec` 新增 `tooltip`，设置页支持 `(i)` 气泡、功能组默认折叠与启用文字；每次进入设置页只展开“通用”和本次跳转来源；通用组新增 `update_notice`。新增 `hwklr/update_service.py` 与 `BridgeApi` 更新/外链方法，启动时并行请求 GitHub/GitCode latest release，下载后写入 `updates/pending.json`；单文件 `.exe` 一律按 7z 自解压包处理，PowerShell 脚本优先用本机 `7z.exe` 解压，否则执行 SFX，再复制到程序目录。启动/安装前用 `probe.ps1` 探测 PowerShell 脚本执行能力，被策略禁用时回退到 `apply_update.cmd`；两者都不可用则不退出程序，pending 的 `attempts` 连续 3 次失败后停止自动重试。icourse 新增 `retain_data`，`safe_screenshot` 关闭时不写文件；课程列表显式约束为滚动区域；登录清理失效端口文件、临时 profile 重试，Cookie 导入跳过失败来源；可见登录 CDP 使用 `suppress_origin=True`，修复新版 Edge/Chrome 的 403。
 - 依赖：`playwright`（系统 Edge，不下载 Chromium）、`cryptography`（本机 Chromium Cookie 解密）、`websocket-client`（可见登录 CDP）。
 
 ---
@@ -955,6 +967,8 @@ App.registerPage('<标签名>', { init, onActivate, onDeactivate, highlightGroup
 | 键 | 类型 | 默认 | 读取方 | 说明 |
 |---|---|---|---|---|
 | `username` | str | `""` | 设置页 general、hsr、cprog | 学号/账号，两个功能共用 |
+| `update_notice` | bool | `true` | settings general、update_service | 启动时是否检查并提示新版本 |
+| `icourse.retain_data` | bool | `true` | icourse | 是否自动保留讨论/测验等任务截图 |
 | `hsr.password` | str | `""` | hsr | 高铁系统密码（明文） |
 | `hsr.enabled` | bool | `true` | hsr/WindowView | 高铁纵横标签是否加载 |
 | `c_programming.enabled` | bool | `true` | cprog/WindowView | C 程序设计标签是否加载 |

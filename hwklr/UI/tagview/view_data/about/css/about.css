@@ -1,10 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-10-31 20:45
-  最后更新: 2026-11-03 21:55
+  最后更新: 2026-11-11 10:00
   文件名: about.css
-  主要用途: “关于”标签页专属样式：软件信息、插件元信息表、功能列表与使用声明。
-  文件版本: 3.0.0
+  主要用途: “关于”标签页专属样式：软件信息、插件元信息表、功能列表、交流群、发布页按钮与使用声明。
+  文件版本: 4.4.3
 */
 
 .tag-about .about-description {
@@ -90,6 +90,71 @@
 .tag-about .plugin-state.off {
   background: var(--panel-soft);
   color: var(--muted);
+}
+
+.tag-about .about-community-card,
+.tag-about .about-release-card {
+  margin-top: 18px;
+}
+
+.tag-about .about-community-text {
+  margin: 0 0 10px;
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.tag-about .about-qq {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 14px;
+}
+
+.tag-about .about-qq strong {
+  color: var(--accent-strong);
+  font-size: 16px;
+  letter-spacing: 0.5px;
+}
+
+.tag-about .about-release-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.tag-about .about-release-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 170px;
+  justify-content: center;
+}
+
+.tag-about .about-release-btn.github {
+  border-color: #17171c;
+  background: #17171c;
+  color: #ffffff;
+}
+
+.tag-about .about-release-btn.github:hover:not(:disabled) {
+  background: #2b2b34;
+}
+
+.tag-about .about-release-btn.gitcode {
+  border-color: #e5484d;
+  background: #e5484d;
+  color: #ffffff;
+}
+
+.tag-about .about-release-btn.gitcode:hover:not(:disabled) {
+  background: #cf3b40;
+}
+
+.tag-about .about-star {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
 }
 
 .tag-about .disclaimer-card {

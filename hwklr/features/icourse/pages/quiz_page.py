@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-10 13:00
+# 最后更新: 2026-11-11 10:00
 # 文件名: quiz_page.py
-# 主要用途: 测验页 Page Object：页面状态、就绪等待、题目读取、填答、成绩与提交确认。
-# 文件版本: 4.4.0
+# 主要用途: 测验页 Page Object：页面状态、就绪等待、题目读取、填答、成绩与提交确认；截图受留存数据开关控制。
+# 文件版本: 4.4.3
 """测验页 Page Object。"""
 from __future__ import annotations
 
@@ -15,7 +16,7 @@ from ..models import Task
 from .base import PageObject
 from .icourse163 import close_modals, page_block_reason
 
-__version__ = "4.4.0"
+__version__ = "4.4.3"
 __author__ = "Gary"
 __all__ = ["QUIZ_SELECTORS", "QuizPage", "READ_QUESTIONS_JS"]
 
@@ -169,16 +170,12 @@ class QuizPage(PageObject):
             self.ctx.check_cancel()
             blocked = page_block_reason(page)
             if blocked:
-                self.ctx.session.screenshot(
-                    page, f".artifacts/quiz-blocked-{task.test_id}.png"
-                )
+                self.screenshot(f".artifacts/quiz-blocked-{task.test_id}.png")
                 raise ActionUnavailable(f"{blocked}。当前 URL：{page.url}")
             state = self._page_state(page)
             reason = self._blocked_reason(state)
             if reason:
-                self.ctx.session.screenshot(
-                    page, f".artifacts/quiz-blocked-{task.test_id}.png"
-                )
+                self.screenshot(f".artifacts/quiz-blocked-{task.test_id}.png")
                 raise ActionUnavailable(
                     f"{reason}。当前 URL：{state.get('url') or page.url}"
                 )
@@ -190,9 +187,7 @@ class QuizPage(PageObject):
                 started = True
             page.wait_for_timeout(QUIZ_POLL_MS)
 
-        self.ctx.session.screenshot(
-            page, f".artifacts/quiz-noquestions-{task.test_id}.png"
-        )
+        self.screenshot(f".artifacts/quiz-noquestions-{task.test_id}.png")
         state = self._page_state(page)
         raise ActionUnavailable(
             "测验页面 30 秒内没有加载出题目（可能需要手动处理验证码/协议）。"

@@ -1,14 +1,17 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-10 23:15
+# 最后更新: 2026-11-11 10:00
 # 文件名: window.py
-# 主要用途: pywebview 核心窗口 WindowView：组合标签注册表、扩展运行时、本地 HTTP 服务与窗口生命周期。
-# 文件版本: 4.4.2
+# 主要用途: pywebview 核心窗口 WindowView：组合标签注册表、扩展运行时、本地 HTTP 服务、更新服务与窗口生命周期。
+# 文件版本: 4.4.3
 """核心窗口。"""
 from __future__ import annotations
 
 import json
 import logging
+import urllib.parse
+import webbrowser
 from pathlib import Path
 from typing import Any, Final
 
@@ -28,6 +31,7 @@ from hwklr.config import load_config
 from hwklr.contracts import ErrorCode
 from hwklr.features import extensions as extension_api
 from hwklr.features import failure
+from hwklr.update_service import UpdateService
 
 from .bridge import BridgeApi
 from .extension_runtime import ExtensionRuntime
@@ -35,7 +39,7 @@ from .registry import TagRegistry
 from .server import UiHttpServer
 from .tagview import TagView
 
-__version__ = "4.4.2"
+__version__ = "4.4.3"
 __author__ = "Gary"
 __all__ = ["WindowView"]
 
@@ -102,6 +106,8 @@ class WindowView:
             self._is_feature_enabled,
             self._set_feature_enabled,
         )
+        # 更新服务不注册为标签；前端通过 BridgeApi 查询/下载/安装。
+        self._update_service: UpdateService = UpdateService(self.request_exit)
 
         # 步骤 0：扫描 extension/ 并把可用扩展登记为运行期标签参数。
         self._extensions.load_installed()
@@ -330,6 +336,65 @@ class WindowView:
         meta["port"] = int(self._context.get("port", 0))
         return meta
 
+    # ---------------------------------------------------------------- 更新
+    def check_update(self) -> dict[str, Any]:
+        """启动后台版本检查并返回当前状态。"""
+        return self._update_service.check()
+
+    def update_state(self) -> dict[str, Any]:
+        """返回更新状态快照。"""
+        return self._update_service.snapshot()
+
+    def start_update_download(self) -> dict[str, Any]:
+        """开始下载更新资产并返回当前状态。"""
+        return self._update_service.download()
+
+    def install_update(self, restart: bool = True) -> dict[str, Any]:
+        """写入待安装标记；``restart`` 为真时替换并重启。"""
+        return self._update_service.install(restart=restart)
+
+    def request_exit(self) -> None:
+        """关闭 pywebview 窗口，让更新脚本可以替换程序。"""
+        window: webview.Window | None = self._current_window()
+        if window is None:
+            return
+        try:
+            window.destroy()
+        except Exception:
+            _LOGGER.exception("关闭窗口失败")
+
+    def open_external_url(self, url: str) -> dict[str, Any]:
+        """用系统默认浏览器打开受信任的发布页。
+
+        Args:
+            url: 目标地址。
+
+        Returns:
+            ``{"ok": bool, "error": str}``。
+        """
+        text: str = str(url or "").strip()
+        parsed: urllib.parse.ParseResult = urllib.parse.urlparse(text)
+        # 同时校验主机与仓库路径，避免 userinfo/子路径伪装成受信任地址。
+        allowed: bool = (
+            parsed.scheme == "https"
+            and (parsed.hostname or "").lower() in {"github.com", "gitcode.com"}
+            and any(
+                parsed.path.startswith(prefix)
+                for prefix in (
+                    "/GaryBeijing/HomeworkKiller4BJTU",
+                    "/weixin_68744568/HomeworkKiller4BJTU",
+                )
+            )
+        )
+        if not allowed:
+            return {"ok": False, "error": "不允许打开该链接"}
+        try:
+            webbrowser.open(text, new=2)
+        except Exception as exc:
+            _LOGGER.exception("打开外部链接失败")
+            return {"ok": False, "error": "打开链接失败：%s" % exc}
+        return {"ok": True, "error": ""}
+
     def bridge_call(
         self,
         tag: str,
@@ -464,5 +529,6 @@ class WindowView:
             self._window = None
             if not self._shutdown_done:
                 self._shutdown_done = True
+                self._update_service.shutdown()
                 self._registry.shutdown()
             self.stop_server()

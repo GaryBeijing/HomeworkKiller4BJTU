@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-10 13:00
+# 最后更新: 2026-11-11 10:00
 # 文件名: base.py
-# 主要用途: 动作层公共上下文：日志回调、取消检查、页面获取与安全截图；已移除终端确认与 rich 输出。
-# 文件版本: 4.3.2
+# 主要用途: 动作层公共上下文：日志回调、取消检查、页面获取与安全截图（受留存数据开关控制）。
+# 文件版本: 4.4.3
 """动作层公共设施。"""
 from __future__ import annotations
 
@@ -73,6 +73,8 @@ class ActionContext:
     interactive: bool = False
     log_callback: LogCallback | None = None
     cancel_event: threading.Event | None = field(default_factory=threading.Event)
+    # 关闭“留存数据”后不再写任何任务截图；已有文件不删除。
+    retain_data: bool = True
 
     @property
     def browser(self) -> BrowserContext:
@@ -173,8 +175,10 @@ def safe_screenshot(ctx: ActionContext, page: Any, name: str) -> str:
         name: 截图文件名（相对 ``artifacts/icourse/``）。
 
     Returns:
-        截图路径；失败时返回空字符串。
+        截图路径；关闭留存或失败时返回空字符串。
     """
+    if not bool(getattr(ctx, "retain_data", True)):
+        return ""
     try:
         return str(ctx.session.screenshot(page, name))
     except Exception as exc:

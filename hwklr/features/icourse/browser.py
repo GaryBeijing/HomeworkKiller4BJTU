@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
+# 最后更新: 2026-11-11 10:00
 # 文件名: browser.py
-# 主要用途: 读取 Edge/Chrome/Brave/Firefox 本机 Cookie 数据库。
-# 文件版本: 4.0.0
+# 主要用途: 读取 Edge/Chrome/Brave/Firefox 本机 Cookie 数据库；单个来源失败时继续尝试其他来源。
+# 文件版本: 4.4.3
 """从本机浏览器读取 icourse163.org 的登录 Cookie。
 
 只读取 host 为 icourse163.org 的 Cookie，不会读取其他站点。
@@ -331,8 +332,22 @@ def read_cookies(source: CookieSource) -> RequestsCookieJar:
     return _read_chromium(source)
 
 
-def iter_browser_cookies(browser: str | None = None) -> Iterator[tuple[CookieSource, RequestsCookieJar]]:
-    """逐个产出 (来源, CookieJar)。读取失败会抛 BrowserCookieError。"""
+def iter_browser_cookies(
+    browser: str | None = None,
+    errors: list[str] | None = None,
+) -> Iterator[tuple[CookieSource, RequestsCookieJar]]:
+    """逐个产出可用的 (来源, CookieJar)。
+
+    单个浏览器/配置读取失败（被占用、App-Bound 加密等）只记录原因并继续
+    尝试下一个来源，不再让第一个失败源终止整条导入链。
+
+    Args:
+        browser: ``auto`` 或浏览器名。
+        errors: 可选的失败原因收集列表。
+
+    Yields:
+        ``(来源, CookieJar)``。
+    """
     sources = find_cookie_sources(browser)
     if not sources:
         target = BROWSER_LABELS.get((browser or "").lower(), browser or "浏览器")
@@ -340,6 +355,11 @@ def iter_browser_cookies(browser: str | None = None) -> Iterator[tuple[CookieSou
             f"没有找到 {target} 的 Cookie 数据库。请确认已安装并在其中登录过 icourse163.org。"
         )
     for source in sources:
-        jar = read_cookies(source)
+        try:
+            jar = read_cookies(source)
+        except BrowserCookieError as exc:
+            if errors is not None:
+                errors.append("%s：%s" % (source.label, exc))
+            continue
         if jar:
             yield source, jar

@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
-# 最后更新: 2026-11-10 10:00
+# 最后更新: 2026-11-11 10:00
 # 文件名: settings.py
 # 主要用途: 设置分组框架（FeatureSettingsGroup）、“设置”标签页功能实现、第三方扩展加载/启用管理与数据库信息展示。
-# 文件版本: 4.4.0
+# 文件版本: 4.4.3
 """设置分组与设置页功能。
 
 V2 起，每个功能通过 :class:`FeatureSettingsGroup` 注册自己的设置板块：
@@ -28,7 +28,7 @@ from hwklr.config import load_config, update_config
 from hwklr.contracts import ActionSpec
 from hwklr.features.base import ApiResult, Feature, failure, success
 
-__version__ = "4.4.0"
+__version__ = "4.4.3"
 __author__ = "Gary"
 __all__ = ["FeatureSettingsGroup", "SettingsFeature", "SettingsFieldSpec"]
 
@@ -44,6 +44,9 @@ class SettingsFieldSpec:
 
     ``alert`` 标记高级/高风险设置；前端在该字段被修改并保存（含自动保存）时
     弹出二次确认，避免用户误改导致功能失效。
+
+    ``tooltip`` 非空时，设置页在名称末尾显示 ``(i)``，悬浮时展示
+    “名称：tooltip”气泡；``help`` 仍是字段下方的常驻说明。
     """
 
     key: str
@@ -51,6 +54,8 @@ class SettingsFieldSpec:
     kind: str = "text"
     placeholder: str = ""
     help: str = ""
+    # 设置项名称旁的 (i) 悬浮气泡内容；为空时不显示帮助按钮。
+    tooltip: str = ""
     options: tuple[tuple[str, str], ...] = ()
     secret: bool = False
     min_value: float | None = None
@@ -191,6 +196,7 @@ class FeatureSettingsGroup:
                 "value": values.get(spec.key, ""),
                 "placeholder": spec.placeholder,
                 "help": spec.help,
+                "tooltip": spec.tooltip,
                 "options": [
                     {"value": value, "label": label} for value, label in spec.options
                 ],
@@ -417,25 +423,44 @@ class SettingsFeature(Feature):
         """
 
         def values_getter() -> dict[str, Any]:
-            """读取用户名。"""
+            """读取通用设置。"""
             config: dict[str, Any] = load_config()
-            return {"username": str(config.get("username") or "")}
+            return {
+                "update_notice": bool(config.get("update_notice", True)),
+                "username": str(config.get("username") or ""),
+            }
 
         def exporter(values: dict[str, Any]) -> dict[str, Any]:
-            """导出用户名。"""
-            return {"username": str(values.get("username") or "")}
+            """导出通用设置。"""
+            return {
+                "update_notice": bool(values.get("update_notice", True)),
+                "username": str(values.get("username") or ""),
+            }
 
         return FeatureSettingsGroup(
             group_id="general",
             title="通用",
-            description="所有功能共用的账号信息。",
+            description="所有功能共用的账号信息与更新提示。",
             field_specs=(
+                SettingsFieldSpec(
+                    key="update_notice",
+                    label="更新提示",
+                    kind="switch",
+                    tooltip=(
+                        "启动时检查 GitHub 与 GitCode 的新版本；"
+                        "关闭后不再检查或提示更新。"
+                    ),
+                ),
                 SettingsFieldSpec(
                     key="username",
                     label="学号 / 账号",
                     kind="text",
                     placeholder="请输入学号或账号",
                     help="高铁纵横与 C 程序设计共用该用户名。",
+                    tooltip=(
+                        "高铁纵横与 C 程序设计共用的学号或账号，"
+                        "保存在本机 config.json。"
+                    ),
                 ),
                 SettingsFieldSpec(
                     key="extensions",
@@ -445,6 +470,10 @@ class SettingsFeature(Feature):
                     help=(
                         "从本地 zip 或 Git 仓库导入第三方功能扩展。导入成功后会显示"
                         "在下方列表中，可随时启用或停用。"
+                    ),
+                    tooltip=(
+                        "从本地 zip 或 Git 仓库导入第三方扩展；"
+                        "导入后在列表中启用或停用。"
                     ),
                 ),
             ),

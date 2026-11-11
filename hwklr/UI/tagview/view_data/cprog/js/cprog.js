@@ -1,10 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-11-01 00:01
-  最后更新: 2026-11-08 17:40
+  最后更新: 2026-11-11 10:30
   文件名: cprog.js
-  主要用途: “C程序设计”页面逻辑：课程/题目选择、启发模式分步弹窗、题解模式后台任务与结果弹窗（仅展示一次）。
-  文件版本: 4.1.0
+  主要用途: “C程序设计”页面逻辑：课程/题目选择、设置跳转、启发模式分步弹窗、题解模式后台任务与结果弹窗（仅展示一次）。
+  文件版本: 4.4.3
 */
 
 (function () {
@@ -50,6 +50,7 @@
    */
   function cacheElements() {
     els.accountBadge = document.getElementById('c-account-badge');
+    els.openSettings = document.getElementById('c-open-settings');
     els.accountStatus = document.getElementById('c-account-status');
     els.refreshCourses = document.getElementById('c-refresh-courses');
     els.courseList = document.getElementById('c-course-list');
@@ -1215,6 +1216,12 @@
    * @returns {void}
    */
   function bindEvents() {
+    if (els.openSettings) {
+      els.openSettings.addEventListener('click', () => {
+        // 跳到 C 程序设计对应的设置板块。
+        App.openSettings('c_programming');
+      });
+    }
     if (els.refreshCourses) {
       els.refreshCourses.addEventListener('click', async () => {
         if (state.busy || jobRunning()) {

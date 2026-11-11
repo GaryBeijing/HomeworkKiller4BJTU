@@ -1,10 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-10-31 20:45
-  最后更新: 2026-11-10 10:00
+  最后更新: 2026-11-11 10:00
   文件名: base.js
   主要用途: 前端公共逻辑：标签栏、设置锁定/跳转、资源加载、桥接调用、提示与加载状态。
-  文件版本: 4.4.0
+  文件版本: 4.4.3
 */
 
 (function () {
@@ -172,10 +172,11 @@
       label.textContent = text;
     }
     state.loadingVisible = Boolean(visible);
-    // 4.0.1：所有全局加载遮罩都提供“取消加载”。
+    // 4.4.3：更新下载等不可中止的操作可以隐藏“取消加载”。
+    const cancellable = !(options && options.cancellable === false);
     if (cancel) {
-      cancel.classList.toggle('hidden', !visible);
-      cancel.disabled = !visible;
+      cancel.classList.toggle('hidden', !visible || !cancellable);
+      cancel.disabled = !visible || !cancellable;
     }
     loading.classList.toggle('hidden', !visible);
   }

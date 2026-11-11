@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: PhiloK (Remaster by Gary)
 # 编写日期: 2026-10-31 20:45
-# 最后更新: 2026-11-10 10:00
+# 最后更新: 2026-11-11 10:00
 # 文件名: __init__.py
 # 主要用途: 实现“高铁纵横”功能：登录、考试列表、自动答题与提交，并注册密码与启用设置（题库通过 db 模块延迟加载）。
-# 文件版本: 4.4.0
+# 文件版本: 4.4.3
 """高铁纵横功能实现。
 
 原作者 PhiloK（``B1.0/``）；本文件是 Gary 的 Remaster 实现。
@@ -32,7 +32,7 @@ from hwklr.features.settings import FeatureSettingsGroup, SettingsFieldSpec
 from .bank import Bank
 from .client import HsrApiError, HsrClient
 
-__version__ = "4.4.0"
+__version__ = "4.4.3"
 __author__ = "PhiloK (Remaster by Gary)"
 __all__ = ["HSRFeature"]
 
@@ -185,6 +185,10 @@ class HSRFeature(Feature):
                     strip=False,
                     placeholder="请输入高铁答题系统密码",
                     help="只保存在本机 config.json。",
+                    tooltip=(
+                        "登录高铁答题系统使用的密码，仅保存在本机 "
+                        "config.json，不会上传。"
+                    ),
                 ),
             ),
             values_getter=values_getter,
