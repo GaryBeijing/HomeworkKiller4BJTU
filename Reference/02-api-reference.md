@@ -843,6 +843,7 @@ from hwklr.features.icourse import IcourseFeature
 - 4.4.2：`update_config` 全程持有可重入配置锁；`TagRegistry` 使用 leaf lock 保护读/安装，运行期插件按 `ViewParam.order` 排序；cprog 将网络/AI 移出 `_state_lock`；build 日志/阶段按 job_id 隔离；扩展扫描缓存；`CompletionJob` 统一到 `BackgroundJob`；新增 `Feature.shutdown()` 与窗口关闭清理。
 - 4.4.3：`SettingsFieldSpec` 新增 `tooltip`，设置页支持 `(i)` 气泡、功能组默认折叠与启用文字；每次进入设置页只展开“通用”和本次跳转来源；通用组新增 `update_notice`。icourse 新增 `retain_data`，`safe_screenshot` 关闭时不写文件；课程列表显式约束为滚动区域；登录清理失效端口文件、临时 profile 重试，Cookie 导入跳过失败来源；可见登录 CDP 使用 `suppress_origin=True`，修复新版 Edge/Chrome 的 403。
 - 4.5.0：自动更新重构为 `hwklr/updater/` 包：公共核心 `core.py`，平台安装器 `installers/windows.py` / `installers/macos.py`，`config.install_root()` / `data_root()` 分离。自动更新只接受 `hwklr4bjtu-<windows|macos>-<arm64|x64>-vX.Y.Z*.zip`，手动 7z SFX exe / 中文名不会匹配；下载校验 SHA-256（缺失时使用 `hwklr4bjtu-<platform>-<arch>-md5-vX.Y.Z*.txt`），解压到 `updates/staging/<v>` 后移动到 `versions/<v>`，通过 `current.json` 切换；旧版本保留、支持回滚。平台代码在打包时用 `--hidden-import`/`--exclude-module` 精确剔除；launcher/bootstrap 不改变业务协议。
+- 4.5.1：修复 Win11 + Edge 可见登录：Edge 启动器进程拉起真实浏览器后立即退出时，轮询 CDP 而不是立刻报“配置目录被占用”；保留临时 profile 重试。
 - 依赖：`playwright`（系统 Edge，不下载 Chromium）、`cryptography`（本机 Chromium Cookie 解密）、`websocket-client`（可见登录 CDP）。
 
 ---

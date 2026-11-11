@@ -6,7 +6,7 @@
 
 ![Python](https://img.shields.io/badge/Python-3.15.2-3776AB?logo=python&logoColor=white)
 ![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-0078D4?logo=windows&logoColor=white)
-![Version](https://img.shields.io/badge/Version-4.5.0-5B4BFF)
+![Version](https://img.shields.io/badge/Version-4.5.1-5B4BFF)
 ![GUI](https://img.shields.io/badge/GUI-pywebview%20%2B%20WebView2-2F3AB2)
 
 [功能特性](#-功能特性) · [界面预览](#-界面预览) · [快速开始](#-快速开始) · [使用指南](#-使用指南) · [构建与分发](#-构建与分发) · [插件开发](#-插件开发) · [常见问题](#-常见问题)
@@ -75,7 +75,7 @@ HomeworkKiller4BJTU（简称 HWKLR）是一个基于 **pywebview + 本地 HTTP �
 - **终止任务**：任务运行时底部“开始完成”变为红框红字白底“终止任务”，同时放大总任务进度条。
 - **题库**：内置 `hwklr/db/icourse_sources.json` 课程目录（422 门），从 GinsMooc 下载的课程/测验/题目缓存到程序同级的 `db/icourse<termId>.json`；默认 TTL 24 小时。
 - **留存数据**：设置中可关闭自动截图留存；关闭后讨论、测验等任务不再写入 `artifacts/icourse/`，已有截图不会被删除。
-- **登录容错**：窗口登录会清理失效的旧调试窗口并在必要时使用独立临时配置目录；本机 Cookie 导入会跳过不可用的浏览器配置继续尝试其他来源。
+- **登录容错**：窗口登录会清理失效的旧调试窗口并在必要时使用独立临时配置目录；Win11 Edge 的启动器进程拉起真实浏览器后立即退出时，继续轮询 CDP 而不是误报配置目录被占用；本机 Cookie 导入会跳过不可用的浏览器配置继续尝试其他来源。
 
 ### 构建与插件
 
@@ -476,7 +476,8 @@ HomeworkKiller4BJTU/
 
 | 版本 | 主要内容 |
 |---|---|
-| **4.5.0** | 跨平台自动更新重构：版本化安装 + `current.json` + 平台安装器；自动更新只取 zip，手动 7z SFX 包不参与；平台代码按目标平台收集/剔除；数据根目录与 launcher/bootstrap 分离 |
+| **4.5.1** | 修复 Win11 + Edge 可见登录：Edge 启动器进程拉起真实浏览器后立即退出时，不再误判为配置目录被占用。 |
+| 4.5.0 | 跨平台自动更新重构：版本化安装 + `current.json` + 平台安装器；自动更新只取 zip，手动 7z SFX 包不参与；平台代码按目标平台收集/剔除；数据根目录与 launcher/bootstrap 分离 |
 | 4.4.3 | 设置页 tooltip / 折叠 / 启用文字；通用“更新提示”与 GitHub+GitCode 自动更新；慕课课程列表滚动、留存数据开关、登录容错与 CDP 403 修复；关于页交流群与发布页入口 |
 | 4.4.2 | P0/P1 修正：config 原子写、TagRegistry 并发安全、cprog 锁纪律、构建日志隔离；config 板块派生、插件运行时 order、扩展扫描缓存；CompletionJob 统一 BackgroundJob 与窗口关闭 shutdown |
 | 4.4.1 | M6：cprog/build Job 迁移、WindowView 与 icourse.js 拆分、插件 manifest 扩展字段 |

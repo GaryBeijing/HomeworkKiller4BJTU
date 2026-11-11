@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-11 20:00
+# 最后更新: 2026-11-11 22:00
 # 文件名: browser_login.py
-# 主要用途: 通过可见 Edge + CDP 完成 icourse163 登录；失效窗口清理、临时配置目录重试、超时关闭与无 Origin 的 CDP 连接。
-# 文件版本: 4.4.3
+# 主要用途: 通过可见 Edge + CDP 完成 icourse163 登录；失效窗口清理、临时配置目录重试、启动器进程退出容错与无 Origin 的 CDP 连接。
+# 文件版本: 4.5.1
 """通过真实浏览器完成 icourse163 登录。
 
 流程与人工登录一致：打开首页 → 点击「登录/注册」→ 切到「邮箱登录」
@@ -29,7 +29,7 @@ from requests.cookies import RequestsCookieJar, create_cookie
 from .config import LOGIN_PAGE, browser_port_file, browser_profile_dir
 from .browser import TARGET_DOMAIN
 
-__version__ = "4.4.3"
+__version__ = "4.5.1"
 # 端口文件超过该时长视为上一次失败留下的旧窗口。
 _PORT_FILE_TTL_SECONDS: int = 15 * 60
 # CDP 启动等待上限（秒）。
@@ -345,20 +345,28 @@ class BrowserLogin:
         )
 
         version = None
+        exit_seen_at: float | None = None
         deadline: float = time.time() + _CDP_START_TIMEOUT
         while time.time() < deadline:
-            time.sleep(0.5)
-            if self.proc.poll() is not None:
-                self.proc = None
-                self._discard_port_file()
-                raise BrowserLoginError(
-                    "浏览器启动后立即退出。可能已存在使用同一配置目录的窗口。"
-                )
             version = _cdp_version(port)
             if version:
                 break
+            # Edge 在 Windows 上常用一个启动器进程拉起真正的浏览器进程后
+            # 立即退出；不能把启动器退出等同于浏览器启动失败。
+            if self.proc.poll() is not None:
+                if exit_seen_at is None:
+                    exit_seen_at = time.time()
+                elif time.time() - exit_seen_at > 8:
+                    break
+            else:
+                exit_seen_at = None
+            time.sleep(0.5)
         if not version:
             self._cleanup_failed_process()
+            if exit_seen_at is not None:
+                raise BrowserLoginError(
+                    "浏览器启动后立即退出。可能已存在使用同一配置目录的窗口。"
+                )
             raise BrowserLoginError("无法连接到浏览器调试端口，请重试。")
 
         browser_port_file().parent.mkdir(parents=True, exist_ok=True)
