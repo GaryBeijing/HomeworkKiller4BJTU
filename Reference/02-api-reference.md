@@ -145,8 +145,9 @@ from hwklr.config import app_root, config_path, load_config, save_config, update
 
 | 符号 | 签名 | 行为 |
 |---|---|---|
-| `app_root` | `() -> Path` | 源码运行 → 仓库根；V3 `HwklrVenv` → 虚拟环境根；`sys.frozen` → `Path(sys.executable).parent`。`db/` 与 `config.json` 都以它为根 |
-| `config_path` | `() -> Path` | `app_root()/config.json` |
+| `install_root` | `() -> Path` | 安装根目录：`HWKLR_INSTALL_ROOT` > `launcher/`/`versions/<v>/` 上溯 > exe 同级 > 源码项目根 |
+| `data_root` / `app_root` | `() -> Path` | 用户数据根：`HWKLR_DATA_ROOT` > `--data-root` > macOS `~/Library/Application Support/HomeworkKiller4BJTU` > 安装根目录 |
+| `config_path` | `() -> Path` | `data_root()/config.json` |
 | `load_config` | `() -> dict` | 文件不存在 → 写入默认值并返回；文件损坏/非对象 → 记 warning 并返回默认值（**不覆盖损坏文件**）；成功后 `_deep_merge(DEFAULT_CONFIG, loaded)` 再 `_migrate_config` |
 | `save_config` | `(config: dict) -> None` | 原子写：先写 `config.json.tmp` 再 `replace`；全程持 `_CONFIG_LOCK`（RLock）。可能抛 `OSError` |
 | `update_config` | `(patch: dict) -> dict` | 全程持 RLock 执行 `load → _deep_merge(current, patch) → save`，返回更新后的完整配置 |
@@ -674,10 +675,10 @@ WindowView(title: str = APP_TITLE, width: int | None = None, height: int | None 
 | `start_server` | `() -> int` | 幂等；返回实际端口并写入 `context["port"]` |
 | `stop_server` | `() -> None` | 端口复位为 0 |
 | `activate_tagview` | `(tagview: TagView) -> None` | 用**窗口内注册的实例**替换入参；`previous.stop()` → `start()` → `window.evaluate_js("window.App && window.App.activate(<name>)")` |
-| `check_update` / `update_state` / `start_update_download` / `install_update` | `(…) -> dict` | 4.4.3 起委托 `hwklr.update_service.UpdateService`；仅供 `BridgeApi` 与前端更新弹窗使用 |
+| `check_update` / `update_state` / `start_update_download` / `install_update` | `(…) -> dict` | 4.5.0 起委托 `hwklr.updater.UpdateService`（版本化安装）；仅供 `BridgeApi` 与前端更新弹窗使用 |
 | `request_exit` | `() -> None` | 安装更新后关闭窗口，让解压脚本继续 |
 | `open_external_url` | `(url: str) -> dict` | 只允许 GitHub/GitCode 项目发布页，使用系统默认浏览器打开 |
-| `run` | `() -> None` | 必须主线程：`start_server` → `webview.create_window(..., js_api=BridgeApi(self))` → 绑定 `events.loaded` → `webview.start(debug=ui.debug, icon=APP_ICON or None)`；`finally` 里先调用 `update_service.shutdown()` 与 `TagRegistry.shutdown()`，再停服务 |
+| `run` | `() -> None` | 必须主线程：`start_server` → `webview.create_window(..., js_api=BridgeApi(self))` → 绑定 `events.loaded` → `webview.start(debug=ui.debug, icon=APP_ICON or None)`；`finally` 里先调用 `updater.shutdown()` 与 `TagRegistry.shutdown()`，再停服务 |
 
 窗口参数（写死，除尺寸外不来自配置）：`resizable=True`、`background_color="#2f3ab2"`、`text_select=True`、`min_size=(min_width, min_height)`、`url="http://127.0.0.1:<port>/"`。
 
@@ -688,10 +689,10 @@ BridgeApi(window_view: WindowView)
     call(tag: str, method: str, params: dict|None = None) -> dict   # → window_view.bridge_call
     get_tags() -> list[dict]                                        # → window_view.tags_payload()
     get_meta() -> dict                                              # → window_view.meta_payload()
-    check_update() -> dict                                          # 4.4.3：启动版本检查
-    get_update_state() -> dict                                      # 4.4.3：轮询更新状态
-    start_update_download() -> dict                                 # 4.4.3：后台下载 release
-    install_update(restart: bool = True) -> dict                    # 4.4.3：写 pending / 解压重启
+    check_update() -> dict                                          # 4.5.0：启动版本检查
+    get_update_state() -> dict                                      # 4.5.0：轮询更新状态
+    start_update_download() -> dict                                 # 4.5.0：下载/校验/解压到 staging
+    install_update(restart: bool = True) -> dict                    # 4.5.0：切换 versions/<v> 并重启
     open_url(url: str) -> dict                                      # 4.4.3：受信任发布页
 ```
 
@@ -840,7 +841,8 @@ from hwklr.features.icourse import IcourseFeature
 - 4.4.0：新增 `hwklr/contracts.py`、`hwklr/feature_specs.py`、`features/jobs.py`、`icourse/tasks.py`、`icourse/state.py` 与 Document/Discussion/Quiz Page Object；`ApiResult` 增加 `code`，`Feature.dispatch` 支持 ActionSpec；DB `load` 锁外 fetch + single-flight + `mutate`。
 - 4.4.1：`BackgroundJob` 增加 `mutate_if`/`event_if` 与自定义 job id；cprog 题解、程序构建、插件构建全部改用统一 job；`UI` 拆为 `bridge/registry/extension_runtime/window`（`from hwklr.UI import WindowView` 不变）；icourse 前端拆为八个 `window.Icourse` 脚本，`FeatureAssetSpec` 按序加载；插件 `meta.json` 新增可选 `schema/id/order/ui/assets/actions/config/db/packaging`，`config` 默认值进入 `load_config`，`db` provider 注册到 `DbManager`。
 - 4.4.2：`update_config` 全程持有可重入配置锁；`TagRegistry` 使用 leaf lock 保护读/安装，运行期插件按 `ViewParam.order` 排序；cprog 将网络/AI 移出 `_state_lock`；build 日志/阶段按 job_id 隔离；扩展扫描缓存；`CompletionJob` 统一到 `BackgroundJob`；新增 `Feature.shutdown()` 与窗口关闭清理。
-- 4.4.3：`SettingsFieldSpec` 新增 `tooltip`，设置页支持 `(i)` 气泡、功能组默认折叠与启用文字；每次进入设置页只展开“通用”和本次跳转来源；通用组新增 `update_notice`。新增 `hwklr/update_service.py` 与 `BridgeApi` 更新/外链方法，启动时并行请求 GitHub/GitCode latest release，下载后写入 `updates/pending.json`；单文件 `.exe` 一律按 7z 自解压包处理，PowerShell 脚本优先用本机 `7z.exe` 解压，否则执行 SFX，再复制到程序目录。启动/安装前用 `probe.ps1` 探测 PowerShell 脚本执行能力，被策略禁用时回退到 `apply_update.cmd`；两者都不可用则不退出程序，pending 的 `attempts` 连续 3 次失败后停止自动重试。icourse 新增 `retain_data`，`safe_screenshot` 关闭时不写文件；课程列表显式约束为滚动区域；登录清理失效端口文件、临时 profile 重试，Cookie 导入跳过失败来源；可见登录 CDP 使用 `suppress_origin=True`，修复新版 Edge/Chrome 的 403。
+- 4.4.3：`SettingsFieldSpec` 新增 `tooltip`，设置页支持 `(i)` 气泡、功能组默认折叠与启用文字；每次进入设置页只展开“通用”和本次跳转来源；通用组新增 `update_notice`。icourse 新增 `retain_data`，`safe_screenshot` 关闭时不写文件；课程列表显式约束为滚动区域；登录清理失效端口文件、临时 profile 重试，Cookie 导入跳过失败来源；可见登录 CDP 使用 `suppress_origin=True`，修复新版 Edge/Chrome 的 403。
+- 4.5.0：自动更新重构为 `hwklr/updater/` 包：公共核心 `core.py`，平台安装器 `installers/windows.py` / `installers/macos.py`，`config.install_root()` / `data_root()` 分离。自动更新只接受 `hwklr4bjtu-<windows|macos>-<arm64|x64>-vX.Y.Z*.zip`，手动 7z SFX exe / 中文名不会匹配；下载校验 SHA-256（缺失时使用 `hwklr4bjtu-<platform>-<arch>-md5-vX.Y.Z*.txt`），解压到 `updates/staging/<v>` 后移动到 `versions/<v>`，通过 `current.json` 切换；旧版本保留、支持回滚。平台代码在打包时用 `--hidden-import`/`--exclude-module` 精确剔除；launcher/bootstrap 不改变业务协议。
 - 依赖：`playwright`（系统 Edge，不下载 Chromium）、`cryptography`（本机 Chromium Cookie 解密）、`websocket-client`（可见登录 CDP）。
 
 ---
@@ -967,7 +969,7 @@ App.registerPage('<标签名>', { init, onActivate, onDeactivate, highlightGroup
 | 键 | 类型 | 默认 | 读取方 | 说明 |
 |---|---|---|---|---|
 | `username` | str | `""` | 设置页 general、hsr、cprog | 学号/账号，两个功能共用 |
-| `update_notice` | bool | `true` | settings general、update_service | 启动时是否检查并提示新版本 |
+| `update_notice` | bool | `true` | settings general、updater | 启动时是否检查并提示新版本 |
 | `icourse.retain_data` | bool | `true` | icourse | 是否自动保留讨论/测验等任务截图 |
 | `hsr.password` | str | `""` | hsr | 高铁系统密码（明文） |
 | `hsr.enabled` | bool | `true` | hsr/WindowView | 高铁纵横标签是否加载 |

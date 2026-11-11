@@ -1,9 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-11-11 10:00
+  最后更新: 2026-11-11 21:00
   文件名: update.js
-  主要用途: 启动时检查新版本，展示 Release note，下载、预备并在用户确认后安装更新。
-  文件版本: 4.4.3
+  主要用途: 启动时检查新版本，展示 Release note，下载、准备并在用户确认后切换到版本化安装。
+  文件版本: 4.5.0
 */
 
 (function () {
@@ -145,7 +146,7 @@
         node(
           'p',
           'update-text',
-          '更新包已下载完成，但当前运行方式不支持自动替换程序；'
+          '更新包已下载完成，但当前运行方式不支持自动安装；'
             + '请手动使用下载的更新包。'
         )
       );
@@ -262,12 +263,15 @@
       return;
     }
     const status = String(state.status || 'idle');
-    if (status === 'checking' || status === 'downloading') {
+    if (status === 'checking' || status === 'downloading' || status === 'preparing') {
       schedulePoll();
     }
     if (status === 'downloading') {
       const progress = Number(state.progress || 0);
       App.setLoading(true, `正在下载更新… ${progress}%`, { cancellable: false });
+    }
+    if (status === 'preparing') {
+      App.setLoading(true, '正在校验并准备更新…', { cancellable: false });
     }
     if (status === 'available' && lastStatus !== 'available') {
       showAvailable(state);

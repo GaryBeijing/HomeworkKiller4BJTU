@@ -93,7 +93,7 @@
 
 #### 1.7 退出路径
 
-`WindowView.run()` 的 `finally` 先调用 `update_service.shutdown()`（4.4.3 起取消更新检查/下载）与 `TagRegistry.shutdown()`（4.4.2 起各 Feature 可有界取消/join 后台任务），再 `self._window = None`、`stop_server()`。构建线程仍为 daemon，无法中断正在执行的 PyInstaller，构建 `.work` 仍可能残留（见 §13）。
+`WindowView.run()` 的 `finally` 先调用 `updater.shutdown()`（4.5.0 起取消更新检查/下载）与 `TagRegistry.shutdown()`（4.4.2 起各 Feature 可有界取消/join 后台任务），再 `self._window = None`、`stop_server()`。构建线程仍为 daemon，无法中断正在执行的 PyInstaller，构建 `.work` 仍可能残留（见 §13）。
 
 ---
 
@@ -840,7 +840,8 @@ QuizAction / PopupQuiz                 ← 按题干/选项文本匹配答案
 - 4.4.0：新增类型化契约与 FeatureSpec registry；`DbProvider.load` 锁外 fetch + per-id single-flight，新增 `mutate` 原子写；新增 BackgroundJob/JobStore；icourse 使用 TaskHandler registry、CourseState 与 Document/Discussion/Quiz Page Object。
 - 4.4.1：BackgroundJob 覆盖 cprog/build/plugin-build，新增 `mutate_if`/`event_if` 与 job id 工厂；`WindowView` 拆为 `bridge.py`/`registry.py`/`extension_runtime.py`/`window.py`，门面 API 不变；`icourse.js` 拆为 8 个 `window.Icourse` 命名空间脚本；插件 manifest 以 `parse_plugin_spec()` 解析可选字段，资源路径禁止越出插件目录，未知键在打包时原样保留。
 - 4.4.2：配置写入使用 RLock 覆盖读改写；`TagRegistry.payload` 锁内取快照、锁外读 Feature；TagRegistry 以稳定 `ViewParam.order` 排序；扩展扫描增加目录签名缓存；cprog 使用 `_action_lock` 串行动作、`_state_lock` 只保护字段；CompletionJob 复用 BackgroundJob，`Feature.shutdown()` 在窗口关闭时取消/join 后台任务。
-- 4.4.3：设置页新增 `SettingsFieldSpec.tooltip`、`(i)` 气泡、功能组默认折叠与“启用/停用”文字；通用组新增 `update_notice`。新增 `hwklr/update_service.py`：启动时双源竞速 latest release，后台下载并校验摘要，`pending.json` + PowerShell 脚本在退出后解压 7z 自解压 exe 或 zip，启动时应用 pending。icourse 新增 `retain_data` 门控 `safe_screenshot`，课程列表显式约束滚动；登录清理失效 `edge-port.txt`、临时 profile 重试，Cookie 导入跳过失败来源。
+- 4.4.3：设置页新增 `SettingsFieldSpec.tooltip`、`(i)` 气泡、功能组默认折叠与“启用/停用”文字；通用组新增 `update_notice`。icourse 新增 `retain_data` 门控 `safe_screenshot`，课程列表显式约束滚动；登录清理失效 `edge-port.txt`、临时 profile 重试，Cookie 导入跳过失败来源。
+- 4.5.0：新增 `hwklr/updater/` 跨平台更新器。`core.py` 负责双源检查、正则资产筛选、SHA-256/md5 校验、ZIP staging；`installers/windows.py` 与 `installers/macos.py` 分别实现解压、校验、`versions/<v>` 激活、`current.json` 与重启。主程序启动时若 `current.json` 指向其他版本，会先拉起该版本并退出（launcher/bootstrap）；不再覆盖运行中的程序，也不需要 7zr/robocopy/PowerShell 更新脚本。`config.install_root()` 与 `data_root()` 分离；打包时按目标平台 hidden-import/exclude 安装器与 launcher。
 
 ---
 
@@ -1697,7 +1698,7 @@ B: save {…, x:1, a:true, b:true}      ← 若 B 的 patch 含 a 之外的新�
 #### 16.6 不受保护的面
 
 - **无代码签名**：Windows 首次运行会弹 SmartScreen。
-- **自动更新信任链**：只访问 GitHub/GitCode 公开 release API 与受信任的下载域名；下载使用 HTTPS，若 release 提供 `sha256:` 摘要则校验；单文件 `.exe` 一律视为 7z 自解压包，安装脚本优先用本机 `7z.exe` 解压，否则执行 SFX 自身；解压时跳过 `config.json/auth/db/extension/documents/artifacts/updates`。安装前先用 `probe.ps1` 验证 PowerShell 能通过 `-File` 执行脚本；被组策略/AppLocker 禁用时回退到 `apply_update.cmd`，两种脚本都不可用则不退出程序。`pending.json` 的 `attempts` 连续 3 次失败后停止自动重试，避免启动循环。源码运行禁用自动安装。任何新增加密/签名方案前，应把此段视为待加固项。
+- **自动更新信任链**：只访问 GitHub/GitCode 公开 release API 与受信任的下载域名；自动更新只接受 `hwklr4bjtu-<platform>-<arch>-vX.Y.Z*.zip`，手动 7z SFX exe/中文名不会匹配。下载使用 HTTPS，优先校验 `SHA256SUMS`/release `sha256`，缺失时使用 `hwklr4bjtu-<platform>-<arch>-md5-vX.Y.Z*.txt`；解压到 `updates/staging` 并校验 `BUILD_INFO.json` 的 version/platform/arch/entry 后才移动到 `versions/<v>`。更新不覆盖运行中的程序，旧版本保留；源码运行禁用安装。任何新增签名/公证方案前，应把此段视为待加固项。
 - **无遥测**：不外发任何埋点数据。
 - **子进程无沙箱**：PyInstaller / `python -m venv` 以当前用户权限执行。
 - **`base_url` 由用户控制**：可指向任意地址（包括 `http://localhost`），等价于用户自愿发起 SSRF；这是配置能力的一部分，不做限制。

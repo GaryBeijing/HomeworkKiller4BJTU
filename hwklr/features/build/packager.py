@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-01 12:40
-# 最后更新: 2026-11-10 10:30
+# 最后更新: 2026-11-11 21:00
 # 文件名: packager.py
-# 主要用途: 构建功能的打包实现：图标/名称/四段版本资源、源码裁剪、V3 源码归档、说明文件分发、数据库 provider 打包、插件模板分发、PyInstaller 与 python-embed zip。
-# 文件版本: 4.4.0
+# 主要用途: 构建功能的打包实现：图标/名称/四段版本资源、源码裁剪、V3 源码归档、说明文件分发、数据库 provider 打包、插件模板分发、PyInstaller 与 python-embed zip、平台安装器收集/剔除。
+# 文件版本: 4.5.0
 """构建打包实现。
 
 构建过程不依赖 UI，可独立调用 :func:`build_package`：
@@ -25,6 +25,7 @@ import importlib.metadata
 import io
 import json
 import os
+import platform as platform_module
 import re
 import shutil
 import subprocess
@@ -39,7 +40,7 @@ from typing import Any, Callable, Final, NamedTuple
 
 from hwklr.features.manifest import OFFICIAL_FEATURES, FeatureSpec
 
-__version__ = "4.4.0"
+__version__ = "4.5.0"
 __author__ = "Gary"
 __all__ = [
     "APP_EXE_NAME",
@@ -449,6 +450,26 @@ def _build_executable(
     for spec in included:
         cmd.extend(["--hidden-import", spec.module])
     included_names: set[str] = {spec.name for spec in included}
+    # #更新器：只收集目标平台的安装器，排除另一平台与两个 launcher 入口。
+    target_platform: str = (
+        "windows"
+        if sys.platform == "win32"
+        else "macos"
+        if sys.platform == "darwin"
+        else ""
+    )
+    if target_platform == "windows":
+        cmd.extend(["--hidden-import", "hwklr.updater.installers.windows"])
+        cmd.extend(["--exclude-module", "hwklr.updater.installers.macos"])
+        cmd.extend(["--exclude-module", "hwklr.updater.launcher_macos"])
+        cmd.extend(["--exclude-module", "hwklr.updater.launcher_windows"])
+    elif target_platform == "macos":
+        cmd.extend(["--hidden-import", "hwklr.updater.installers.macos"])
+        cmd.extend(["--exclude-module", "hwklr.updater.installers.windows"])
+        cmd.extend(["--exclude-module", "hwklr.updater.launcher_windows"])
+        cmd.extend(["--exclude-module", "hwklr.updater.launcher_macos"])
+        for module in ("winreg", "msvcrt", "win32api", "win32con"):
+            cmd.extend(["--exclude-module", module])
     for spec in OFFICIAL_FEATURES:
         if spec.name not in included_names:
             cmd.extend(["--exclude-module", spec.module])
@@ -760,12 +781,33 @@ def _write_manifest(
         display_name: 程序显示名称。
         exe_name: 可执行文件名（不含扩展名）。
     """
+    target_platform: str = (
+        "windows"
+        if sys.platform == "win32"
+        else "macos"
+        if sys.platform == "darwin"
+        else sys.platform
+    )
+    machine: str = platform_module.machine().lower()
+    target_arch: str = (
+        "x64"
+        if machine in ("amd64", "x86_64", "x64")
+        else "arm64"
+        if machine in ("arm64", "aarch64")
+        else machine
+    )
+    entry_name: str = (
+        "%s.exe" % exe_name if target_platform == "windows" else "%s.app" % exe_name
+    )
     data: dict[str, Any] = {
         "app": display_name,
         "exe_name": exe_name,
         "version": version,
         "dev_build": bool(dev_build),
         "format": build_format,
+        "platform": target_platform,
+        "arch": target_arch,
+        "entry": entry_name,
         "features": [spec.name for spec in included],
         "built_at": time.strftime("%Y-%m-%d %H:%M:%S"),
     }

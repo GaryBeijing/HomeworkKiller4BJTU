@@ -6,7 +6,7 @@
 
 ![Python](https://img.shields.io/badge/Python-3.15.2-3776AB?logo=python&logoColor=white)
 ![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-0078D4?logo=windows&logoColor=white)
-![Version](https://img.shields.io/badge/Version-4.4.3-5B4BFF)
+![Version](https://img.shields.io/badge/Version-4.5.0-5B4BFF)
 ![GUI](https://img.shields.io/badge/GUI-pywebview%20%2B%20WebView2-2F3AB2)
 
 [功能特性](#-功能特性) · [界面预览](#-界面预览) · [快速开始](#-快速开始) · [使用指南](#-使用指南) · [构建与分发](#-构建与分发) · [插件开发](#-插件开发) · [常见问题](#-常见问题)
@@ -96,10 +96,10 @@ HomeworkKiller4BJTU（简称 HWKLR）是一个基于 **pywebview + 本地 HTTP �
 ### 自动更新
 
 - “设置 → 通用”中的“更新提示”默认开启；每次启动同时请求 GitHub 与 GitCode 的 latest release，首个成功响应生效并终止另一方请求。
-- 发现新版本时显示发布日志与“现在安装！/ 观望中...”选择；下载完成后可“现在安装并重启软件”或“稍后安装”，后者在下次启动时由独立脚本解压更新包。
-- 发行版的单文件 `.exe` 是 7z 自解压包（推荐用 `7zCon.sfx` 控制台模块生成）；更新脚本优先调用本机 `7z.exe` 解压，必要时执行 SFX 自身，再把文件复制到程序目录。
-- 更新前会探测 PowerShell 能否执行脚本；被组策略/AppLocker 等禁用时自动回退到 `apply_update.cmd`（cmd.exe）。两种脚本都不可用时不会退出程序，而是提示手动安装；启动阶段的 pending 连续失败 3 次后停止自动重试，保证程序仍可正常打开。
-- 下载仅允许 HTTPS 与受信任的 release 域名，并在提供摘要时校验 sha256；安装脚本会保留 `config.json`、`auth/`、`db/`、`extension/` 等用户数据。源码运行只下载不安装。
+- 自动更新只筛选 `hwklr4bjtu-<windows|macos>-<arm64|x64>-vX.Y.Z*.zip`；手动安装包（Windows 为 7z 自解压 exe，GitCode 可能使用中文名）不会被程序误选。
+- 新版本解压到 `versions/<版本>/`，通过 `current.json` 切换；不覆盖正在运行的程序，旧版本保留，失败可回滚。
+- Windows 主程序同时承担轻量 bootstrap：若 `current.json` 指向另一个已安装版本，启动时先拉起该版本并退出。稳定的独立 launcher 使用 onedir 构建，不使用 onefile（降低杀毒误报）。
+- 下载仅允许 HTTPS 与受信任的 release 域名；优先校验 `SHA256SUMS`/release `sha256` 摘要，SHA-256 缺失时使用匹配的 `hwklr4bjtu-<platform>-<arch>-md5-vX.Y.Z*.txt`。源码运行只下载不安装。
 
 ---
 
@@ -300,6 +300,8 @@ __all__ = ["MyPluginFeature"]
 - 默认导出目录名：`{程序名}-v{版本号}`。
 - 使用 PyInstaller 目录版，无控制台、启用字节码优化。
 - 不包含 `config.json`、参考文档、开发资料与插件模板，尽量减小包体。
+- 自动更新资产必须是 ZIP，命名满足 `hwklr4bjtu-<windows|macos>-<arm64|x64>-vX.Y.Z*.zip`；包内根目录需要 `BUILD_INFO.json`（含 version/platform/arch/entry）与入口文件。
+- 推荐安装布局：根目录放 launcher/或主程序 bootstrap，实际程序位于 `versions/<v>/`，`current.json` 指向当前版本；手动更新包（Windows 7z 自解压 exe、GitCode 中文名）不要使用自动更新 ZIP 的命名。
 
 ### 开发构建
 
@@ -474,7 +476,8 @@ HomeworkKiller4BJTU/
 
 | 版本 | 主要内容 |
 |---|---|
-| **4.4.3** | 设置页 tooltip / 折叠 / 启用文字；通用“更新提示”与 GitHub+GitCode 自动更新（7z SFX 解压安装）；慕课课程列表滚动、留存数据开关、登录容错与 CDP 403 修复；关于页交流群与发布页入口 |
+| **4.5.0** | 跨平台自动更新重构：版本化安装 + `current.json` + 平台安装器；自动更新只取 zip，手动 7z SFX 包不参与；平台代码按目标平台收集/剔除；数据根目录与 launcher/bootstrap 分离 |
+| 4.4.3 | 设置页 tooltip / 折叠 / 启用文字；通用“更新提示”与 GitHub+GitCode 自动更新；慕课课程列表滚动、留存数据开关、登录容错与 CDP 403 修复；关于页交流群与发布页入口 |
 | 4.4.2 | P0/P1 修正：config 原子写、TagRegistry 并发安全、cprog 锁纪律、构建日志隔离；config 板块派生、插件运行时 order、扩展扫描缓存；CompletionJob 统一 BackgroundJob 与窗口关闭 shutdown |
 | 4.4.1 | M6：cprog/build Job 迁移、WindowView 与 icourse.js 拆分、插件 manifest 扩展字段 |
 | 4.4.0 | 架构重构：契约、FeatureSpec registry、DB 并发、TaskHandler/CourseState/Page Object |

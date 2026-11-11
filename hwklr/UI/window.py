@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-10 23:15
-# 最后更新: 2026-11-11 10:00
+# 最后更新: 2026-11-11 21:00
 # 文件名: window.py
-# 主要用途: pywebview 核心窗口 WindowView：组合标签注册表、扩展运行时、本地 HTTP 服务、更新服务与窗口生命周期。
-# 文件版本: 4.4.3
+# 主要用途: pywebview 核心窗口 WindowView：组合标签注册表、扩展运行时、本地 HTTP 服务、跨平台更新服务与窗口生命周期。
+# 文件版本: 4.5.0
 """核心窗口。"""
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ from hwklr.config import load_config
 from hwklr.contracts import ErrorCode
 from hwklr.features import extensions as extension_api
 from hwklr.features import failure
-from hwklr.update_service import UpdateService
+from hwklr.updater import UpdateService
 
 from .bridge import BridgeApi
 from .extension_runtime import ExtensionRuntime
@@ -39,7 +39,7 @@ from .registry import TagRegistry
 from .server import UiHttpServer
 from .tagview import TagView
 
-__version__ = "4.4.3"
+__version__ = "4.5.0"
 __author__ = "Gary"
 __all__ = ["WindowView"]
 
