@@ -1,0 +1,192 @@
+/*
+  作者: Gary
+  编写日期: 2026-11-12 13:00
+  最后更新: 2026-11-12 13:00
+  文件名: welcome.css
+  主要用途: 首次启动/版本升级欢迎弹窗：协议展示、更新说明与分页按钮样式。
+  文件版本: 4.6.1
+*/
+
+/* 弹窗需要压过加载遮罩与普通设置弹窗，确保首次进入时始终可读。 */
+.welcome-backdrop {
+  z-index: 95;
+}
+
+.welcome-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(1040px, 80vw);
+  height: min(780px, 80vh);
+  padding: 28px 34px 24px;
+  overflow: hidden;
+  background: var(--panel);
+}
+
+.welcome-header {
+  flex: 0 0 auto;
+}
+
+.welcome-title {
+  margin: 0;
+  color: var(--ink);
+  font-size: clamp(24px, 2.6vw, 34px);
+  font-weight: 700;
+  letter-spacing: 0.4px;
+}
+
+.welcome-subtitle {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  letter-spacing: 0.4px;
+}
+
+.welcome-divider {
+  flex: 0 0 auto;
+  width: 100%;
+  margin: 18px 0;
+  border: none;
+  border-top: 1px solid var(--panel-border);
+}
+
+.welcome-pages {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.welcome-page {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  animation: welcome-page-in var(--transition-duration, 0.19s) ease-out;
+}
+
+@keyframes welcome-page-in {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.welcome-page.hidden {
+  display: none !important;
+}
+
+.welcome-prompt {
+  flex: 0 0 auto;
+  margin: 0 0 14px;
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.welcome-prompt strong {
+  color: var(--accent-strong);
+  font-weight: 600;
+}
+
+/* 协议与更新说明共用的滚动区；更新页需要与弹窗背景一致且无边框。 */
+.welcome-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 18px 20px;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-md);
+  background: var(--panel-soft);
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.8;
+  overscroll-behavior: contain;
+}
+
+.welcome-agreement-text {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.welcome-changelog {
+  border: none;
+  background: var(--panel);
+  padding: 6px 4px 6px 8px;
+}
+
+.welcome-changelog-group + .welcome-changelog-group {
+  margin-top: 18px;
+}
+
+.welcome-changelog-title {
+  margin-bottom: 6px;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.welcome-changelog-list {
+  margin: 0;
+  padding-left: 14px;
+  list-style: none;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.9;
+}
+
+.welcome-changelog-list li {
+  position: relative;
+  padding-left: 14px;
+}
+
+/* 需求约定更新条目使用“-”前缀，而不是浏览器默认圆点。 */
+.welcome-changelog-list li::before {
+  content: "-";
+  position: absolute;
+  left: 0;
+  color: var(--muted);
+}
+
+.welcome-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.welcome-footer {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  padding-top: 18px;
+}
+
+.welcome-footer .btn {
+  min-width: 170px;
+  padding: 11px 22px;
+  font-size: 14px;
+}
+
+@media (max-width: 760px) {
+  .welcome-modal {
+    width: 92vw;
+    height: 88vh;
+    padding: 22px 20px 18px;
+  }
+
+  .welcome-footer .btn {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .welcome-page {
+    animation: none;
+  }
+}

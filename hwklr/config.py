@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
-# 最后更新: 2026-11-11 21:00
+# 最后更新: 2026-11-12 13:40
 # 文件名: config.py
-# 主要用途: 统一读写 config.json；按设置分组存放账号、密码、AI、构建与第三方扩展配置，并解析安装根目录与用户数据根目录。
-# 文件版本: 4.5.0
+# 主要用途: 统一读写 config.json；按设置分组存放账号、密码、AI、构建、欢迎弹窗与第三方扩展配置，并解析安装根目录与用户数据根目录。
+# 文件版本: 4.6.1
 """项目配置读写。
 
 配置文件固定位于**项目根目录**（``main.py`` 同级）的 ``config.json``。
@@ -26,7 +26,7 @@ from hwklr.feature_specs import (
     feature_config_defaults,
 )
 
-__version__ = "4.5.0"
+__version__ = "4.6.1"
 __all__ = [
     "DEFAULT_CONFIG",
     "app_root",
@@ -86,6 +86,12 @@ CORE_DEFAULTS: Final[dict[str, Any]] = {
         "min_width": 900,
         "min_height": 620,
         "debug": False,
+        # 已确认过欢迎/更新弹窗的版本；与当前版本不同时重新展示。
+        "welcome_version": "",
+        # 已完成的一次性默认值迁移版本，避免反复覆盖用户后来手动选择的旧默认值。
+        "defaults_version": "",
+        # 题解模式默认值的一次性迁移标记。
+        "solution_mode_version": "",
     },
     "network": {
         "timeout_seconds": 40,
@@ -315,7 +321,29 @@ def _migrate_config(config: dict[str, Any]) -> dict[str, Any]:
     build["features"] = features
     config["build"] = build
 
-    # 步骤 4：第三方扩展启用列表必须是字符串列表。
+    # 步骤 4：4.6.1 把旧默认线程数 1 一次性提升到 8；用户已改过的其它值保持不变。
+    ui: dict[str, Any] = config.get("ui") if isinstance(config.get("ui"), dict) else {}
+    if not str(ui.get("defaults_version", "") or "").strip():
+        for section, key in (
+            ("c_programming", "max_concurrency"),
+            ("icourse", "workers"),
+        ):
+            bucket: Any = config.get(section)
+            if not isinstance(bucket, dict):
+                continue
+            if str(bucket.get(key, "")).strip() == "1":
+                bucket[key] = 8
+        ui["defaults_version"] = "4.6.1"
+    # 题解模式默认值从“关闭”改为“启用”；完成后不再覆盖用户手动关闭。
+    if not str(ui.get("solution_mode_version", "") or "").strip():
+        cprog: Any = config.get("c_programming")
+        if isinstance(cprog, dict):
+            cprog["enable_solution_mode"] = True
+        ui["solution_mode_version"] = "4.6.1"
+    ui.setdefault("welcome_version", "")
+    config["ui"] = ui
+
+    # 步骤 5：第三方扩展启用列表必须是字符串列表。
     third_party: Any = config.get("third-party")
     if isinstance(third_party, dict):
         config["third-party"] = [

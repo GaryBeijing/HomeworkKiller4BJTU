@@ -45,7 +45,7 @@
 | 通道 | 入口 | 适用 | 返回 |
 |---|---|---|---|
 | **A. 功能调用（唯一动态通道）** | `window.pywebview.api.call(tag, method, params)` | 一切业务动作 | `ApiResult` |
-| **B. 元信息（只读）** | `GET /api/tags`、`GET /api/meta`、`window.pywebview.api.get_tags()`、`.get_meta()` | 标签列表、应用元信息 | 普通 JSON（非 ApiResult） |
+| **B. 元信息（只读）** | `GET /api/tags`、`GET /api/meta`、`GET /api/welcome`、`window.pywebview.api.get_tags()`、`.get_meta()`、`.dismiss_welcome()` | 标签列表、应用元信息、欢迎弹窗数据 | 普通 JSON（非 ApiResult） |
 
 其余 HTTP 路径只用于静态文件（`/page_data/*`、`/view_data/*`、`/`）。
 
@@ -675,6 +675,8 @@ WindowView(title: str = APP_TITLE, width: int | None = None, height: int | None 
 | `start_server` | `() -> int` | 幂等；返回实际端口并写入 `context["port"]` |
 | `stop_server` | `() -> None` | 端口复位为 0 |
 | `activate_tagview` | `(tagview: TagView) -> None` | 用**窗口内注册的实例**替换入参；`previous.stop()` → `start()` → `window.evaluate_js("window.App && window.App.activate(<name>)")` |
+| `welcome_payload` | `() -> dict` | 4.6.1：委托 `hwklr.welcome.welcome_payload()`，返回是否展示、协议文本与更新分组 |
+| `dismiss_welcome` | `(version: str = "") -> dict` | 4.6.1：记录当前版本已确认欢迎弹窗，返回 `{"ok": bool}` |
 | `check_update` / `update_state` / `start_update_download` / `install_update` | `(…) -> dict` | 4.5.0 起委托 `hwklr.updater.UpdateService`（版本化安装）；仅供 `BridgeApi` 与前端更新弹窗使用 |
 | `request_exit` | `() -> None` | 安装更新后关闭窗口，让解压脚本继续 |
 | `open_external_url` | `(url: str) -> dict` | 只允许 GitHub/GitCode 项目发布页，使用系统默认浏览器打开 |
@@ -689,6 +691,7 @@ BridgeApi(window_view: WindowView)
     call(tag: str, method: str, params: dict|None = None) -> dict   # → window_view.bridge_call
     get_tags() -> list[dict]                                        # → window_view.tags_payload()
     get_meta() -> dict                                              # → window_view.meta_payload()
+    dismiss_welcome(version: str) -> dict                           # 4.6.1：记录欢迎弹窗已确认
     check_update() -> dict                                          # 4.5.0：启动版本检查
     get_update_state() -> dict                                      # 4.5.0：轮询更新状态
     start_update_download() -> dict                                 # 4.5.0：下载/校验/解压到 staging
@@ -794,6 +797,7 @@ UiHttpServer(page_dir: Path, view_data_dir: Path, preferred_port: int = 49152,
 | GET/HEAD | `/api/health` | `{"ok": true}` |
 | GET/HEAD | `/api/tags` | `tags_provider()` |
 | GET/HEAD | `/api/meta` | `meta_provider()` |
+| GET/HEAD | `/api/welcome` | `welcome_provider()`（4.6.1） |
 | GET/HEAD | `/favicon.ico` | `204` 空响应 |
 | GET/HEAD | `/page_data/<rel>` | `page_dir` 下的文件 |
 | GET/HEAD | `/view_data/<rel>` | `view_data_dir` 下的文件 |
@@ -845,6 +849,7 @@ from hwklr.features.icourse import IcourseFeature
 - 4.5.0：自动更新重构为 `hwklr/updater/` 包：公共核心 `core.py`，平台安装器 `installers/windows.py` / `installers/macos.py`，`config.install_root()` / `data_root()` 分离。自动更新只接受 `hwklr4bjtu-<windows|macos>-<arm64|x64>-vX.Y.Z*.zip`，手动 7z SFX exe / 中文名不会匹配；下载校验 SHA-256（缺失时使用 `hwklr4bjtu-<platform>-<arch>-md5-vX.Y.Z*.txt`），解压到 `updates/staging/<v>` 后移动到 `versions/<v>`，通过 `current.json` 切换；旧版本保留、支持回滚。平台代码在打包时用 `--hidden-import`/`--exclude-module` 精确剔除；launcher/bootstrap 不改变业务协议。
 - 4.5.1：修复 Win11 + Edge 可见登录：Edge 启动器进程拉起真实浏览器后立即退出时，轮询 CDP 而不是立刻报“配置目录被占用”；保留临时 profile 重试。
 - 4.6.0：慕课视频任务在就绪后调用 `seek_video(page, 0.99)` 把进度拖到 99%，再以更严格的结尾容差等待 `ended`；账号类型删除 `auto/自动识别`，`icourse/mail/phone` 显式映射到爱课程/网易邮箱/网易手机号，旧配置中的 `auto` 回退为 `icourse`。
+- 4.6.1：新增 `/api/welcome` 与 `BridgeApi.dismiss_welcome()`；欢迎弹窗的协议文本来自 `LICENSE` + `usr_agreement.txt`，更新分组来自 `updates_info.txt`，确认状态写入 `config.ui.welcome_version`。C 程序设计 `max_concurrency` 与慕课 `workers` 默认值提升到 8，旧配置中仍为 1 的值会一次性迁移到 8；C 程序设计 `enable_solution_mode` 默认改为 `true`，前端默认模式改为 `solution`；旧配置中仍为 `false` 的值通过 `ui.solution_mode_version` 一次性迁移到 `true`，之后不再覆盖用户手动关闭。
 - 依赖：`playwright`（系统 Edge，不下载 Chromium）、`cryptography`（本机 Chromium Cookie 解密）、`websocket-client`（可见登录 CDP）。
 
 ---
@@ -942,6 +947,18 @@ App.registerPage('<标签名>', { init, onActivate, onDeactivate, highlightGroup
  "disclaimer": str, "features": [{"name": str, "description": str}], "port": int}
 ```
 
+`/api/welcome`（`hwklr.welcome.welcome_payload()`，4.6.1）：
+
+```json
+{"show": bool, "version": str, "title": str, "subtitle": str,
+ "agreement_heading": str, "updates_heading": str, "agreement": str,
+ "changelog": [{"title": str, "items": [str]}]}
+```
+
+`show` 由 `config.ui.welcome_version` 与当前版本比较决定；`agreement` 为 `LICENSE`
+与 `usr_agreement.txt` 的合并文本；`changelog` 由 `updates_info.txt` 解析得到，
+兼容 `# 分类` + `- 条目` 与需求文档中的 `分类 条目1 条目2;分类2 条目3` 紧凑写法。
+
 ### 4.4 HTML / CSS 约定
 
 - 每个标签页 HTML 是**片段**：根节点固定为 `<section class="tag-page ..." id="<前缀>-page">`，**不含** `<html>/<head>/<body>`。
@@ -972,6 +989,9 @@ App.registerPage('<标签名>', { init, onActivate, onDeactivate, highlightGroup
 |---|---|---|---|---|
 | `username` | str | `""` | 设置页 general、hsr、cprog | 学号/账号，两个功能共用 |
 | `update_notice` | bool | `true` | settings general、updater | 启动时是否检查并提示新版本 |
+| `ui.welcome_version` | str | `""` | welcome | 已确认欢迎弹窗的版本；与当前版本不同时重新展示 |
+| `ui.defaults_version` | str | `""` | config migration | 一次性默认值迁移标记；4.6.1 完成旧线程数 1→8 |
+| `ui.solution_mode_version` | str | `""` | config migration | 一次性迁移标记；4.6.1 把旧题解模式默认值 false→true |
 | `icourse.retain_data` | bool | `true` | icourse | 是否自动保留讨论/测验等任务截图 |
 | `hsr.password` | str | `""` | hsr | 高铁系统密码（明文） |
 | `hsr.enabled` | bool | `true` | hsr/WindowView | 高铁纵横标签是否加载 |
@@ -985,8 +1005,9 @@ App.registerPage('<标签名>', { init, onActivate, onDeactivate, highlightGroup
 | `c_programming.base_url` | str | `"https://api.deepseek.com"` | cprog | OpenAI 兼容端点 |
 | `c_programming.api_key` | str | `""` | cprog | 为空时回退到环境变量（见 §3.9） |
 | `c_programming.thinking_level` | str | `"auto"` | cprog | `auto`/`off`/`low`/`high`/`max` |
-| `c_programming.max_concurrency` | int | `1` | cprog | 题解线程数，钳制到 1–8 |
-| `c_programming.enable_solution_mode` | bool | `false` | cprog | 题解模式总开关 |
+| `c_programming.max_concurrency` | int | `8` | cprog | 题解线程数，钳制到 1–8 |
+| `icourse.workers` | int | `8` | icourse | 视频并行数，钳制到 1–8 |
+| `c_programming.enable_solution_mode` | bool | `true` | cprog | 题解模式总开关；默认启用，C 标签默认进入题解模式 |
 | `c_programming.last_course_id` | int\|null | `null` | cprog | 上次课程，用于自动选中 |
 | `build.output_dir` | str | `""` | build/packager | 空 → `<仓库根>/build`；相对路径以仓库根为基准 |
 | `build.dev_format` | str | `"executable"` | build | `executable`/`zip`，仅开发构建生效 |

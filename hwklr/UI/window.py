@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-10 23:15
-# 最后更新: 2026-11-11 21:00
+# 最后更新: 2026-11-12 13:00
 # 文件名: window.py
-# 主要用途: pywebview 核心窗口 WindowView：组合标签注册表、扩展运行时、本地 HTTP 服务、跨平台更新服务与窗口生命周期。
-# 文件版本: 4.5.0
+# 主要用途: pywebview 核心窗口 WindowView：组合标签注册表、扩展运行时、本地 HTTP 服务、欢迎弹窗、跨平台更新服务与窗口生命周期。
+# 文件版本: 4.6.1
 """核心窗口。"""
 from __future__ import annotations
 
@@ -32,6 +32,7 @@ from hwklr.contracts import ErrorCode
 from hwklr.features import extensions as extension_api
 from hwklr.features import failure
 from hwklr.updater import UpdateService
+from hwklr.welcome import mark_welcome_seen, welcome_payload
 
 from .bridge import BridgeApi
 from .extension_runtime import ExtensionRuntime
@@ -39,7 +40,7 @@ from .registry import TagRegistry
 from .server import UiHttpServer
 from .tagview import TagView
 
-__version__ = "4.5.0"
+__version__ = "4.6.1"
 __author__ = "Gary"
 __all__ = ["WindowView"]
 
@@ -363,6 +364,26 @@ class WindowView:
         except Exception:
             _LOGGER.exception("关闭窗口失败")
 
+    # ------------------------------------------------------------ 欢迎弹窗
+    def welcome_payload(self) -> dict[str, Any]:
+        """返回欢迎弹窗数据。
+
+        Returns:
+            是否展示、版本、协议文本与更新分组。
+        """
+        return welcome_payload()
+
+    def dismiss_welcome(self, version: str = "") -> dict[str, Any]:
+        """记录用户已确认当前版本的欢迎弹窗。
+
+        Args:
+            version: 前端回传的版本号。
+
+        Returns:
+            ``{"ok": bool}``。
+        """
+        return {"ok": mark_welcome_seen(str(version or ""))}
+
     def open_external_url(self, url: str) -> dict[str, Any]:
         """用系统默认浏览器打开受信任的发布页。
 
@@ -445,6 +466,7 @@ class WindowView:
             preferred_port=preferred_port,
             tags_provider=self.tags_payload,
             meta_provider=self.meta_payload,
+            welcome_provider=self.welcome_payload,
             extension_resolver=self._resolve_extension_dir,
         )
         port: int = server.start()

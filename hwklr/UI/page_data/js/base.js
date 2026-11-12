@@ -1,10 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-10-31 20:45
-  最后更新: 2026-11-11 10:00
+  最后更新: 2026-11-12 13:00
   文件名: base.js
-  主要用途: 前端公共逻辑：标签栏、设置锁定/跳转、资源加载、桥接调用、提示与加载状态。
-  文件版本: 4.4.3
+  主要用途: 前端公共逻辑：标签栏、设置锁定/跳转、资源加载、桥接调用、欢迎弹窗、提示与加载状态。
+  文件版本: 4.6.1
 */
 
 (function () {
@@ -619,6 +619,14 @@
       toast(`初始化失败: ${error.message}`, 'error');
     } finally {
       setLoading(false);
+    }
+    // 首屏激活完成后展示欢迎/更新弹窗；确认后由后端记录当前版本。
+    if (window.Welcome && typeof window.Welcome.maybeShow === 'function') {
+      try {
+        await window.Welcome.maybeShow();
+      } catch (error) {
+        console.error(error);
+      }
     }
   }
 

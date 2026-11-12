@@ -1,10 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-11-08 14:30
-  最后更新: 2026-11-10 23:40
+  最后更新: 2026-11-12 13:00
   文件名: job.js
   主要用途: “中国大学慕课”页面完成任务启动、轮询、取消与结果弹窗。
-  文件版本: 4.4.1
+  文件版本: 4.6.1
 */
 (function (global) {
   'use strict';
@@ -107,7 +107,7 @@
       const settings = state.settings || {};
       els['i-warning-detail'].textContent =
         '将处理 ' + keys.length + ' 个任务；最大并行数 '
-        + (settings.workers || 1) + '；自动提交测验：'
+        + (settings.workers || 8) + '；自动提交测验：'
         + (settings.submit_quizzes ? '开' : '关') + '；自动发布讨论：'
         + (settings.publish_discussions ? '开' : '关') + '。';
     }

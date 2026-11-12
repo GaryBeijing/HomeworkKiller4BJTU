@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-12 10:00
+# 最后更新: 2026-11-12 13:00
 # 文件名: __init__.py
 # 主要用途: 实现“中国大学慕课”功能：登录、课程状态、任务 handler 编排、批量完成与题库同步。
-# 文件版本: 4.6.0
+# 文件版本: 4.6.1
 """中国大学慕课功能。
 
 功能层只负责动作分发、状态缓存与 job 编排；浏览器自动化、课程解析与题库
@@ -47,7 +47,7 @@ from .models import (
     extract_term_id,
 )
 
-__version__ = "4.6.0"
+__version__ = "4.6.1"
 __author__ = "Gary"
 __all__ = ["IcourseFeature"]
 
@@ -141,7 +141,7 @@ _DEFAULT_SETTINGS: Final[dict[str, Any]] = {
     "account": "",
     "password": "",
     "account_type": "icourse",
-    "workers": 1,
+    "workers": 8,
     "video_rate": 2.0,
     "submit_quizzes": False,
     "publish_discussions": False,
@@ -164,7 +164,7 @@ def _clamp_workers(value: Any) -> int:
     try:
         number = int(value)
     except (TypeError, ValueError):
-        number = 1
+        number = 8
     return max(1, min(8, number))
 
 
@@ -339,8 +339,8 @@ class IcourseFeature(Feature):
                 max_value=8,
                 step=1,
                 alert=True,
-                help="仅用于视频；并发过高可能触发站点限流。",
-                tooltip="仅用于视频的并发播放数；并发过高可能触发站点限流。",
+                help="默认 8（上限），仅用于视频；并发过高可能触发站点限流。",
+                tooltip="仅用于视频的并发播放数，默认 8；并发过高可能触发站点限流。",
                 is_necessary=False,
             ),
             SettingsFieldSpec(
@@ -1213,7 +1213,7 @@ class IcourseFeature(Feature):
             "total": 0,
             "term_id": 0,
             "course_name": "",
-            "workers": 1,
+            "workers": 8,
             "submit_quizzes": False,
             "publish_discussions": False,
             "tasks": [],

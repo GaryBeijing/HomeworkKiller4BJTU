@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-10 10:30
-# 最后更新: 2026-11-12 10:00
+# 最后更新: 2026-11-12 13:40
 # 文件名: feature_specs.py
 # 主要用途: 官方功能的单一元数据来源：显示名/稳定 id、配置默认值、关于信息、资源、数据库与打包声明。
-# 文件版本: 4.6.0
+# 文件版本: 4.6.1
 """官方功能元数据 registry。
 
 本模块只依赖标准库，放在 ``hwklr`` 根包而不是 ``hwklr.features`` 下，
@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Final
 
-__version__ = "4.6.0"
+__version__ = "4.6.1"
 __author__ = "Gary"
 __all__ = [
     "FEATURE_BY_ID",
@@ -164,8 +164,8 @@ OFFICIAL_FEATURES: Final[tuple[FeatureSpec, ...]] = (
                 ("base_url", "https://api.deepseek.com"),
                 ("api_key", ""),
                 ("thinking_level", "auto"),
-                ("max_concurrency", 1),
-                ("enable_solution_mode", False),
+                ("max_concurrency", 8),
+                ("enable_solution_mode", True),
                 ("last_course_id", None),
                 ("enabled", True),
             ),
@@ -191,7 +191,7 @@ OFFICIAL_FEATURES: Final[tuple[FeatureSpec, ...]] = (
                 ("account", ""),
                 ("password", ""),
                 ("account_type", "icourse"),
-                ("workers", 1),
+                ("workers", 8),
                 ("video_rate", 2.0),
                 ("submit_quizzes", False),
                 ("publish_discussions", False),

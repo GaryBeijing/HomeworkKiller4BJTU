@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-01 00:01
-# 最后更新: 2026-11-11 10:00
+# 最后更新: 2026-11-12 13:40
 # 文件名: __init__.py
 # 主要用途: 实现“C程序设计”功能：课程/题目选择、启发模式、题解模式、启用开关与设置板块（依赖延迟加载）。
-# 文件版本: 4.4.3
+# 文件版本: 4.6.1
 """C 程序设计功能。
 
 重制自 ``B_CHelper``，主要变化：
@@ -54,7 +54,7 @@ from .models import (
 from .parsers import deterministic_structure
 from .site import MoodleError, MoodleSite, SubmitError
 
-__version__ = "4.4.3"
+__version__ = "4.6.1"
 __author__ = "Gary"
 __all__ = ["CProgrammingFeature"]
 
@@ -66,7 +66,7 @@ class SolutionCancelled(Exception):
     """题解任务被用户终止。"""
 _MAX_SUBMIT_ERRORS: Final[int] = 3
 _MAX_EVENTS: Final[int] = 200
-_DEFAULT_CONCURRENCY: Final[int] = 1
+_DEFAULT_CONCURRENCY: Final[int] = 8
 _MAX_CONCURRENCY: Final[int] = 8
 _THINKING_LABELS: Final[dict[str, str]] = {
     "off": "关闭",
@@ -104,7 +104,7 @@ def _clamp_concurrency(value: Any) -> int:
         value: 配置或前端传入的并发数。
 
     Returns:
-        合法并发数；无法识别时返回默认值 1。
+        合法并发数；无法识别时返回默认值 8。
     """
     try:
         number: int = int(value)
@@ -339,7 +339,7 @@ class CProgrammingFeature(Feature):
                 "max_concurrency": _clamp_concurrency(
                     setting.get("max_concurrency", _DEFAULT_CONCURRENCY)
                 ),
-                "enable_solution_mode": bool(setting.get("enable_solution_mode", False)),
+                "enable_solution_mode": bool(setting.get("enable_solution_mode", True)),
             }
 
         def exporter(values: dict[str, Any]) -> dict[str, Any]:
@@ -357,7 +357,7 @@ class CProgrammingFeature(Feature):
                         values.get("max_concurrency", _DEFAULT_CONCURRENCY)
                     ),
                     "enable_solution_mode": bool(
-                        values.get("enable_solution_mode", False)
+                        values.get("enable_solution_mode", True)
                     ),
                 }
             }
@@ -468,7 +468,7 @@ class CProgrammingFeature(Feature):
                     step=1,
                     alert=True,
                     help=(
-                        "默认 1（单线程顺序解题）。大于 1 时按题目顺序平均分配给"
+                        "默认 8（上限，多线程并行解题）。按题目顺序平均分配给"
                         "多个线程同时解题；并发过高可能触发平台或 AI 限流。"
                     ),
                     tooltip=(
@@ -482,11 +482,12 @@ class CProgrammingFeature(Feature):
                     kind="switch",
                     alert=True,
                     help=(
-                        "默认关闭。关闭时，C程序设计标签页中的题解模式不可选，"
-                        "并显示锁头标志。"
+                        "默认启用，题解模式默认打开。关闭时，C程序设计标签页中的"
+                        "题解模式不可选，并显示锁头标志。"
                     ),
                     tooltip=(
-                        "开启后可在题解模式直接生成并提交完整代码；请谨慎使用。"
+                        "默认启用；开启后可在题解模式直接生成并提交完整代码，"
+                        "请谨慎使用。"
                     ),
                 ),
             ),
@@ -605,7 +606,7 @@ class CProgrammingFeature(Feature):
         Returns:
             启用返回 ``True``。
         """
-        return bool(self._read_ai_setting().get("enable_solution_mode", False))
+        return bool(self._read_ai_setting().get("enable_solution_mode", True))
 
     def _read_max_concurrency(self) -> int:
         """读取并规范化最大并发数。

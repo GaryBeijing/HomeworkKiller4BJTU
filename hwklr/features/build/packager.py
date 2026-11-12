@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-01 12:40
-# 最后更新: 2026-11-11 21:00
+# 最后更新: 2026-11-12 13:00
 # 文件名: packager.py
-# 主要用途: 构建功能的打包实现：图标/名称/四段版本资源、源码裁剪、V3 源码归档、说明文件分发、数据库 provider 打包、插件模板分发、PyInstaller 与 python-embed zip、平台安装器收集/剔除。
-# 文件版本: 4.5.0
+# 主要用途: 构建功能的打包实现：图标/名称/四段版本资源、源码裁剪、V3 源码归档、说明文件与欢迎页资源分发、数据库 provider 打包、插件模板分发、PyInstaller 与 python-embed zip、平台安装器收集/剔除。
+# 文件版本: 4.6.1
 """构建打包实现。
 
 构建过程不依赖 UI，可独立调用 :func:`build_package`：
@@ -15,8 +15,9 @@
   site-packages，生成双击即可运行的 zip 分发包。
 
 所有输出默认位于项目根目录 ``build/``，不会包含用户 ``config.json``。
-产物根目录统一附带 ``README.md`` 与 ``LICENSE``；开发构建的源码归档同样
-包含两者以及 ``Reference/`` 参考文档。
+产物根目录统一附带 ``README.md``、``LICENSE``、``usr_agreement.txt`` 与
+``updates_info.txt``；开发构建的源码归档同样包含这些文件以及
+``Reference/`` 参考文档。
 """
 from __future__ import annotations
 
@@ -112,9 +113,14 @@ def _package_dir() -> Path:
 _VENDOR_DIR: Final[Path] = Path(__file__).resolve().parent / "vendor"
 _SITE_PACKAGES: Final[Path] = Path(sysconfig.get_paths()["purelib"])
 # 所有产物根目录固定附带项目根目录的说明文件。
-_DISTRIBUTION_FILES: Final[tuple[str, ...]] = ("README.md", "LICENSE")
+_DISTRIBUTION_FILES: Final[tuple[str, ...]] = (
+    "README.md",
+    "LICENSE",
+    "usr_agreement.txt",
+    "updates_info.txt",
+)
 # V3 起开发构建的源码归档固定为 legacy/、Reference/、hwklr/、main.py、requirements.txt；
-# 3.0.1 起追加 README.md 与 LICENSE。
+# 3.0.1 起追加 README.md 与 LICENSE；4.6.1 起追加欢迎弹窗资源。
 _DEV_EXTRA_DIRS: Final[tuple[str, ...]] = ("legacy", "Reference")
 _DEV_EXTRA_FILES: Final[tuple[str, ...]] = ("requirements.txt",)
 
@@ -957,7 +963,8 @@ def _archive_sources(dest: Path, version: str, *, log: LogFn) -> Path:
     """把开发源码归档到产物目录。
 
     V3 起归档包含 ``legacy/``、``Reference/``、``hwklr/``、``main.py`` 与
-    ``requirements.txt``；3.0.1 起追加 ``README.md`` 与 ``LICENSE``。插件工程
+    ``requirements.txt``；3.0.1 起追加 ``README.md`` 与 ``LICENSE``；4.6.1 起
+    追加欢迎弹窗使用的用户协议与更新说明。插件工程
     模板随归档保留，python-embed 等下载缓存排除。
 
     Args:
@@ -1172,7 +1179,7 @@ def _zip_directory(
 
 
 def _copy_distribution_files(dest: Path, *, log: LogFn) -> None:
-    """把 README.md 与 LICENSE 复制到产物根目录。
+    """把 README、许可证、用户协议与更新说明复制到产物根目录。
 
     Args:
         dest: 产物根目录。

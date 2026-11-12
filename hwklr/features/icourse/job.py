@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-11 10:00
+# 最后更新: 2026-11-12 13:00
 # 文件名: job.py
 # 主要用途: 编排“开始完成”后台任务：视频并发、文档/测验/讨论串行、进度快照与取消。
-# 文件版本: 4.4.3
+# 文件版本: 4.6.1
 """完成任务的 job 编排。"""
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ from .courses import reload_course
 from .tasks import TaskHandlerRegistry, TaskOutcome, TaskStatus, default_task_registry
 from .models import DONE, Course, Task
 
-__version__ = "4.4.3"
+__version__ = "4.6.1"
 __author__ = "Gary"
 __all__ = ["CompletionJob"]
 
@@ -114,7 +114,7 @@ class CompletionJob:
                 "total": len(self.tasks),
                 "term_id": course.term_id,
                 "course_name": course.name,
-                "workers": int(self._settings.get("workers", 1) or 1),
+                "workers": int(self._settings.get("workers", 8) or 8),
                 "submit_quizzes": bool(self._settings.get("submit_quizzes")),
                 "publish_discussions": bool(
                     self._settings.get("publish_discussions")
@@ -405,7 +405,7 @@ class CompletionJob:
             batch = run_workers(
                 self.course,
                 videos,
-                workers=int(self._settings.get("workers", 1) or 1),
+                workers=int(self._settings.get("workers", 8) or 8),
                 answer_index=answer_index,
                 storage_state=storage_state,
                 rate=float(self._settings.get("video_rate", 2.0) or 2.0),

@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-10 23:00
-# 最后更新: 2026-11-11 10:00
+# 最后更新: 2026-11-12 13:00
 # 文件名: bridge.py
-# 主要用途: 暴露给前端的 pywebview JS 桥接对象 BridgeApi（标签路由、更新检查与外部链接）。
-# 文件版本: 4.4.3
+# 主要用途: 暴露给前端的 pywebview JS 桥接对象 BridgeApi（标签路由、欢迎弹窗确认、更新检查与外部链接）。
+# 文件版本: 4.6.1
 """JS 桥接对象。"""
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from .window import WindowView
 
-__version__ = "4.4.3"
+__version__ = "4.6.1"
 __author__ = "Gary"
 __all__ = ["BridgeApi"]
 
@@ -66,6 +66,17 @@ class BridgeApi:
             应用名称、版本、作者、端口等信息。
         """
         return self._window_view.meta_payload()
+
+    def dismiss_welcome(self, version: str) -> dict[str, Any]:
+        """记录当前版本的欢迎弹窗已确认。
+
+        Args:
+            version: 当前应用版本号。
+
+        Returns:
+            ``{"ok": bool}``。
+        """
+        return self._window_view.dismiss_welcome(str(version or ""))
 
     # ---------------------------------------------------------------- 更新
     def check_update(self) -> dict[str, Any]:

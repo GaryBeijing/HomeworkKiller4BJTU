@@ -1,15 +1,16 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-10-31 20:45
-# 最后更新: 2026-11-03 19:50
+# 最后更新: 2026-11-12 13:00
 # 文件名: server.py
-# 主要用途: 提供本地静态资源 / API 服务，支持官方 view_data 与第三方扩展资源目录。
-# 文件版本: 3.0.0
+# 主要用途: 提供本地静态资源 / API 服务，支持官方 view_data、第三方扩展资源与欢迎弹窗数据。
+# 文件版本: 4.6.1
 """本地 UI 服务。
 
 pywebview 通过 ``http://127.0.0.1:<port>/`` 加载页面。使用自有 HTTP 服务
 而不是 pywebview 内置服务，便于固定起始端口、同时暴露 page_data /
-view_data 两个资源根目录，并提供 ``/api/tags``、``/api/meta`` 接口。
+view_data 两个资源根目录，并提供 ``/api/tags``、``/api/meta`` 与
+``/api/welcome`` 接口。
 """
 from __future__ import annotations
 
@@ -24,7 +25,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Final
 
-__version__ = "3.0.0"
+__version__ = "4.6.1"
 __all__ = ["UiHttpServer"]
 
 _LOGGER: Final[logging.Logger] = logging.getLogger(__name__)
@@ -92,6 +93,10 @@ class _UiRequestHandler(BaseHTTPRequestHandler):
         if request_path == "/api/meta":
             meta_provider: Callable[[], dict[str, Any]] = server.meta_provider
             self._send_json(meta_provider(), send_body)
+            return
+        if request_path == "/api/welcome":
+            welcome_provider: Callable[[], dict[str, Any]] = server.welcome_provider
+            self._send_json(welcome_provider(), send_body)
             return
         if request_path == "/favicon.ico":
             self._send_status(204, send_body)
@@ -240,6 +245,7 @@ class UiHttpServer:
         preferred_port: int = _DEFAULT_PORT,
         tags_provider: Callable[[], list[dict[str, Any]]] | None = None,
         meta_provider: Callable[[], dict[str, Any]] | None = None,
+        welcome_provider: Callable[[], dict[str, Any]] | None = None,
         extension_resolver: Callable[[str], Path | None] | None = None,
     ) -> None:
         """初始化服务。
@@ -250,6 +256,7 @@ class UiHttpServer:
             preferred_port: 首选端口，默认 49152。
             tags_provider: 返回标签列表的回调。
             meta_provider: 返回应用元信息的回调。
+            welcome_provider: 返回欢迎弹窗数据的回调。
             extension_resolver: 按扩展 ID 返回资源根目录的回调。
         """
         self._page_dir: Path = page_dir
@@ -259,6 +266,9 @@ class UiHttpServer:
         )
         self._tags_provider: Callable[[], list[dict[str, Any]]] = tags_provider or (lambda: [])
         self._meta_provider: Callable[[], dict[str, Any]] = meta_provider or (lambda: {})
+        self._welcome_provider: Callable[[], dict[str, Any]] = (
+            welcome_provider or (lambda: {"show": False})
+        )
         self._extension_resolver: Callable[[str], Path | None] = (
             extension_resolver or (lambda extension_id: None)
         )
@@ -299,6 +309,7 @@ class UiHttpServer:
             httpd.view_data_dir = self._view_data_dir  # type: ignore[attr-defined]
             httpd.tags_provider = self._tags_provider  # type: ignore[attr-defined]
             httpd.meta_provider = self._meta_provider  # type: ignore[attr-defined]
+            httpd.welcome_provider = self._welcome_provider  # type: ignore[attr-defined]
             httpd.extension_resolver = self._extension_resolver  # type: ignore[attr-defined]
             self._httpd = httpd
             self._port = port
