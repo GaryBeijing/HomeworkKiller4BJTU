@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-11 10:00
+# 最后更新: 2026-11-12 10:00
 # 文件名: login_service.py
 # 主要用途: 编排慕课账号登录、窗口/无头浏览器登录、本机 Cookie 导入（容错多来源）与已保存会话加载。
-# 文件版本: 4.4.3
+# 文件版本: 4.6.0
 """慕课登录与会话服务。
 
 - 账号登录统一走 icourse163 登录页（Playwright/系统 Edge），
@@ -31,7 +31,7 @@ from .session_store import (
     save_session,
 )
 
-__version__ = "4.4.3"
+__version__ = "4.6.0"
 __author__ = "Gary"
 __all__ = [
     "LoginError",
@@ -204,7 +204,7 @@ def login_with_credentials(
     account: str,
     password: str,
     *,
-    account_type: str = "auto",
+    account_type: str = "icourse",
     browser: str = "auto",
     headless: bool = False,
     timeout: int = 240,
@@ -216,7 +216,7 @@ def login_with_credentials(
     Args:
         account: 账号。
         password: 密码。
-        account_type: ``auto/icourse/mail/phone``。
+        account_type: ``icourse/mail/phone``（用户显式选择，不再自动识别）。
         browser: 浏览器类型。
         headless: 是否无头。
         timeout: 等待登录秒数。
@@ -235,7 +235,7 @@ def login_with_credentials(
         raise LoginError("后台登录需要先在设置中填写账号和密码。")
     if cancel is not None and cancel.is_set():
         raise LoginError("登录已取消。")
-    account_kind: str = accounts.resolve_account_type(account_type, account)
+    account_kind: str = accounts.resolve_account_type(account_type)
     if log:
         log("正在使用%s登录…" % ("无头浏览器" if headless else "浏览器窗口"))
 

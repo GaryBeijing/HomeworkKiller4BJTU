@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-11 10:00
+# 最后更新: 2026-11-12 10:00
 # 文件名: browser_login_playwright.py
 # 主要用途: 通过无头 Playwright 完成 icourse163 登录；Edge 启动失败时依次回退 Chrome/内置 Chromium。
-# 文件版本: 4.4.3
+# 文件版本: 4.6.0
 """无窗口（headless）浏览器登录。
 
 `browser_login` 的可见窗口流程使用 CDP + 系统 Edge；无窗口模式若继续用
@@ -220,7 +220,7 @@ def playwright_login(
     password: str | None = None,
     timeout: int = 240,
     log: Log | None = None,
-    account_kind: str = "auto",
+    account_kind: str = "aiketang",
     verify: Callable[[RequestsCookieJar], dict[str, Any]],
     get_credentials: Callable[[], tuple[str, str]] | None = None,
 ) -> tuple[RequestsCookieJar, dict[str, Any]]:
@@ -236,18 +236,13 @@ def playwright_login(
             "后台登录需要账号和密码，请先在设置中填写。"
         )
 
-    kind = account_kind
-    if kind == "auto":
-        text = str(email or "")
-        if "@" in text:
-            kind = "netease" if text.rsplit("@", 1)[-1].lower() in {
-                "163.com", "126.com", "yeah.net", "188.com", "vip.163.com"
-            } else "aiketang"
-        else:
-            kind = "aiketang"
-    if kind in ("aiketang", "icourse", "phone"):
-        # 爱课堂账号（含手机号注册）统一走主表单；phone 在这里是
-        # accounts.resolve_account_type 的别名，不是 URS 手机号。
+    # 账号类型由用户显式选择，不再根据邮箱域名自动识别。
+    kind = str(account_kind or "aiketang").strip().lower()
+    if kind in ("mail", "netease"):
+        kind = "netease"
+    elif kind in ("phone", "netease_phone"):
+        kind = "netease_phone"
+    else:
         kind = "aiketang"
 
     with sync_playwright() as playwright:

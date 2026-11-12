@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-11 10:00
+# 最后更新: 2026-11-12 10:00
 # 文件名: __init__.py
 # 主要用途: 实现“中国大学慕课”功能：登录、课程状态、任务 handler 编排、批量完成与题库同步。
-# 文件版本: 4.4.3
+# 文件版本: 4.6.0
 """中国大学慕课功能。
 
 功能层只负责动作分发、状态缓存与 job 编排；浏览器自动化、课程解析与题库
@@ -47,7 +47,7 @@ from .models import (
     extract_term_id,
 )
 
-__version__ = "4.4.3"
+__version__ = "4.6.0"
 __author__ = "Gary"
 __all__ = ["IcourseFeature"]
 
@@ -140,7 +140,7 @@ _KIND_ORDER: Final[tuple[str, ...]] = (
 _DEFAULT_SETTINGS: Final[dict[str, Any]] = {
     "account": "",
     "password": "",
-    "account_type": "auto",
+    "account_type": "icourse",
     "workers": 1,
     "video_rate": 2.0,
     "submit_quizzes": False,
@@ -296,10 +296,9 @@ class IcourseFeature(Feature):
                 key="account",
                 label="账号",
                 placeholder="爱课程 / 网易邮箱 / 网易手机号",
-                help="账号类型可在下方选择，默认自动识别。",
+                help="账号类型可在下方选择，不再自动识别。",
                 tooltip=(
-                    "爱课程、网易邮箱或网易手机号；账号类型可在下方选择，"
-                    "默认自动识别。"
+                    "爱课程、网易邮箱或网易手机号；请选择与账号匹配的类型。"
                 ),
                 is_necessary=False,
             ),
@@ -321,7 +320,6 @@ class IcourseFeature(Feature):
                 label="账号类型",
                 kind="select",
                 options=(
-                    ("auto", "自动识别"),
                     ("icourse", "爱课程（含手机号注册）"),
                     ("mail", "网易邮箱"),
                     ("phone", "网易手机号"),
@@ -481,8 +479,9 @@ class IcourseFeature(Feature):
             values[key] = bool(values.get(key))
         values["account"] = str(values.get("account") or "").strip()
         values["password"] = str(values.get("password") or "")
-        if values.get("account_type") not in ("auto", "icourse", "mail", "phone"):
-            values["account_type"] = "auto"
+        if values.get("account_type") not in ("icourse", "mail", "phone"):
+            # 旧配置中的 auto 或未知值统一回退到“爱课程”，由用户再显式修改。
+            values["account_type"] = "icourse"
         return {key: values.get(key, _DEFAULT_SETTINGS[key]) for key in _DEFAULT_SETTINGS}
 
     # ------------------------------------------------------------------ 依赖

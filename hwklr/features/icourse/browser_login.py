@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-11 22:00
+# 最后更新: 2026-11-12 10:00
 # 文件名: browser_login.py
 # 主要用途: 通过可见 Edge + CDP 完成 icourse163 登录；失效窗口清理、临时配置目录重试、启动器进程退出容错与无 Origin 的 CDP 连接。
-# 文件版本: 4.5.1
+# 文件版本: 4.6.0
 """通过真实浏览器完成 icourse163 登录。
 
 流程与人工登录一致：打开首页 → 点击「登录/注册」→ 切到「邮箱登录」
@@ -29,7 +29,7 @@ from requests.cookies import RequestsCookieJar, create_cookie
 from .config import LOGIN_PAGE, browser_port_file, browser_profile_dir
 from .browser import TARGET_DOMAIN
 
-__version__ = "4.5.1"
+__version__ = "4.6.0"
 # 端口文件超过该时长视为上一次失败留下的旧窗口。
 _PORT_FILE_TTL_SECONDS: int = 15 * 60
 # CDP 启动等待上限（秒）。
@@ -47,11 +47,9 @@ LOGIN_TABS = {
     # 爱课堂/爱课程账号（含手机号注册的账号）：只走「爱课程登录」。
     "aiketang": ("爱课程登录", "账号登录"),
     "icourse": ("爱课程登录", "账号登录"),
-    "phone": ("爱课程登录", "账号登录"),
     # 网易通行证：邮箱 / 手机号分别走 URS。
     "netease": ("邮箱登录",),
     "netease_phone": ("手机号登录", "手机验证码登录"),
-    "auto": ("爱课程登录", "邮箱登录", "手机号登录"),
 }
 
 ACCOUNT_INPUT_SELECTORS = (
@@ -425,7 +423,7 @@ class BrowserLogin:
         return result.get("result", {}).get("value")
 
     def open_login_dialog(
-        self, session: str, wait: float = 20, account_kind: str = "auto"
+        self, session: str, wait: float = 20, account_kind: str = "aiketang"
     ) -> None:
         click_js = (
             "(() => {"
@@ -451,7 +449,7 @@ class BrowserLogin:
             if not clicked:
                 self.log("未找到「登录/注册」按钮，按当前登录页继续。")
 
-        tabs = LOGIN_TABS.get(account_kind, LOGIN_TABS["auto"])
+        tabs = LOGIN_TABS.get(account_kind, LOGIN_TABS["aiketang"])
         for tab in tabs:
             tab_js = (
                 "(() => {"
@@ -489,7 +487,7 @@ class BrowserLogin:
         return [f for f in out if f]
 
     def _login_context(
-        self, session: str, wait: float = 20, account_kind: str = "auto"
+        self, session: str, wait: float = 20, account_kind: str = "aiketang"
     ) -> int | None:
         assert self.cdp
         main_probe = (
@@ -540,7 +538,7 @@ class BrowserLogin:
 
         deadline = time.time() + wait
         while time.time() < deadline:
-            if account_kind in ("aiketang", "icourse", "phone"):
+            if account_kind in ("aiketang", "icourse"):
                 # 爱课堂/爱课程账号只在主页面表单登录，绝不走 URS 手机号。
                 try:
                     if self._eval(main_probe, session):
@@ -555,20 +553,11 @@ class BrowserLogin:
                 ctx = find_frame(phone_frame_probe)
                 if ctx is not None:
                     return ctx
-            else:
-                try:
-                    if self._eval(main_probe, session):
-                        return None
-                except BrowserLoginError:
-                    pass
-                ctx = find_frame(email_frame_probe) or find_frame(phone_frame_probe)
-                if ctx is not None:
-                    return ctx
             time.sleep(0.6)
         raise BrowserLoginError("登录页/iframe 中没有找到账号和密码输入框。")
 
     def fill_and_submit(
-        self, session: str, email: str, password: str, account_kind: str = "auto"
+        self, session: str, email: str, password: str, account_kind: str = "aiketang"
     ) -> None:
         ctx = self._login_context(session, account_kind=account_kind)
         fill_js = f"""
@@ -735,7 +724,7 @@ def browser_login(
     timeout: int = 240,
     log: Log | None = None,
     headless: bool = False,
-    account_kind: str = "auto",
+    account_kind: str = "aiketang",
     verify: Callable[[RequestsCookieJar], dict[str, Any]],
     get_credentials: Callable[[], tuple[str, str]] | None = None,
 ) -> tuple[RequestsCookieJar, dict[str, Any]]:

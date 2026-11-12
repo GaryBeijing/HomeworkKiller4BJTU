@@ -3,7 +3,7 @@
 # 编写日期: 2026-11-08 14:30
 # 文件名: client.py
 # 主要用途: icourse163 RPC 与登录 HTTP 客户端。
-# 文件版本: 4.0.0
+# 文件版本: 4.6.0
 """icourse163.org HTTP 客户端。
 
 登录使用站点「邮箱登录」表单对应的接口
@@ -287,12 +287,17 @@ class MoocClient:
         email: str,
         password: str,
         *,
-        account_type: str = "auto",
+        account_type: str = "icourse",
     ) -> dict[str, Any]:
         """使用爱课程账号 + 密码登录；网易/手机号请用浏览器登录。"""
         if not email or not password:
             raise AuthError("账号和密码不能为空。")
-        if str(account_type).lower() in ("netease", "netease_phone"):
+        if str(account_type).lower() in (
+            "mail",
+            "phone",
+            "netease",
+            "netease_phone",
+        ):
             raise LoginMethodError(
                 "网易通行证账号请使用浏览器窗口登录"
             )

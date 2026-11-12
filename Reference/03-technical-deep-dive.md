@@ -843,6 +843,7 @@ QuizAction / PopupQuiz                 ← 按题干/选项文本匹配答案
 - 4.4.3：设置页新增 `SettingsFieldSpec.tooltip`、`(i)` 气泡、功能组默认折叠与“启用/停用”文字；通用组新增 `update_notice`。icourse 新增 `retain_data` 门控 `safe_screenshot`，课程列表显式约束滚动；登录清理失效 `edge-port.txt`、临时 profile 重试，Cookie 导入跳过失败来源。
 - 4.5.0：新增 `hwklr/updater/` 跨平台更新器。`core.py` 负责双源检查、正则资产筛选、SHA-256/md5 校验、ZIP staging；`installers/windows.py` 与 `installers/macos.py` 分别实现解压、校验、`versions/<v>` 激活、`current.json` 与重启。主程序启动时若 `current.json` 指向其他版本，会先拉起该版本并退出（launcher/bootstrap）；不再覆盖运行中的程序，也不需要 7zr/robocopy/PowerShell 更新脚本。`config.install_root()` 与 `data_root()` 分离；打包时按目标平台 hidden-import/exclude 安装器与 launcher。
 - 4.5.1：修复 Win11 + Edge 可见登录。Edge 常以启动器进程拉起真实浏览器后立即退出，`browser_login._launch_with_profile()` 不再把启动器退出当成失败，而是继续轮询 CDP；只有 8 秒内仍无调试端口才判定失败并重试临时 profile。
+- 4.6.0：慕课视频不再按完整时长等待：视频就绪后 `seek_video()` 直接把 `currentTime` 拖到 99%，跳过后只等待剩余片段播完；`video_finished()` 支持更小的结尾容差，避免把 99% 误判为完成。账号类型删除自动识别，`resolve_account_type()` 只接受显式类型（icourse/mail/phone），旧 `auto` 配置回退到 icourse。
 
 ---
 

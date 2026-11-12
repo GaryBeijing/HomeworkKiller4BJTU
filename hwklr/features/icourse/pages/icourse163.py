@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-09 21:40
+# 最后更新: 2026-11-12 10:30
 # 文件名: icourse163.py
 # 主要用途: icourse163 页面 URL、选择器、SPA 导航、登录墙判定与视频状态脚本。
-# 文件版本: 4.3.2
+# 文件版本: 4.6.0
 """icourse163 页面 URL 与选择器。
 
 结构基于 2026-11 的新版 React 学习页：
@@ -320,6 +320,36 @@ def set_video_rate(page: Page, rate: float = 2.0, *, muted: bool = True) -> dict
                       ended:v.ended, readyState:v.readyState};
             }""",
             {"rate": rate, "muted": muted},
+        )
+    except Exception:
+        return {"ok": False, "reason": "navigation"}
+
+
+def seek_video(page: Page, fraction: float = 0.99) -> dict:
+    """把视频进度拖到指定比例并继续播放。
+
+    中国大学慕课视频没有心跳机制，直接跳到接近结尾可以避免等待完整时长。
+    """
+    try:
+        return page.evaluate(
+            """({fraction}) => {
+              const v = document.querySelector('video');
+              if (!v) return {ok:false, reason:'no-video'};
+              const duration = Number(v.duration);
+              if (!isFinite(duration) || duration <= 0) {
+                return {ok:false, reason:'no-duration'};
+              }
+              const ratio = Math.max(0, Math.min(0.99, Number(fraction) || 0.99));
+              const target = Math.max(0, duration * ratio - 0.1);
+              try {
+                v.currentTime = target;
+              } catch (error) {
+                return {ok:false, reason:String(error)};
+              }
+              v.play().catch(() => {});
+              return {ok:true, duration, target, currentTime:v.currentTime};
+            }""",
+            {"fraction": float(fraction)},
         )
     except Exception:
         return {"ok": False, "reason": "navigation"}

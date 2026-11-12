@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-11 10:00
+# 最后更新: 2026-11-12 10:30
 # 文件名: video.py
 # 主要用途: 视频任务：播放、进度高水位、弹题与完成判定；截图受留存数据开关控制。
-# 文件版本: 4.4.3
+# 文件版本: 4.6.0
 """视频任务：从选中的一节开始，按顺序 2 倍速播放未完成视频。"""
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ from ..pages import (
     open_route,
     page_alerts,
     page_block_reason,
+    seek_video,
     set_video_rate,
     video_state,
 )
@@ -38,18 +39,26 @@ POLL_MS = 1500
 MAX_WAIT_MS = 3 * 60 * 60 * 1000
 # 距离结尾多少秒内视为播完；结束后播放器会把 currentTime 归零。
 FINISH_TOLERANCE_SECONDS = 2.0
+# 慕课视频没有心跳机制：直接拖到 99% 再等待播放完成。
+SEEK_FRACTION = 0.99
+# 跳转后要真正等到接近结尾，避免把 99% 误当成已完成。
+SEEK_FINISH_TOLERANCE_SECONDS = 0.1
 # 页面跳走/视频元素消失多久后放弃；避免登录态中途失效时卡满 3 小时。
 MISSING_VIDEO_POLLS = 20
 # 高水位多久没有增长就认为播放器卡死。
 STALL_TIMEOUT_SECONDS = 300.0
 
 
-def video_finished(state: dict, high_water: float = 0.0) -> bool:
+def video_finished(
+    state: dict,
+    high_water: float = 0.0,
+    tolerance: float = FINISH_TOLERANCE_SECONDS,
+) -> bool:
     """判断一次视频轮询状态是否已播完（纯函数，便于单测）。
 
     判定顺序：
     1. 播放器的 ``ended``（或监听器记录的 ended）；
-    2. 高水位（轮询值 + 页面监听记录的 max）到达 ``duration - 2``；
+    2. 高水位（轮询值 + 页面监听记录的 max）到达 ``duration - tolerance``；
     3. 高水位接近结尾且 ``currentTime`` 已归零（结束后播放器重置）。
     """
     if not state or not state.get("ok"):
@@ -65,9 +74,9 @@ def video_finished(state: dict, high_water: float = 0.0) -> bool:
         float(state.get("max") or 0),
         current,
     )
-    if high >= duration - FINISH_TOLERANCE_SECONDS:
+    if high >= duration - tolerance:
         return True
-    if current <= 1.0 and high >= duration - max(FINISH_TOLERANCE_SECONDS, 5.0):
+    if current <= 1.0 and high >= duration - max(tolerance, 5.0):
         return True
     return False
 
@@ -233,8 +242,28 @@ class VideoAction:
             )
             return VideoProgress(task, url, False, "视频未就绪", time.monotonic() - started)
 
+        # 慕课视频没有心跳机制：直接拖到 99%，再等待播放完成。
+        seeked = False
+        seek_state = seek_video(page, SEEK_FRACTION)
+        if seek_state.get("ok"):
+            seeked = True
+            self.ctx.info(
+                "已将视频进度拖到 %.0f%%，等待播放完成。"
+                % (float(seek_state.get("target") or 0) * 100.0 / max(1.0, float(seek_state.get("duration") or 1.0)))
+            )
+        else:
+            self.ctx.warn(
+                "无法跳转视频进度（%s），按正常播放等待。"
+                % seek_state.get("reason", "unknown")
+            )
+
         finished, reason, max_current = self._wait_silent(
-            page, task, max_seconds=max_seconds
+            page,
+            task,
+            max_seconds=max_seconds,
+            finish_tolerance=(
+                SEEK_FINISH_TOLERANCE_SECONDS if seeked else FINISH_TOLERANCE_SECONDS
+            ),
         )
 
         if finished:
@@ -265,7 +294,12 @@ class VideoAction:
 
     # ------------------------------------------------------------------ 等待
     def _wait_silent(
-        self, page, task: Task, *, max_seconds: float | None = None
+        self,
+        page,
+        task: Task,
+        *,
+        max_seconds: float | None = None,
+        finish_tolerance: float = FINISH_TOLERANCE_SECONDS,
     ) -> tuple[bool, str, float]:
         limit = MAX_WAIT_MS / 1000
         if max_seconds is not None:
@@ -307,7 +341,7 @@ class VideoAction:
             elif time.monotonic() - last_progress_at >= STALL_TIMEOUT_SECONDS:
                 return False, "长时间无进度", max_current
             self._report_progress(task, {**state, "currentTime": max_current})
-            if video_finished(state, max_current):
+            if video_finished(state, max_current, finish_tolerance):
                 return True, "", max_current
             # 播放器被暂停且不是弹窗导致时，尝试恢复
             if state.get("paused") and not popup:

@@ -844,6 +844,7 @@ from hwklr.features.icourse import IcourseFeature
 - 4.4.3：`SettingsFieldSpec` 新增 `tooltip`，设置页支持 `(i)` 气泡、功能组默认折叠与启用文字；每次进入设置页只展开“通用”和本次跳转来源；通用组新增 `update_notice`。icourse 新增 `retain_data`，`safe_screenshot` 关闭时不写文件；课程列表显式约束为滚动区域；登录清理失效端口文件、临时 profile 重试，Cookie 导入跳过失败来源；可见登录 CDP 使用 `suppress_origin=True`，修复新版 Edge/Chrome 的 403。
 - 4.5.0：自动更新重构为 `hwklr/updater/` 包：公共核心 `core.py`，平台安装器 `installers/windows.py` / `installers/macos.py`，`config.install_root()` / `data_root()` 分离。自动更新只接受 `hwklr4bjtu-<windows|macos>-<arm64|x64>-vX.Y.Z*.zip`，手动 7z SFX exe / 中文名不会匹配；下载校验 SHA-256（缺失时使用 `hwklr4bjtu-<platform>-<arch>-md5-vX.Y.Z*.txt`），解压到 `updates/staging/<v>` 后移动到 `versions/<v>`，通过 `current.json` 切换；旧版本保留、支持回滚。平台代码在打包时用 `--hidden-import`/`--exclude-module` 精确剔除；launcher/bootstrap 不改变业务协议。
 - 4.5.1：修复 Win11 + Edge 可见登录：Edge 启动器进程拉起真实浏览器后立即退出时，轮询 CDP 而不是立刻报“配置目录被占用”；保留临时 profile 重试。
+- 4.6.0：慕课视频任务在就绪后调用 `seek_video(page, 0.99)` 把进度拖到 99%，再以更严格的结尾容差等待 `ended`；账号类型删除 `auto/自动识别`，`icourse/mail/phone` 显式映射到爱课程/网易邮箱/网易手机号，旧配置中的 `auto` 回退为 `icourse`。
 - 依赖：`playwright`（系统 Edge，不下载 Chromium）、`cryptography`（本机 Chromium Cookie 解密）、`websocket-client`（可见登录 CDP）。
 
 ---

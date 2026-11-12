@@ -3,7 +3,7 @@
 # 编写日期: 2026-11-08 14:30
 # 文件名: __init__.py
 # 主要用途: 页面适配层出口：URL、选择器与页面级操作。
-# 文件版本: 4.0.0
+# 文件版本: 4.6.0
 """页面适配层：URL、选择器与页面级操作。"""
 from __future__ import annotations
 
@@ -21,6 +21,7 @@ from .icourse163 import (
     open_route,
     page_alerts,
     page_block_reason,
+    seek_video,
     set_video_rate,
     testlist_url,
     video_state,
@@ -41,6 +42,7 @@ __all__ = [
     "open_route",
     "page_alerts",
     "page_block_reason",
+    "seek_video",
     "set_video_rate",
     "testlist_url",
     "video_state",
