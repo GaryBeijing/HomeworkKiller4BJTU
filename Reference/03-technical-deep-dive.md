@@ -846,6 +846,7 @@ QuizAction / PopupQuiz                 ← 按题干/选项文本匹配答案
 - 4.6.0：慕课视频不再按完整时长等待：视频就绪后 `seek_video()` 直接把 `currentTime` 拖到 99%，跳过后只等待剩余片段播完；`video_finished()` 支持更小的结尾容差，避免把 99% 误判为完成。账号类型删除自动识别，`resolve_account_type()` 只接受显式类型（icourse/mail/phone），旧 `auto` 配置回退到 icourse。
 - 4.6.1：新增 `hwklr/welcome.py` 与 `/api/welcome`。首屏激活完成后前端读取协议与更新说明，以两页大弹窗展示；确认后通过 `BridgeApi.dismiss_welcome()` 写入 `config.ui.welcome_version`，版本升级后自动重新展示。协议文件优先在可执行文件目录及其上层查找，再回退到数据根目录、安装根目录与源码目录，兼容 exe 同级和 `versions/<v>` 版本化布局；打包时 `_DISTRIBUTION_FILES` 同步附带 `usr_agreement.txt` 与 `updates_info.txt`。C 程序设计 `max_concurrency` 与慕课 `workers` 默认值改为 8，并用 `ui.defaults_version` 做一次性 1→8 迁移，避免以后反复覆盖用户手动选择。
 - 4.6.2：更新器解压后调用 `PlatformInstaller.normalize_staging()`，通过 `app_root()` 定位 ZIP 内实际的 `BUILD_INFO.json` 所在目录并压平到 staging 根，兼容发布 ZIP 外层多一层产物目录；激活前再次归一化，保证 `versions/<v>` 根目录就是程序根。欢迎弹窗协议文本顺序改为先 `usr_agreement.txt`、后 `LICENSE`。
+- 4.6.3：`BUILD_INFO.json.entry` 成为启动入口的唯一事实来源：`resolve_entry()` 在版本目录内安全解析入口，Windows 安装器、Windows/macOS launcher 都不再硬编码默认 exe/.app；入口缺失才回退平台默认名，显式非法或不存在的入口直接报错。`install()` 在 `current.json` 已写入后捕获 `restart()` 异常并回滚指针，`bootstrap_current_version()` 也不再让坏版本导致主程序崩溃。
 
 ---
 

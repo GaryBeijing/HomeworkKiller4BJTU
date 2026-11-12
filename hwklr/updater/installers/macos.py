@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-11 21:00
+# 最后更新: 2026-11-12 16:50
 # 文件名: macos.py
-# 主要用途: macOS 版本化安装器：ditto 解压、.app 校验/签名检查、open 重启与回滚。
-# 文件版本: 4.5.0
+# 主要用途: macOS 版本化安装器：ditto 解压、按 BUILD_INFO 入口校验 .app/签名、open 重启与回滚。
+# 文件版本: 4.6.3
 """macOS 平台安装器。"""
 from __future__ import annotations
 
@@ -13,9 +14,14 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from .base import InstallerError, PlatformInstaller, safe_extract_zip
+from .base import (
+    InstallerError,
+    PlatformInstaller,
+    read_installed_build_info,
+    safe_extract_zip,
+)
 
-__version__ = "4.5.0"
+__version__ = "4.6.3"
 __author__ = "Gary"
 __all__ = ["MacOSInstaller"]
 
@@ -83,7 +89,8 @@ class MacOSInstaller(PlatformInstaller):
     def validate(self, staged: Path, version: str) -> Path:
         """校验版本/平台/架构、入口与代码签名。"""
         entry: Path = super().validate(staged, version)
-        app: Path = self._app_path(staged)
+        # BUILD_INFO 的 entry 会给出真实 .app 名；只有入口不是目录时才回退扫描。
+        app: Path = entry if entry.is_dir() else self._app_path(staged)
         # 签名/公证由发布流程保证；缺少 codesign 时只记录警告。
         try:
             result = subprocess.run(
@@ -106,9 +113,13 @@ class MacOSInstaller(PlatformInstaller):
         """通过 open 或直接执行 .app 主程序启动新版本。"""
         version_dir: Path = self.version_dir(version)
         try:
-            app: Path = self._app_path(version_dir)
-        except InstallerError as exc:
-            raise InstallerError(str(exc)) from exc
+            app: Path = self.resolve_entry(version_dir, expect_dir=True)
+        except InstallerError:
+            # 兼容没有 entry 的旧发行包：允许扫描唯一的 .app。
+            info: dict[str, Any] | None = read_installed_build_info(version_dir)
+            if info is not None and str(info.get("entry") or "").strip():
+                raise
+            app = self._app_path(version_dir)
         executable: Path = app / "Contents" / "MacOS"
         binaries: list[Path] = [
             item for item in executable.iterdir() if item.is_file()
@@ -144,9 +155,12 @@ class MacOSInstaller(PlatformInstaller):
             return False
         return True
 
-    def rollback(self) -> str | None:
-        """回滚并启动上一版本。"""
+    def rollback(self, *, launch: bool = True) -> str | None:
+        """回滚 current.json，并在 ``launch`` 为真时启动上一版本。"""
         previous: str | None = super().rollback()
-        if previous:
-            self.restart(previous, notice="failed")
+        if previous and launch:
+            try:
+                self.restart(previous, notice="failed")
+            except (InstallerError, OSError):
+                _LOGGER.warning("回滚后启动上一版本失败", exc_info=True)
         return previous

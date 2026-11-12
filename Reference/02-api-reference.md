@@ -851,6 +851,7 @@ from hwklr.features.icourse import IcourseFeature
 - 4.6.0：慕课视频任务在就绪后调用 `seek_video(page, 0.99)` 把进度拖到 99%，再以更严格的结尾容差等待 `ended`；账号类型删除 `auto/自动识别`，`icourse/mail/phone` 显式映射到爱课程/网易邮箱/网易手机号，旧配置中的 `auto` 回退为 `icourse`。
 - 4.6.1：新增 `/api/welcome` 与 `BridgeApi.dismiss_welcome()`；欢迎弹窗的协议文本来自 `LICENSE` + `usr_agreement.txt`，更新分组来自 `updates_info.txt`，确认状态写入 `config.ui.welcome_version`。C 程序设计 `max_concurrency` 与慕课 `workers` 默认值提升到 8，旧配置中仍为 1 的值会一次性迁移到 8；C 程序设计 `enable_solution_mode` 默认改为 `true`，前端默认模式改为 `solution`；旧配置中仍为 `false` 的值通过 `ui.solution_mode_version` 一次性迁移到 `true`，之后不再覆盖用户手动关闭。
 - 4.6.2：`PlatformInstaller.app_root()` / `normalize_staging()` 识别并压平发布 ZIP 中多出的一层产物目录（如 `北交作业助手-v4.6.0.6439/BUILD_INFO.json`），修复“更新包缺少 BUILD_INFO.json”误报；`versions/<v>` 根目录仍直接是程序根。`welcome.load_agreement_text()` 改为用户协议在前、开源许可证在后。
+- 4.6.3：启动新版本时通过 `resolve_entry()` / `confined_entry_path()` 读取已安装版本 `BUILD_INFO.json` 的 `entry`，Windows 安装器与两个 launcher 不再硬编码 `HomeworkKiller4BJTU.exe/.app`；入口只允许版本目录内的相对路径。启动失败时 `install()` / `bootstrap_current_version()` 会回滚 `current.json`，没有 `previous` 时清理失效指针。
 - 依赖：`playwright`（系统 Edge，不下载 Chromium）、`cryptography`（本机 Chromium Cookie 解密）、`websocket-client`（可见登录 CDP）。
 
 ---

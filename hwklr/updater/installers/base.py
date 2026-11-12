@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-11 21:00
-# 最后更新: 2026-11-12 14:10
+# 最后更新: 2026-11-12 16:50
 # 文件名: base.py
-# 主要用途: 平台安装器接口、ZIP 安全解压、嵌套发布目录归一化、BUILD_INFO 校验与 current.json 版本指针。
-# 文件版本: 4.6.2
+# 主要用途: 平台安装器接口、ZIP 安全解压、嵌套发布目录归一化、BUILD_INFO 入口解析与 current.json 版本指针。
+# 文件版本: 4.6.3
 """平台安装器公共逻辑。"""
 from __future__ import annotations
 
@@ -15,17 +15,19 @@ import shutil
 import sys
 import zipfile
 from abc import ABC, abstractmethod
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from hwklr.config import data_root, install_root
 
-__version__ = "4.6.2"
+__version__ = "4.6.3"
 __author__ = "Gary"
 __all__ = [
     "InstallerError",
     "PlatformInstaller",
+    "confined_entry_path",
     "read_current",
+    "read_installed_build_info",
     "safe_extract_zip",
     "write_current",
 ]
@@ -66,6 +68,67 @@ def write_current(version: str, previous: str = "", root: Path | None = None) ->
         json.dump(payload, fp, ensure_ascii=False, indent=2)
         fp.write("\n")
     temporary.replace(target)
+
+
+def read_installed_build_info(root: Path) -> dict[str, Any] | None:
+    """读取程序根目录的 BUILD_INFO.json。
+
+    与 :meth:`PlatformInstaller.build_info` 不同，本函数不负责寻找嵌套
+    程序根；它用于已经激活的 ``versions/<v>`` 目录。
+
+    Args:
+        root: 程序根目录。
+
+    Returns:
+        BUILD_INFO 字典；文件不存在时返回 ``None``。
+
+    Raises:
+        InstallerError: 文件存在但无法读取、不是 JSON 对象时抛出。
+    """
+    candidate: Path = Path(root) / "BUILD_INFO.json"
+    if not candidate.is_file():
+        return None
+    try:
+        with candidate.open(encoding="utf-8-sig") as fp:
+            data: Any = json.load(fp)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise InstallerError("BUILD_INFO.json 无法解析：%s" % exc) from exc
+    if not isinstance(data, dict):
+        raise InstallerError("BUILD_INFO.json 内容不合法")
+    return data
+
+
+def confined_entry_path(root: Path, entry_name: str) -> Path:
+    """把 BUILD_INFO 的 ``entry`` 解析为程序根目录内的安全路径。
+
+    Args:
+        root: 程序根目录。
+        entry_name: BUILD_INFO 中的入口相对路径。
+
+    Returns:
+        解析后的入口路径（不保证文件存在）。
+
+    Raises:
+        InstallerError: 路径为空、包含绝对路径/盘符/父目录，或解析后越界时抛出。
+    """
+    name: str = str(entry_name or "").strip()
+    if not name or "\x00" in name or ":" in name:
+        raise InstallerError("BUILD_INFO.json 的 entry 非法：%s" % entry_name)
+    normalized: str = name.replace("\\", "/")
+    parts: tuple[str, ...] = PurePosixPath(normalized).parts
+    if (
+        not parts
+        or PurePosixPath(normalized).is_absolute()
+        or any(part in ("", ".", "..") for part in normalized.split("/"))
+    ):
+        raise InstallerError("BUILD_INFO.json 的 entry 非法：%s" % entry_name)
+    root_resolved: Path = Path(root).resolve()
+    candidate: Path = (root_resolved / Path(*parts)).resolve()
+    try:
+        candidate.relative_to(root_resolved)
+    except ValueError as exc:
+        raise InstallerError("入口路径越界：%s" % entry_name) from exc
+    return candidate
 
 
 def safe_extract_zip(archive: Path, target: Path) -> None:
@@ -205,6 +268,42 @@ class PlatformInstaller(ABC):
             current = current.parent
         return root
 
+    def resolve_entry(
+        self,
+        root: Path,
+        *,
+        expect_dir: bool = False,
+        fallback_name: str = "",
+    ) -> Path:
+        """解析程序根目录中的启动入口。
+
+        优先使用 ``BUILD_INFO.json`` 的 ``entry``；只有 BUILD_INFO 或
+        ``entry`` 缺失时才回退到平台默认入口。显式给出的入口非法或不
+        存在时直接报错，避免静默启动到错误文件。
+
+        Args:
+            root: 程序根目录。
+            expect_dir: 入口是否为目录（macOS ``.app``）。
+            fallback_name: 覆盖平台默认入口名。
+
+        Returns:
+            入口路径。
+
+        Raises:
+            InstallerError: 入口缺失、非法或类型不匹配时抛出。
+        """
+        info: dict[str, Any] | None = read_installed_build_info(root)
+        name: str = str((info or {}).get("entry") or "").strip()
+        if not name:
+            name = str(fallback_name or self.entry_name or "").strip()
+        if not name:
+            raise InstallerError("BUILD_INFO.json 缺少入口")
+        entry: Path = confined_entry_path(root, name)
+        exists: bool = entry.is_dir() if expect_dir else entry.is_file()
+        if not exists:
+            raise InstallerError("更新包缺少入口：%s" % name)
+        return entry
+
     def build_info(self, staged: Path) -> dict[str, Any]:
         """读取 staging 中的 BUILD_INFO.json。"""
         candidate: Path = self.app_root(staged) / "BUILD_INFO.json"
@@ -242,8 +341,10 @@ class PlatformInstaller(ABC):
                 "更新包架构不匹配：期望 %s，实际 %s"
                 % (self.arch, info.get("arch"))
             )
-        entry_name: str = str(info.get("entry") or self.entry_name or "")
-        entry: Path = self.app_root(staged) / entry_name
+        entry_name: str = str(info.get("entry") or self.entry_name or "").strip()
+        if not entry_name:
+            raise InstallerError("BUILD_INFO.json 缺少入口")
+        entry: Path = confined_entry_path(self.app_root(staged), entry_name)
         if not entry.exists():
             raise InstallerError("更新包缺少入口：%s" % entry_name)
         return entry
@@ -302,12 +403,25 @@ class PlatformInstaller(ABC):
             except OSError:
                 _LOGGER.warning("清理旧版本失败：%s", child, exc_info=True)
 
+    def clear_current(self) -> None:
+        """删除 current.json；用于没有可回滚版本时清理失效指针。"""
+        try:
+            (self.install_root() / "current.json").unlink()
+        except FileNotFoundError:
+            return
+        except OSError:
+            _LOGGER.warning("删除 current.json 失败", exc_info=True)
+
     @abstractmethod
     def restart(self, version: str, notice: str = "") -> bool:
         """启动新版本；返回是否成功创建进程。"""
 
-    def rollback(self) -> str | None:
-        """把 current.json 指回 previous 并返回该版本。"""
+    def rollback(self, *, launch: bool = True) -> str | None:
+        """把 current.json 指回 previous 并返回该版本。
+
+        Args:
+            launch: 是否由子类在回滚后启动旧版本；基类不使用该参数。
+        """
         state: dict[str, str] = read_current(self.install_root())
         previous: str = state.get("previous", "")
         if not previous:

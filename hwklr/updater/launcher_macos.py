@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-11 21:00
+# 最后更新: 2026-11-12 16:50
 # 文件名: launcher_macos.py
-# 主要用途: macOS 稳定启动器：读取 current.json 并启动 versions/<v> 中的 .app，失败时回退上一版本。
-# 文件版本: 4.5.0
+# 主要用途: macOS 稳定启动器：读取 current.json 与 BUILD_INFO 入口启动 versions/<v> 中的 .app，失败时回退上一版本。
+# 文件版本: 4.6.3
 """macOS launcher（仅启动逻辑，不含业务代码）。"""
 from __future__ import annotations
 
@@ -11,9 +12,10 @@ import json
 import os
 import subprocess
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+from typing import Any
 
-__version__ = "4.5.0"
+__version__ = "4.6.3"
 __author__ = "Gary"
 __all__ = ["main"]
 
@@ -43,6 +45,83 @@ def _read_current(root: Path) -> dict[str, str]:
         "version": str(data.get("version") or ""),
         "previous": str(data.get("previous") or ""),
     }
+
+
+def _read_build_info(version_dir: Path) -> dict[str, Any] | None:
+    """宽松读取版本目录或唯一 .app 内的 BUILD_INFO.json。
+
+    Args:
+        version_dir: ``versions/<v>`` 目录。
+
+    Returns:
+        字典；缺失或损坏时返回 ``None``。
+    """
+    candidates: list[Path] = [version_dir / "BUILD_INFO.json"]
+    apps: list[Path] = sorted(version_dir.glob("*.app"))
+    if len(apps) == 1:
+        candidates.append(apps[0] / "Contents" / "Resources" / "BUILD_INFO.json")
+    for candidate in candidates:
+        try:
+            with candidate.open(encoding="utf-8-sig") as fp:
+                data: Any = json.load(fp)
+        except (OSError, json.JSONDecodeError):
+            continue
+        if isinstance(data, dict):
+            return data
+    return None
+
+
+def _confined_entry(version_dir: Path, entry_name: str) -> Path | None:
+    """把 BUILD_INFO 的入口限制在版本目录内。
+
+    Args:
+        version_dir: ``versions/<v>`` 目录。
+        entry_name: BUILD_INFO 中的入口相对路径。
+
+    Returns:
+        安全路径；非法时返回 ``None``。
+    """
+    name: str = str(entry_name or "").strip()
+    if not name or "\x00" in name or ":" in name:
+        return None
+    normalized: str = name.replace("\\", "/")
+    parts: tuple[str, ...] = PurePosixPath(normalized).parts
+    if (
+        not parts
+        or PurePosixPath(normalized).is_absolute()
+        or any(part in ("", ".", "..") for part in normalized.split("/"))
+    ):
+        return None
+    root: Path = version_dir.resolve()
+    try:
+        candidate: Path = (root / Path(*parts)).resolve()
+        candidate.relative_to(root)
+    except (OSError, ValueError):
+        return None
+    return candidate
+
+
+def _entry_path(root: Path, version: str) -> Path | None:
+    """解析版本 .app：优先 BUILD_INFO.entry，缺失时回退默认名/唯一 .app。
+
+    Args:
+        root: 安装根目录。
+        version: 版本目录名。
+
+    Returns:
+        .app 目录；无法解析时返回 ``None``。
+    """
+    version_dir: Path = root / "versions" / version
+    info: dict[str, Any] | None = _read_build_info(version_dir)
+    entry_name: str = str((info or {}).get("entry") or "").strip()
+    if entry_name:
+        candidate: Path | None = _confined_entry(version_dir, entry_name)
+        return candidate if candidate is not None and candidate.is_dir() else None
+    fallback: Path = version_dir / ENTRY_NAME
+    if fallback.is_dir():
+        return fallback
+    apps: list[Path] = sorted(version_dir.glob("*.app"))
+    return apps[0] if len(apps) == 1 else None
 
 
 def _arguments() -> tuple[str, str, str]:
@@ -86,8 +165,8 @@ def _show_error(root: Path) -> None:
 
 
 def _launch(root: Path, version: str, data_root: Path, notice: str) -> bool:
-    app: Path = root / "versions" / version / ENTRY_NAME
-    if not app.is_dir():
+    app: Path | None = _entry_path(root, version)
+    if app is None:
         return False
     executable_dir: Path = app / "Contents" / "MacOS"
     binaries: list[Path] = (

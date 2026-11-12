@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-11 21:00
-# 最后更新: 2026-11-12 14:10
+# 最后更新: 2026-11-12 16:50
 # 文件名: core.py
 # 主要用途: 平台无关的更新核心：版本检查、资产筛选、ZIP 下载校验、staging 目录归一化与安装状态机。
-# 文件版本: 4.6.2
+# 文件版本: 4.6.3
 """跨平台自动更新核心。"""
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ from .installers import get_platform_installer
 from .installers.base import InstallerError, PlatformInstaller
 from .models import PreparedUpdate, ReleaseAsset, ReleaseInfo
 
-__version__ = "4.6.2"
+__version__ = "4.6.3"
 __author__ = "Gary"
 __all__ = [
     "AUTO_ASSET_RE",
@@ -368,6 +368,34 @@ def _parse_md5sums(text: str, asset_name: str) -> str:
         if not fallback and re.fullmatch(r"[0-9a-f]{32}", digest):
             fallback = digest
     return fallback
+
+
+def _safe_rollback(
+    installer: PlatformInstaller,
+    *,
+    launch: bool = False,
+) -> str | None:
+    """尽力回滚 current.json，失败时只记录日志。
+
+    Args:
+        installer: 当前平台安装器。
+        launch: 回滚后是否启动上一版本。
+
+    Returns:
+        回滚到的版本；没有可回滚版本时返回 ``None``。
+    """
+    try:
+        previous: str | None = installer.rollback(launch=launch)
+    except Exception:
+        _LOGGER.warning("回滚更新失败", exc_info=True)
+        return None
+    if previous:
+        return previous
+    try:
+        installer.clear_current()
+    except Exception:
+        _LOGGER.warning("清理失效 current.json 失败", exc_info=True)
+    return None
 
 
 class UpdateService:
@@ -760,21 +788,28 @@ class UpdateService:
         prepared: PreparedUpdate | None = self._prepared
         if prepared is None or self.snapshot().get("status") != "ready":
             return {"ok": False, "error": "更新尚未准备完成", "pending": False}
+        current_written: bool = False
         try:
-            version_dir: Path = self._installer.activate(
-                prepared.staged_dir, prepared.version
-            )
+            self._installer.activate(prepared.staged_dir, prepared.version)
             self._installer.write_current(prepared.version, prepared.previous)
+            current_written = True
             self._installer.cleanup_old_versions()
             if restart:
-                started: bool = self._installer.restart(
-                    prepared.version, notice="ok"
-                )
+                launch_error: str = ""
+                try:
+                    started: bool = self._installer.restart(
+                        prepared.version, notice="ok"
+                    )
+                except (InstallerError, OSError) as exc:
+                    started = False
+                    launch_error = str(exc)
                 if not started:
-                    self._installer.rollback()
+                    # 启动失败时只回滚指针，避免当前进程退出前再拉起一个旧版本。
+                    _safe_rollback(self._installer, launch=False)
                     return {
                         "ok": False,
-                        "error": "无法启动新版本，已回滚到上一版本",
+                        "error": launch_error
+                        or "无法启动新版本，已回滚到上一版本",
                         "pending": True,
                     }
                 self._schedule_exit()
@@ -787,6 +822,8 @@ class UpdateService:
             return {"ok": True, "error": "", "pending": False}
         except (InstallerError, OSError) as exc:
             _LOGGER.warning("安装更新失败: %s", exc)
+            if current_written:
+                _safe_rollback(self._installer, launch=False)
             return {"ok": False, "error": str(exc), "pending": True}
 
     def _schedule_exit(self) -> None:
@@ -843,10 +880,16 @@ def bootstrap_current_version() -> bool:
         return False
     target: Path = installer.version_dir(current)
     if not target.exists():
+        _safe_rollback(installer, launch=False)
         return False
-    if installer.restart(current, notice=""):
+    try:
+        restarted: bool = installer.restart(current, notice="")
+    except (InstallerError, OSError):
+        restarted = False
+    if restarted:
         return True
-    installer.rollback()
+    # 只回滚指针；当前进程本身就是可用的旧版本，继续运行即可。
+    _safe_rollback(installer, launch=False)
     return False
 
 
