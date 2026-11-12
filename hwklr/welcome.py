@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-12 13:00
-# 最后更新: 2026-11-12 13:00
+# 最后更新: 2026-11-12 14:10
 # 文件名: welcome.py
-# 主要用途: 首次启动/版本升级后的欢迎弹窗数据：读取协议与更新说明、解析更新条目并记录已确认版本。
-# 文件版本: 4.6.1
+# 主要用途: 首次启动/版本升级后的欢迎弹窗数据：按用户协议在前、开源许可证在后的顺序读取文本，解析更新条目并记录已确认版本。
+# 文件版本: 4.6.2
 """欢迎弹窗数据。
 
 协议与更新说明来自发行包根目录的 ``LICENSE``、``usr_agreement.txt`` 与
@@ -22,7 +22,7 @@ from typing import Any, Final
 from hwklr import __version__ as APP_VERSION
 from hwklr.config import data_root, install_root, load_config, update_config
 
-__version__ = "4.6.1"
+__version__ = "4.6.2"
 __author__ = "Gary"
 __all__ = [
     "load_agreement_text",
@@ -100,18 +100,18 @@ def _read_text(name: str) -> str:
 
 
 def load_agreement_text() -> str:
-    """合并开源许可证与用户协议文本。
+    """按“用户协议 + 开源许可证”的顺序合并文本。
 
     Returns:
         供弹窗滚动区展示的完整文本。
     """
     sections: list[str] = []
-    license_text: str = _read_text(_LICENSE_FILE).strip()
-    if license_text:
-        sections.append("【开源许可证】\n" + license_text)
     agreement_text: str = _read_text(_AGREEMENT_FILE).strip()
     if agreement_text:
         sections.append("【用户协议】\n" + agreement_text)
+    license_text: str = _read_text(_LICENSE_FILE).strip()
+    if license_text:
+        sections.append("【开源许可证】\n" + license_text)
     return "\n\n".join(sections) or "暂无协议内容。"
 
 

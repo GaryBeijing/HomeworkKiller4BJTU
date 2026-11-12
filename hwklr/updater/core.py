@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-11 21:00
+# 最后更新: 2026-11-12 14:10
 # 文件名: core.py
-# 主要用途: 平台无关的更新核心：版本检查、资产筛选、ZIP 下载校验、staging 与安装状态机。
-# 文件版本: 4.5.0
+# 主要用途: 平台无关的更新核心：版本检查、资产筛选、ZIP 下载校验、staging 目录归一化与安装状态机。
+# 文件版本: 4.6.2
 """跨平台自动更新核心。"""
 from __future__ import annotations
 
@@ -28,7 +29,7 @@ from .installers import get_platform_installer
 from .installers.base import InstallerError, PlatformInstaller
 from .models import PreparedUpdate, ReleaseAsset, ReleaseInfo
 
-__version__ = "4.5.0"
+__version__ = "4.6.2"
 __author__ = "Gary"
 __all__ = [
     "AUTO_ASSET_RE",
@@ -698,6 +699,8 @@ class UpdateService:
 
                 shutil.rmtree(staging, ignore_errors=True)
             self._installer.extract(target, staging)
+            # 发布 ZIP 常带一层产物目录；先压平，确保 BUILD_INFO 与入口在根目录。
+            self._installer.normalize_staging(staging)
             entry: Path = self._installer.validate(staging, version)
             previous: str = self._installer.current_version()
             prepared = PreparedUpdate(

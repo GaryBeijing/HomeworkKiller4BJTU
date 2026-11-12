@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-11 21:00
+# 最后更新: 2026-11-12 14:10
 # 文件名: base.py
-# 主要用途: 平台安装器接口、ZIP 安全解压、BUILD_INFO 校验与 current.json 版本指针。
-# 文件版本: 4.5.0
+# 主要用途: 平台安装器接口、ZIP 安全解压、嵌套发布目录归一化、BUILD_INFO 校验与 current.json 版本指针。
+# 文件版本: 4.6.2
 """平台安装器公共逻辑。"""
 from __future__ import annotations
 
@@ -19,7 +20,7 @@ from typing import Any
 
 from hwklr.config import data_root, install_root
 
-__version__ = "4.5.0"
+__version__ = "4.6.2"
 __author__ = "Gary"
 __all__ = [
     "InstallerError",
@@ -135,9 +136,78 @@ class PlatformInstaller(ABC):
         """默认 ZIP 解压；macOS 可覆盖为 ditto。"""
         safe_extract_zip(archive, target)
 
+    def app_root(self, staged: Path) -> Path:
+        """定位 staging 中真正的程序根目录。
+
+        发布 ZIP 由“产物目录整体压缩”生成，解压后可能多出一层以程序名
+        命名的目录（例如 ``北交作业助手-v4.6.0.6439/BUILD_INFO.json``）。
+        此处返回包含 ``BUILD_INFO.json`` 的那一层，避免误报“更新包缺少
+        BUILD_INFO.json”。
+
+        Args:
+            staged: staging 解压根目录。
+
+        Returns:
+            包含 ``BUILD_INFO.json`` 的目录；找不到时返回 ``staged``。
+        """
+        root: Path = Path(staged)
+        if (root / "BUILD_INFO.json").is_file():
+            return root
+        if not root.is_dir():
+            return root
+        candidates: list[Path] = []
+        for info in root.rglob("BUILD_INFO.json"):
+            if not info.is_file():
+                continue
+            relative: tuple[str, ...] = info.relative_to(root).parts
+            # 跳过 macOS 资源分叉与 .app bundle 内部文件，只认发行根目录。
+            if "__MACOSX" in relative:
+                continue
+            if any(part.endswith(".app") for part in relative):
+                continue
+            candidates.append(info.parent)
+        if len(candidates) == 1:
+            return candidates[0]
+        if len(candidates) > 1:
+            raise InstallerError(
+                "更新包包含多个 BUILD_INFO.json，无法确定程序根目录"
+            )
+        return root
+
+    def normalize_staging(self, staged: Path) -> Path:
+        """把嵌套的发布目录压平到 staging 根。
+
+        Args:
+            staged: staging 解压根目录。
+
+        Returns:
+            压平后的 staging 根目录。
+        """
+        root: Path = Path(staged)
+        source_root: Path = self.app_root(root)
+        if source_root == root:
+            return root
+        # 步骤 1：把真实程序根的内容移动到 staging 根。
+        for child in list(source_root.iterdir()):
+            destination: Path = root / child.name
+            if destination.exists():
+                raise InstallerError(
+                    "更新包目录结构与根目录文件冲突：%s" % child.name
+                )
+            shutil.move(str(child), str(destination))
+        # 步骤 2：清理压平后留下的空目录。
+        current: Path = source_root
+        while current != root:
+            try:
+                current.rmdir()
+            except OSError:
+                break
+            current = current.parent
+        return root
+
     def build_info(self, staged: Path) -> dict[str, Any]:
         """读取 staging 中的 BUILD_INFO.json。"""
-        candidate: Path = staged / "BUILD_INFO.json"
+        candidate: Path = self.app_root(staged) / "BUILD_INFO.json"
         if not candidate.is_file():
             raise InstallerError("更新包缺少 BUILD_INFO.json")
         try:
@@ -173,7 +243,7 @@ class PlatformInstaller(ABC):
                 % (self.arch, info.get("arch"))
             )
         entry_name: str = str(info.get("entry") or self.entry_name or "")
-        entry: Path = staged / entry_name
+        entry: Path = self.app_root(staged) / entry_name
         if not entry.exists():
             raise InstallerError("更新包缺少入口：%s" % entry_name)
         return entry
@@ -186,6 +256,8 @@ class PlatformInstaller(ABC):
         target: Path = self.version_dir(version)
         if target.exists():
             raise InstallerError("目标版本目录已存在：%s" % target)
+        # 兼容直接传入未压平的 staging；确保 versions/<v> 根目录就是程序根。
+        staged = self.normalize_staging(staged)
         target.parent.mkdir(parents=True, exist_ok=True)
         # 先移动到 versions 同卷的临时目录，再用 rename 原子切换；
         # 跨卷（如 macOS 数据目录 -> 安装目录）中途失败不会污染目标版本。

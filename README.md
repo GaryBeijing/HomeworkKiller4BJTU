@@ -6,7 +6,7 @@
 
 ![Python](https://img.shields.io/badge/Python-3.15.2-3776AB?logo=python&logoColor=white)
 ![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-0078D4?logo=windows&logoColor=white)
-![Version](https://img.shields.io/badge/Version-4.6.1-5B4BFF)
+![Version](https://img.shields.io/badge/Version-4.6.2-5B4BFF)
 ![GUI](https://img.shields.io/badge/GUI-pywebview%20%2B%20WebView2-2F3AB2)
 
 [功能特性](#-功能特性) · [界面预览](#-界面预览) · [快速开始](#-快速开始) · [使用指南](#-使用指南) · [构建与分发](#-构建与分发) · [插件开发](#-插件开发) · [常见问题](#-常见问题)
@@ -477,7 +477,8 @@ HomeworkKiller4BJTU/
 
 | 版本 | 主要内容 |
 |---|---|
-| **4.6.1** | 默认线程数提升：C 程序设计最大并发数与慕课视频并行数默认 8（上限）；C 程序设计默认启用并进入题解模式；新增首次启动/版本升级欢迎弹窗，展示协议与当前版本更新说明。 |
+| **4.6.2** | 修复自动更新误报“更新包缺少 BUILD_INFO.json”：解压后自动识别并压平发布 ZIP 的产物根目录；首次启动协议改为“用户协议 + 开源许可证”顺序。 |
+| 4.6.1 | 默认线程数提升：C 程序设计最大并发数与慕课视频并行数默认 8（上限）；C 程序设计默认启用并进入题解模式；新增首次启动/版本升级欢迎弹窗，展示协议与当前版本更新说明。 |
 | 4.6.0 | 慕课刷课优化：视频直接跳到 99% 后等待播放完成；删除账号类型“自动识别”，改为显式选择爱课程/网易邮箱/网易手机号。 |
 | 4.5.1 | 修复 Win11 + Edge 可见登录：Edge 启动器进程拉起真实浏览器后立即退出时，不再误判为配置目录被占用。 |
 | 4.5.0 | 跨平台自动更新重构：版本化安装 + `current.json` + 平台安装器；自动更新只取 zip，手动 7z SFX 包不参与；平台代码按目标平台收集/剔除；数据根目录与 launcher/bootstrap 分离 |

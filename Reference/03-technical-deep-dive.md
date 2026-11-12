@@ -845,6 +845,7 @@ QuizAction / PopupQuiz                 ← 按题干/选项文本匹配答案
 - 4.5.1：修复 Win11 + Edge 可见登录。Edge 常以启动器进程拉起真实浏览器后立即退出，`browser_login._launch_with_profile()` 不再把启动器退出当成失败，而是继续轮询 CDP；只有 8 秒内仍无调试端口才判定失败并重试临时 profile。
 - 4.6.0：慕课视频不再按完整时长等待：视频就绪后 `seek_video()` 直接把 `currentTime` 拖到 99%，跳过后只等待剩余片段播完；`video_finished()` 支持更小的结尾容差，避免把 99% 误判为完成。账号类型删除自动识别，`resolve_account_type()` 只接受显式类型（icourse/mail/phone），旧 `auto` 配置回退到 icourse。
 - 4.6.1：新增 `hwklr/welcome.py` 与 `/api/welcome`。首屏激活完成后前端读取协议与更新说明，以两页大弹窗展示；确认后通过 `BridgeApi.dismiss_welcome()` 写入 `config.ui.welcome_version`，版本升级后自动重新展示。协议文件优先在可执行文件目录及其上层查找，再回退到数据根目录、安装根目录与源码目录，兼容 exe 同级和 `versions/<v>` 版本化布局；打包时 `_DISTRIBUTION_FILES` 同步附带 `usr_agreement.txt` 与 `updates_info.txt`。C 程序设计 `max_concurrency` 与慕课 `workers` 默认值改为 8，并用 `ui.defaults_version` 做一次性 1→8 迁移，避免以后反复覆盖用户手动选择。
+- 4.6.2：更新器解压后调用 `PlatformInstaller.normalize_staging()`，通过 `app_root()` 定位 ZIP 内实际的 `BUILD_INFO.json` 所在目录并压平到 staging 根，兼容发布 ZIP 外层多一层产物目录；激活前再次归一化，保证 `versions/<v>` 根目录就是程序根。欢迎弹窗协议文本顺序改为先 `usr_agreement.txt`、后 `LICENSE`。
 
 ---
 
@@ -1701,7 +1702,7 @@ B: save {…, x:1, a:true, b:true}      ← 若 B 的 patch 含 a 之外的新�
 #### 16.6 不受保护的面
 
 - **无代码签名**：Windows 首次运行会弹 SmartScreen。
-- **自动更新信任链**：只访问 GitHub/GitCode 公开 release API 与受信任的下载域名；自动更新只接受 `hwklr4bjtu-<platform>-<arch>-vX.Y.Z*.zip`，手动 7z SFX exe/中文名不会匹配。下载使用 HTTPS，优先校验 `SHA256SUMS`/release `sha256`，缺失时使用 `hwklr4bjtu-<platform>-<arch>-md5-vX.Y.Z*.txt`；解压到 `updates/staging` 并校验 `BUILD_INFO.json` 的 version/platform/arch/entry 后才移动到 `versions/<v>`。更新不覆盖运行中的程序，旧版本保留；源码运行禁用安装。任何新增签名/公证方案前，应把此段视为待加固项。
+- **自动更新信任链**：只访问 GitHub/GitCode 公开 release API 与受信任的下载域名；自动更新只接受 `hwklr4bjtu-<platform>-<arch>-vX.Y.Z*.zip`，手动 7z SFX exe/中文名不会匹配。下载使用 HTTPS，优先校验 `SHA256SUMS`/release `sha256`，缺失时使用 `hwklr4bjtu-<platform>-<arch>-md5-vX.Y.Z*.txt`；解压到 `updates/staging`，先识别并压平发布 ZIP 外层可能的产物目录，再校验 `BUILD_INFO.json` 的 version/platform/arch/entry 后才移动到 `versions/<v>`。更新不覆盖运行中的程序，旧版本保留；源码运行禁用安装。任何新增签名/公证方案前，应把此段视为待加固项。
 - **无遥测**：不外发任何埋点数据。
 - **子进程无沙箱**：PyInstaller / `python -m venv` 以当前用户权限执行。
 - **`base_url` 由用户控制**：可指向任意地址（包括 `http://localhost`），等价于用户自愿发起 SSRF；这是配置能力的一部分，不做限制。
