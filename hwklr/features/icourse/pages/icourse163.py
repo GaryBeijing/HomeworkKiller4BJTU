@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-16 17:20
+# 最后更新: 2026-11-16 20:30
 # 文件名: icourse163.py
-# 主要用途: icourse163 页面 URL、选择器、SPA 导航、登录墙判定、可选中止的弹窗关闭与视频状态脚本。
-# 文件版本: 4.6.5
+# 主要用途: icourse163 页面 URL（含新版考试列表）、选择器、SPA 导航、登录墙判定、可选中止的弹窗关闭与视频状态脚本。
+# 文件版本: 4.6.7
 """icourse163 页面 URL 与选择器。
 
 结构基于 2026-11 的新版 React 学习页：
@@ -88,10 +88,26 @@ def new_assessment_url(
     *,
     objective: bool | None = None,
 ) -> str:
-    """返回新版 `/mooc/learn/.../assessments/...` 路由。"""
-    segment = "hw" if kind == "作业" else ("exam" if kind == "考试" else "quiz")
+    """返回新版任务列表/详情路由。
+
+    新版测验与作业在 ``/assessments`` 下；考试没有独立的 path 详情页，
+    统一进入 ``/exams`` 列表，由动作层按任务名点击并点“进入考试”。
+    """
+    if kind == "考试":
+        return new_exam_list_url(school, course_id, term_id)
+    segment = "hw" if kind == "作业" else "quiz"
     path = NEW_LEARN_PATH.format(school=school, course_id=int(course_id))
     return f"{BASE}{path}/assessments/{segment}/{int(test_id)}?tid={int(term_id)}"
+
+
+def new_exam_list_url(
+    school: str,
+    course_id: int | str,
+    term_id: int | str,
+) -> str:
+    """返回新版课程考试列表页。"""
+    path = NEW_LEARN_PATH.format(school=school, course_id=int(course_id))
+    return f"{BASE}{path}/exams?tid={int(term_id)}"
 
 
 def new_testlist_url(

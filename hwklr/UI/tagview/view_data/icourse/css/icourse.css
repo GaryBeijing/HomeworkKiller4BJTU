@@ -1,10 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-11-08 14:30
-  最后更新: 2026-11-11 10:00
+  最后更新: 2026-11-16 20:30
   文件名: icourse.css
-  主要用途: “中国大学慕课”标签页样式：固定视口高度、课程列表与任务区内部滚动、紧凑顶栏、标签内登录提示与任务结果弹窗。
-  文件版本: 4.4.3
+  主要用途: “中国大学慕课”标签页样式：固定视口高度、课程列表与任务区内部滚动、紧凑顶栏、答案浏览弹窗、标签内登录提示与任务结果弹窗。
+  文件版本: 4.6.7
 */
 
 /* 慕课页永远不滚动整个页面；滚动只发生在课程列表、任务表和日志内部。 */
@@ -678,4 +678,170 @@
   .tag-icourse .ic-selection-hint {
     display: none;
   }
+}
+
+/* ---------------------------------------------------------------- 答案浏览 */
+.tag-icourse .ic-card-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tag-icourse .ic-notice .ic-notice-action {
+  flex: 0 0 auto;
+  align-self: center;
+  padding: 2px 7px;
+  border: 1px solid #e0bf67;
+  border-radius: 999px;
+  background: #fff7d6;
+  color: inherit;
+  cursor: pointer;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.tag-icourse .ic-notice .ic-notice-action:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.tag-icourse .ic-bank-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(820px, 92%);
+  max-height: min(78vh, 720px);
+}
+
+.tag-icourse .ic-bank-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.tag-icourse .ic-bank-head h3 {
+  margin: 0;
+}
+
+.tag-icourse .ic-bank-close {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.tag-icourse .ic-bank-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, 220px) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.tag-icourse .ic-bank-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-top: 10px;
+  padding-right: 4px;
+  overflow: auto;
+}
+
+.tag-icourse .ic-bank-item {
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+}
+
+.tag-icourse .ic-bank-item-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tag-icourse .ic-bank-index {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.tag-icourse .ic-bank-test-name {
+  margin-left: auto;
+}
+
+.tag-icourse .ic-bank-title {
+  margin: 8px 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.65;
+  word-break: break-word;
+}
+
+.tag-icourse .ic-bank-options {
+  margin: 6px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tag-icourse .ic-bank-options li {
+  display: flex;
+  gap: 6px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.tag-icourse .ic-bank-options li.correct {
+  background: #e7f7ed;
+  color: var(--ok);
+  font-weight: 600;
+}
+
+.tag-icourse .ic-bank-letter {
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+
+.tag-icourse .ic-bank-options li.correct .ic-bank-letter {
+  color: var(--ok);
+}
+
+.tag-icourse .ic-bank-correct-mark {
+  margin-left: auto;
+}
+
+.tag-icourse .ic-bank-answer {
+  margin: 8px 0 0;
+  padding: 7px 9px;
+  border-radius: 4px;
+  background: #f5f7fb;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.7;
+  word-break: break-word;
+}
+
+@media (max-width: 720px) {
+  .tag-icourse .ic-bank-controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.tag-icourse .ic-bank-controls input[type="search"] {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #d6d8e8;
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  outline: none;
+}
+
+.tag-icourse .ic-bank-controls input[type="search"]:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(91, 75, 255, 0.14);
 }

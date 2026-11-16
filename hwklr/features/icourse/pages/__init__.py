@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
+# 最后更新: 2026-11-16 20:30
 # 文件名: __init__.py
 # 主要用途: 页面适配层出口：URL、选择器与页面级操作。
-# 文件版本: 4.6.0
+# 文件版本: 4.6.7
 """页面适配层：URL、选择器与页面级操作。"""
 from __future__ import annotations
 
@@ -19,6 +20,7 @@ from .icourse163 import (
     is_spoc_url,
     learn_url,
     new_assessment_url,
+    new_exam_list_url,
     new_learn_url,
     new_testlist_url,
     open_route,
@@ -43,6 +45,7 @@ __all__ = [
     "is_spoc_url",
     "learn_url",
     "new_assessment_url",
+    "new_exam_list_url",
     "new_learn_url",
     "new_testlist_url",
     "open_route",

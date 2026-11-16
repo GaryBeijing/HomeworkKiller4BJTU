@@ -1,10 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-11-08 14:30
-  最后更新: 2026-11-16 17:20
+  最后更新: 2026-11-16 20:30
   文件名: core.js
   主要用途: “中国大学慕课”页面共享状态、DOM 缓存、事件绑定与加载/取消入口。
-  文件版本: 4.6.5
+  文件版本: 4.6.7
 */
 (function (global) {
   'use strict';
@@ -41,6 +41,9 @@
     notifiedKeys: new Set(),
     resultShownJobId: '',
     keydownHandler: null,
+    catalogTimer: null,
+    noticeChecked: false,
+    bank: null,
   };
 
   const els = {};
@@ -118,6 +121,11 @@
   const hideLog = (...args) => IC.hideLog(...args);
   const appendLog = (...args) => IC.appendLog(...args);
   const renderLogs = (...args) => IC.renderLogs(...args);
+  const openAnswerBank = (...args) => IC.openAnswerBank(...args);
+  const hideAnswerBank = (...args) => IC.hideAnswerBank(...args);
+  const loadAnswerBank = (...args) => IC.loadAnswerBank(...args);
+  const startCatalogRefresh = (...args) => IC.startCatalogRefresh(...args);
+  const loadUpstreamNotice = (...args) => IC.loadUpstreamNotice(...args);
 
   IC.node = function (tag, className, text) {
     const element = document.createElement(tag);
@@ -156,6 +164,9 @@
       'i-warning-modal', 'i-warning-detail', 'i-warning-cancel',
       'i-warning-confirm', 'i-result-modal', 'i-result-title',
       'i-result-summary', 'i-result-bank', 'i-result-list', 'i-result-close',
+      'i-answer-bank', 'i-refresh-catalog', 'i-bank-modal', 'i-bank-close',
+      'i-bank-search', 'i-bank-test', 'i-bank-reload', 'i-bank-status',
+      'i-bank-list',
     ].forEach((id) => {
       els[id] = document.getElementById(id);
     });
@@ -163,6 +174,24 @@
 
   IC.bindEvents = function () {
     on(els['i-refresh-courses'], 'click', () => loadCourses(true));
+    on(els['i-refresh-catalog'], 'click', startCatalogRefresh);
+    on(els['i-answer-bank'], 'click', openAnswerBank);
+    on(els['i-bank-close'], 'click', hideAnswerBank);
+    on(els['i-bank-reload'], 'click', loadAnswerBank);
+    on(els['i-bank-test'], 'change', loadAnswerBank);
+    on(els['i-bank-search'], 'keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        loadAnswerBank();
+      }
+    });
+    if (els['i-bank-modal']) {
+      els['i-bank-modal'].addEventListener('click', (event) => {
+        if (event.target === els['i-bank-modal']) {
+          hideAnswerBank();
+        }
+      });
+    }
     on(els['i-relogin'], 'click', relogin);
     on(els['i-open-settings'], 'click', (event) => {
       event.preventDefault();
@@ -209,12 +238,14 @@
     hideWarning();
     hideLoginOverlay();
     hideLog();
+    hideAnswerBank();
     if (state.keydownHandler) {
       document.removeEventListener('keydown', state.keydownHandler);
     }
     state.keydownHandler = (event) => {
       if (event.key === 'Escape') {
         hideWarning();
+        hideAnswerBank();
       }
     };
     document.addEventListener('keydown', state.keydownHandler);
@@ -225,6 +256,7 @@
     clearTimer('jobTimer');
     clearTimer('loginTimer');
     clearTimer('syncTimer');
+    clearTimer('catalogTimer');
   };
 
   IC.onCancelLoading = function () {

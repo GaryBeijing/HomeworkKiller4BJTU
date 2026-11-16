@@ -1,10 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-11-08 14:30
-  最后更新: 2026-11-16 17:20
+  最后更新: 2026-11-16 20:30
   文件名: courses.js
-  主要用途: “中国大学慕课”页面课程列表、任务类型、任务表格与勾选状态渲染。
-  文件版本: 4.6.5
+  主要用途: “中国大学慕课”页面课程列表、同名课程诊断、任务类型、任务表格与勾选状态渲染。
+  文件版本: 4.6.7
 */
 (function (global) {
   'use strict';
@@ -173,6 +173,13 @@
       clearNotices();
       state.activeType = chooseDefaultType();
       renderAll();
+      const candidates = ((data.catalog || {}).candidates) || [];
+      if (candidates.length) {
+        showTagNotice('题库未匹配当前 termId；找到同名课程：'
+          + candidates.slice(0, 3).map((item) => (item.name || '')
+            + '（' + (item.school || '') + '，id=' + item.id + '）').join('；')
+          + '。请核对课程 id，不会自动替换。');
+      }
       if ((data.answer_sync || {}).running) {
         scheduleSyncPoll();
       }

@@ -1,10 +1,14 @@
 # -*- coding: utf-8 -*-
-# 作者: Gary
+# 作者: Gary (Adapted from GinsMooc by gin)
 # 编写日期: 2026-11-08 14:30
+# 最后更新: 2026-11-16 20:30
 # 文件名: icourse_models.py
 # 主要用途: GinsMooc 题库纯数据模型、题目归一化与答案索引。
-# 文件版本: 4.0.0
+# 文件版本: 4.6.7
 """GinsMooc 数据模型与答案归一化。
+
+数据字段与答案归一化规则参考 GinsMooc（©2022-2024 gin）；
+本模块为独立 Python 适配实现，归属说明见项目根目录 NOTICE。
 
 这一层只做纯数据转换，不做 IO，方便单元测试。
 """

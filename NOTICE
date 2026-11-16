@@ -1,0 +1,33 @@
+HomeworkKiller4BJTU
+Copyright (c) 2026 Gary and HomeworkKiller4BJTU contributors
+
+This product includes software and behavior adapted from, or implemented with
+reference to, the following third-party project:
+
+GinsMooc
+  Author: gin
+  Project: https://github.com/ginnnnnncc/GinsMooc
+  README copyright notice: (c) 2022-2024 by gin
+  Upstream license: no standalone LICENSE file was included in the upstream
+  repository at the time this notice was written. This notice does not grant
+  any license to GinsMooc code and does not alter its original copyright.
+
+Adapted areas in this project (author tag:
+"Gary (Adapted from GinsMooc by gin)"):
+  - hwklr/db/icourse_client.py
+  - hwklr/db/icourse_models.py
+  - hwklr/db/icoursedb.py
+  - hwklr/features/icourse/answer_store.py
+  - hwklr/features/icourse/actions/quiz.py
+  - hwklr/features/icourse/actions/popup.py
+  - hwklr/features/icourse/pages/quiz_page.py
+  - hwklr/features/icourse/pages/popup_page.py
+
+The icourse feature plugin author is marked as
+"Gary (Ref GinsMooc by gin)".
+
+The Apache License 2.0 used by HomeworkKiller4BJTU applies only to material
+whose copyright is held by the HomeworkKiller4BJTU authors. It does not
+relicense GinsMooc-derived material. If the GinsMooc author provides different
+license terms or asks for attribution/removal changes, those terms take
+precedence for the GinsMooc-derived portions.

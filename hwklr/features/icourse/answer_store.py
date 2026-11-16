@@ -1,11 +1,15 @@
 # -*- coding: utf-8 -*-
-# 作者: Gary
+# 作者: Gary (Adapted from GinsMooc by gin)
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-16 17:20
+# 最后更新: 2026-11-16 20:30
 # 文件名: answer_store.py
 # 主要用途: 把 IcourseDb 的课程记录适配为动作层需要的答案索引、题库同步与实时答案兜底接口。
-# 文件版本: 4.6.5
-"""答案题库适配层。"""
+# 文件版本: 4.6.7
+"""答案题库适配层。
+
+答案索引与实时查询流程参考 GinsMooc（©2022-2024 gin），
+归属说明见项目根目录 NOTICE。
+"""
 from __future__ import annotations
 
 from typing import Any
@@ -18,8 +22,8 @@ from hwklr.db.icoursedb import (
     record_answer_index,
 )
 
-__version__ = "4.6.5"
-__author__ = "Gary"
+__version__ = "4.6.7"
+__author__ = "Gary (Adapted from GinsMooc by gin)"
 __all__ = ["AnswerStore"]
 
 

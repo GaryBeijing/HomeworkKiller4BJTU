@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
-# 作者: Gary
+# 作者: Gary (Adapted from GinsMooc by gin)
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-16 17:20
+# 最后更新: 2026-11-16 20:30
 # 文件名: icourse_client.py
 # 主要用途: GinsMooc 题库 HTTP 客户端（课程目录搜索、课程/测验/题目读取与实时答案查询）。
-# 文件版本: 4.6.5
+# 文件版本: 4.6.7
 """GinsMooc HTTP 客户端。
+
+本模块是 GinsMooc 公开 HTTP 接口的独立 Python 适配实现；
+字段与端点参考 GinsMooc（©2022-2024 gin），归属说明见项目根目录 NOTICE。
 
 接口特点（详见 docs/ginsmooc-api.md）：
 - 无需登录、CORS 全开；
@@ -31,7 +34,7 @@ from .icourse_models import (
     test_from_json,
 )
 
-__version__ = "4.6.5"
+__version__ = "4.6.7"
 
 DEFAULT_BASE_URL = "https://ginnnnnn.top/api"
 DEFAULT_HEADERS = {

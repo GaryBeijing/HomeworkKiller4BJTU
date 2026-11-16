@@ -1,10 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-11-08 14:30
-  最后更新: 2026-11-10 23:40
+  最后更新: 2026-11-16 20:30
   文件名: icourse.js
-  主要用途: “中国大学慕课”页面激活入口与 App.registerPage 注册。
-  文件版本: 4.4.1
+  主要用途: “中国大学慕课”页面激活入口、上游公告加载与 App.registerPage 注册。
+  文件版本: 4.6.7
 */
 (function (global) {
   'use strict';
@@ -89,6 +89,8 @@
     } catch (error) {
       App.toast('读取慕课状态失败：' + error.message, 'error');
     }
+    // 上游公告不阻塞登录/课程加载；每个会话最多检查一次。
+    IC.loadUpstreamNotice().catch(() => {});
     if (state.job && state.job.running) {
       scheduleJobPoll();
       renderAll();

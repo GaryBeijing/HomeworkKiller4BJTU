@@ -1,11 +1,15 @@
 # -*- coding: utf-8 -*-
-# 作者: Gary
+# 作者: Gary (Adapted from GinsMooc by gin)
 # 编写日期: 2026-11-10 13:00
-# 最后更新: 2026-11-16 17:20
+# 最后更新: 2026-11-16 20:30
 # 文件名: quiz_page.py
-# 主要用途: 测验页 Page Object：页面状态、就绪等待、题目读取、填答、主观题参考答案、成绩与提交确认。
-# 文件版本: 4.6.5
-"""测验页 Page Object。"""
+# 主要用途: 测验页 Page Object：页面状态、就绪等待、题目读取、填答、主观题参考答案、成绩读取重试与提交确认。
+# 文件版本: 4.6.7
+"""测验页 Page Object。
+
+旧版/新版测验页的选择器与填答脚本参考 GinsMooc 扩展（©2022-2024 gin），
+归属说明见项目根目录 NOTICE。
+"""
 from __future__ import annotations
 
 import time
@@ -17,7 +21,7 @@ from .base import PageObject
 from .icourse163 import close_modals, page_block_reason
 
 __version__ = "4.6.5"
-__author__ = "Gary"
+__author__ = "Gary (Adapted from GinsMooc by gin)"
 __all__ = ["QUIZ_SELECTORS", "QuizPage", "READ_QUESTIONS_JS"]
 
 
@@ -519,7 +523,8 @@ class QuizPage(PageObject):
             task: 任务（可能带 ``total_score``）。
             result: 待填充的测验结果。
         """
-        deadline = time.monotonic() + 6.0
+        deadline = time.monotonic() + 20.0
+        reloads: int = 0
         while time.monotonic() < deadline:
             try:
                 data: Any = page.evaluate(SCORE_READ_JS)
@@ -535,7 +540,24 @@ class QuizPage(PageObject):
                 result.score = score
                 result.total_score = total
                 break
+            if reloads < 3 and self._concurrency_limited(page):
+                reloads += 1
+                self.ctx.log(
+                    "成绩页提示并发限制，%d 秒后重试读取（第 %d/3 次）…"
+                    % (reloads * 2, reloads)
+                )
+                close_modals(page)
+                try:
+                    page.wait_for_timeout(reloads * 2000)
+                    page.reload(wait_until="domcontentloaded", timeout=15000)
+                    page.wait_for_timeout(1200)
+                except Exception as exc:
+                    self.ctx.warn("成绩页重载失败：%s" % exc)
+                    break
+                continue
             page.wait_for_timeout(400)
+        if result.score is None and reloads:
+            self.ctx.warn("并发限制重试后仍未读取到成绩；提交状态不受影响。")
         if result.total_score is None and task.total_score is not None:
             result.total_score = float(task.total_score)
         if result.score is None:
@@ -545,6 +567,17 @@ class QuizPage(PageObject):
             result.score_text = "%g/%g" % (result.score, result.total_score)
         else:
             result.score_text = "%g 分" % result.score
+
+    def _concurrency_limited(self, page) -> bool:
+        """判断成绩页是否提示“并发限制，请稍后再试”。"""
+        try:
+            text: Any = page.evaluate(
+                "() => (document.body?.innerText || '')"
+            )
+        except Exception:
+            return False
+        content = str(text or "")
+        return "并发限制" in content or "请稍后再试" in content
 
     # ------------------------------------------------------------------ 提交
     def _confirm_dialog(self, page) -> bool:

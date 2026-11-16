@@ -1,10 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-11-08 14:30
-  最后更新: 2026-11-11 10:00
+  最后更新: 2026-11-16 20:30
   文件名: notices.js
-  主要用途: “中国大学慕课”页面提示条、日志与截图提醒（留存数据关闭时不显示路径）。
-  文件版本: 4.4.3
+  主要用途: “中国大学慕课”页面提示条、上游公告、日志与截图提醒（留存数据关闭时不显示路径）。
+  文件版本: 4.6.7
 */
 (function (global) {
   'use strict';
@@ -159,6 +159,58 @@
     els['i-log-lines'].appendChild(node('div', 'log-line ' + level,
       '[' + new Date().toLocaleTimeString() + '] ' + message));
     els['i-log-lines'].scrollTop = els['i-log-lines'].scrollHeight;
+  };
+
+  IC.loadUpstreamNotice = async function () {
+    if (state.noticeChecked) {
+      return;
+    }
+    state.noticeChecked = true;
+    try {
+      const data = await App.callOk('get_notice');
+      if (data && data.available && !data.dismissed) {
+        IC.showUpstreamNotice(data);
+      }
+    } catch (error) {
+      appendLog('warn', '读取上游公告失败：' + error.message);
+    }
+  };
+
+  IC.showUpstreamNotice = function (data) {
+    const stack = els['i-notice-stack'];
+    if (!stack) {
+      return;
+    }
+    const item = node('div', 'ic-notice ic-notice-upstream');
+    item.appendChild(node('span', 'ic-notice-text', 'GinsMooc 公告：'
+      + String(data.content || '')));
+    const dismiss = node('button', 'ic-notice-action', '不再提醒');
+    dismiss.type = 'button';
+    dismiss.addEventListener('click', async () => {
+      dismiss.disabled = true;
+      try {
+        await App.call('dismiss_notice', { id: Number(data.id || 0) });
+      } catch (error) {
+        // 即使保存失败也只关闭本次提示，避免反复弹窗。
+      }
+      item.remove();
+    });
+    item.appendChild(dismiss);
+    const close = node('button', 'ic-notice-close', '×');
+    close.type = 'button';
+    close.setAttribute('aria-label', '关闭并不再提醒');
+    close.title = '关闭并不再提醒';
+    close.addEventListener('click', () => {
+      if (Number(data.id || 0) > 0) {
+        App.call('dismiss_notice', { id: Number(data.id || 0) }).catch(() => {});
+      }
+      item.remove();
+    });
+    item.appendChild(close);
+    stack.appendChild(item);
+    while (stack.children.length > 4) {
+      stack.removeChild(stack.firstChild);
+    }
   };
 
   IC.renderLogs = function () {

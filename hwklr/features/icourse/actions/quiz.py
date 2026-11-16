@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
-# 作者: Gary
+# 作者: Gary (Adapted from GinsMooc by gin)
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-16 17:20
+# 最后更新: 2026-11-16 20:30
 # 文件名: quiz.py
-# 主要用途: 测验任务：读取题目、本地题库匹配、实时答案兜底、填答与提交；截图受留存数据开关控制。
-# 文件版本: 4.6.6
+# 主要用途: 测验/作业/考试任务：读取题目、本地题库匹配、实时答案兜底、填答与提交；截图受留存数据开关控制。
+# 文件版本: 4.6.7
 """测验/作业：从 GinsMooc 取答案，填入页面并可选提交。
+
+答案匹配、option id 解析与填答策略参考 GinsMooc（©2022-2024 gin），
+归属说明见项目根目录 NOTICE。
 
 默认 dry-run（只计算并展示将填的答案），只有 ``submit=True`` 才点击提交。
 仅支持 MOOC，SPOC 直接拒绝。
@@ -499,8 +502,10 @@ class QuizAction:
                 return
 
         self.ctx.info("任务路由未渲染，尝试从课程评估列表打开…")
+        # 考试新版没有独立详情 path，必须从 /exams 列表点击任务名与“进入考试”。
+        list_url = new_url if task.kind == "考试" else new_list_url
         if self._open_from_testlist(
-            page, base, task.name, new_list_url, task.kind
+            page, base, task.name, list_url, task.kind
         ):
             return
         raise ActionUnavailable(
@@ -518,10 +523,12 @@ class QuizAction:
     ) -> bool:
         """在新/旧评估列表中按任务名点击目标项。"""
         new_learn = ""
-        if "/assessments" in new_list_url:
-            new_learn = new_list_url.split("/assessments", 1)[0]
-            if "?" in new_list_url:
-                new_learn += "?" + new_list_url.split("?", 1)[1]
+        for marker in ("/assessments", "/exams"):
+            if marker in new_list_url:
+                new_learn = new_list_url.split(marker, 1)[0]
+                if "?" in new_list_url:
+                    new_learn += "?" + new_list_url.split("?", 1)[1]
+                break
         attempts: list[str] = []
         if new_list_url:
             attempts.append(new_list_url)
@@ -545,6 +552,19 @@ class QuizAction:
                 clicked = ""
             if clicked:
                 page.wait_for_timeout(2200)
+                if kind == "考试":
+                    # 列表项先展开考试说明，再点“进入考试”才会渲染题目/开始按钮。
+                    entered = ""
+                    for _ in range(3):
+                        try:
+                            entered = page.evaluate(TESTLIST_CLICK_JS, "进入考试")
+                        except Exception:
+                            entered = ""
+                        if entered:
+                            break
+                        page.wait_for_timeout(900)
+                    if entered:
+                        page.wait_for_timeout(2500)
                 close_modals(page)
                 return True
         open_route(page, base, "#/learn/testlist")

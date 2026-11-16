@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
-# 作者: Gary
+# 作者: Gary (Ref GinsMooc by gin)
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-16 17:20
+# 最后更新: 2026-11-16 20:30
 # 文件名: __init__.py
-# 主要用途: 实现“中国大学慕课”功能：登录、课程状态、任务 handler 编排、批量完成、实时课程解析与题库同步。
-# 文件版本: 4.6.5
+# 主要用途: 实现“中国大学慕课”功能：登录、课程状态、任务 handler 编排、批量完成、实时课程解析、题库同步、答案浏览与目录刷新。
+# 文件版本: 4.6.7
 """中国大学慕课功能。
 
 功能层只负责动作分发、状态缓存与 job 编排；浏览器自动化、课程解析与题库
@@ -21,7 +21,7 @@ import time
 from typing import Any, Final
 
 from hwklr import db as hwklr_db
-from hwklr.config import load_config
+from hwklr.config import load_config, update_config
 from hwklr.contracts import (
     ActionSpec,
     ParamSpec,
@@ -47,8 +47,8 @@ from .models import (
     extract_term_id,
 )
 
-__version__ = "4.6.5"
-__author__ = "Gary"
+__version__ = "4.6.7"
+__author__ = "Gary (Ref GinsMooc by gin)"
 __all__ = ["IcourseFeature"]
 
 _LOGGER: Final[logging.Logger] = logging.getLogger(__name__)
@@ -105,6 +105,33 @@ _ACTION_SPECS: Final[tuple[ActionSpec, ...]] = (
     ),
     ActionSpec("get_answer_sync", description="读取题库同步快照。"),
     ActionSpec(
+        "get_answer_bank",
+        params=(
+            ParamSpec("term_id", int, required=True, coerce=coerce_int),
+            ParamSpec("test_id", int, default=0, coerce=coerce_int),
+            ParamSpec("query", str, default=""),
+        ),
+        description="浏览或搜索已缓存课程的题目与答案。",
+    ),
+    ActionSpec("get_notice", description="读取 GinsMooc 上游公告。"),
+    ActionSpec(
+        "dismiss_notice",
+        params=(ParamSpec("id", int, required=True, coerce=coerce_int),),
+        description="记录已关闭的上游公告。",
+        risk="write",
+    ),
+    ActionSpec(
+        "start_catalog_refresh",
+        description="后台刷新 GinsMooc 课程目录。",
+        risk="write",
+    ),
+    ActionSpec("get_catalog_refresh", description="读取课程目录刷新进度。"),
+    ActionSpec(
+        "cancel_catalog_refresh",
+        description="取消课程目录刷新。",
+        risk="write",
+    ),
+    ActionSpec(
         "start_completion_job",
         params=(
             ParamSpec("term_id", int, required=True, coerce=coerce_int),
@@ -149,6 +176,7 @@ _DEFAULT_SETTINGS: Final[dict[str, Any]] = {
     "auto_sync_answers": True,
     "download_documents": True,
     "retain_data": True,
+    "dismissed_notice_id": 0,
 }
 
 
@@ -249,6 +277,8 @@ class IcourseFeature(Feature):
         self._state_lock: threading.RLock = self._state.lock
         self._answer_sync: Any | None = None
         self._answer_sync_lock: threading.RLock = threading.RLock()
+        self._catalog_job: Any | None = None
+        self._catalog_job_lock: threading.RLock = threading.RLock()
         self._login_job: BackgroundJob[Any] = BackgroundJob(
             JobKind.LOGIN,
             self._idle_login(),
@@ -532,6 +562,8 @@ class IcourseFeature(Feature):
         *,
         probe: bool = True,
         test_count: int = 0,
+        name: str = "",
+        school: str = "",
     ) -> dict[str, Any]:
         """返回课程题库收录状态及诊断字段。
 
@@ -539,9 +571,12 @@ class IcourseFeature(Feature):
             term_id: 课程 term id。
             probe: 是否允许实时 HTTP 探测。
             test_count: 课程测验数量（仅用于展示）。
+            name: 课程名；未收录时用于搜索同名课程。
+            school: 学校；与 ``name`` 一起做严格匹配。
 
         Returns:
-            含 ``available/source/reason/test_count`` 的字典。
+            含 ``available/source/reason/test_count`` 的字典；未收录且
+            提供了课程名时附带 ``candidates``。
         """
         term_id = int(term_id)
         if term_id <= 0:
@@ -582,15 +617,43 @@ class IcourseFeature(Feature):
                 "reason": "",
                 "test_count": int(test_count),
             }
+        candidates: list[dict[str, Any]] = []
+        if probe and str(name or "").strip():
+            try:
+                found = provider.client.search_courses(
+                    str(name).strip(), school=str(school or "").strip()
+                )
+            except Exception:
+                found = []
+            candidates = [
+                course.to_dict()
+                for course in list(found)[:5]
+                if int(getattr(course, "id", 0) or 0) != term_id
+            ]
+        reason = (
+            "题库未收录该课程（已实时校验）"
+            if probe
+            else "题库未收录该课程（本地目录/缓存未命中）"
+        )
+        if candidates:
+            reason += "；找到 %d 个同名课程：%s" % (
+                len(candidates),
+                "、".join(
+                    "%s(%s, id=%s)"
+                    % (
+                        item.get("name") or "",
+                        item.get("school") or "",
+                        item.get("id"),
+                    )
+                    for item in candidates
+                ),
+            )
         return {
             "available": False,
             "source": "unavailable",
-            "reason": (
-                "题库未收录该课程（已实时校验）"
-                if probe
-                else "题库未收录该课程（本地目录/缓存未命中）"
-            ),
+            "reason": reason,
             "test_count": int(test_count),
+            "candidates": candidates,
         }
 
     def _catalog_available(self, term_id: int, *, probe: bool = True) -> bool:
@@ -656,6 +719,12 @@ class IcourseFeature(Feature):
             "logout": self._action_logout,
             "start_answer_sync": self._action_start_answer_sync,
             "get_answer_sync": self._action_get_answer_sync,
+            "get_answer_bank": self._action_get_answer_bank,
+            "get_notice": self._action_get_notice,
+            "dismiss_notice": self._action_dismiss_notice,
+            "start_catalog_refresh": self._action_start_catalog_refresh,
+            "get_catalog_refresh": self._action_get_catalog_refresh,
+            "cancel_catalog_refresh": self._action_cancel_catalog_refresh,
             "start_completion_job": self._action_start_completion_job,
             "get_completion_job": self._action_get_completion_job,
             "cancel_completion_job": self._action_cancel_completion_job,
@@ -785,7 +854,12 @@ class IcourseFeature(Feature):
                 if task.test_id and task.kind in _QUIZ_KINDS
             }
         )
-        catalog = self._catalog_status(term_id, test_count=test_count)
+        catalog = self._catalog_status(
+            term_id,
+            test_count=test_count,
+            name=course.name,
+            school=course.school,
+        )
         catalog_available = bool(catalog["available"])
         payload = {
             "course": course.to_dict(True),
@@ -1092,6 +1166,154 @@ class IcourseFeature(Feature):
                 else self._idle_answer_sync()
             )
         return success(snapshot)
+
+    # ------------------------------------------------------------------ 答案浏览
+    def _action_get_answer_bank(self, params: dict[str, Any]) -> ApiResult:
+        """返回已缓存课程的题目、选项与答案。"""
+        term_id = int(params.get("term_id") or 0)
+        if term_id <= 0:
+            return failure("请先选择课程")
+        test_id = int(params.get("test_id") or 0)
+        query = str(params.get("query") or "")
+        provider: Any = self._db_provider()
+        if not provider.exist(term_id):
+            return failure("该课程题库尚未同步，请先点击“同步”")
+        record: dict[str, Any] = provider.load(term_id)
+        from .answer_bank import answer_bank_payload
+
+        payload = answer_bank_payload(record, test_id=test_id, query=query)
+        payload["term_id"] = term_id
+        course: Any = record.get("course")
+        course = course if isinstance(course, dict) else {}
+        payload["course"] = {
+            "id": term_id,
+            "name": str(course.get("name") or ""),
+            "school": str(course.get("school") or ""),
+        }
+        return success(payload)
+
+    # ------------------------------------------------------------------ 公告
+    def _action_get_notice(self, params: dict[str, Any]) -> ApiResult:
+        """读取 GinsMooc 上游公告；网络失败不阻塞页面。"""
+        settings = self._read_settings()
+        try:
+            dismissed = int(settings.get("dismissed_notice_id") or 0)
+        except (TypeError, ValueError):
+            dismissed = 0
+        try:
+            provider: Any = self._db_provider()
+            data: Any = provider.client.notice("v1.0.0")
+        except Exception as exc:
+            _LOGGER.info("读取慕课上游公告失败: %s", exc)
+            return success(
+                {
+                    "id": 0,
+                    "content": "",
+                    "dismissed": False,
+                    "available": False,
+                    "error": str(exc),
+                }
+            )
+        data = data if isinstance(data, dict) else {}
+        try:
+            notice_id = int(data.get("id") or 0)
+        except (TypeError, ValueError):
+            notice_id = 0
+        content = str(data.get("content") or "").strip()
+        return success(
+            {
+                "id": notice_id,
+                "content": content,
+                "dismissed": bool(notice_id and notice_id == dismissed),
+                "available": bool(content),
+                "error": "",
+            }
+        )
+
+    def _action_dismiss_notice(self, params: dict[str, Any]) -> ApiResult:
+        """记录用户已关闭的公告 id。"""
+        try:
+            notice_id = int(params.get("id") or 0)
+        except (TypeError, ValueError):
+            notice_id = 0
+        if notice_id <= 0:
+            return failure("公告 id 不合法")
+        update_config({"icourse": {"dismissed_notice_id": notice_id}})
+        return success({"dismissed": notice_id})
+
+    # ------------------------------------------------------------------ 目录刷新
+    def _action_start_catalog_refresh(self, params: dict[str, Any]) -> ApiResult:
+        """启动课程目录后台刷新。"""
+        provider: Any = self._db_provider()
+        from .catalog_sync import CatalogRefreshJob
+
+        with self._catalog_job_lock:
+            job = self._catalog_job
+            if job is not None and job.snapshot().get("running"):
+                return success({"started": False, "refresh": job.snapshot()})
+            job = CatalogRefreshJob(
+                provider,
+                log=lambda message: _LOGGER.info("慕课目录刷新: %s", message),
+                on_success=self._invalidate_catalog_cache,
+            )
+            self._catalog_job = job
+            self._jobs.put("catalog_refresh", job.background_job)
+            job.start()
+            return success({"started": True, "refresh": job.snapshot()})
+
+    def _action_get_catalog_refresh(self, params: dict[str, Any]) -> ApiResult:
+        """返回课程目录刷新进度。"""
+        with self._catalog_job_lock:
+            job = self._catalog_job
+            snapshot = job.snapshot() if job is not None else self._idle_catalog_refresh()
+        return success(snapshot)
+
+    def _action_cancel_catalog_refresh(self, params: dict[str, Any]) -> ApiResult:
+        """取消课程目录刷新。"""
+        with self._catalog_job_lock:
+            job = self._catalog_job
+        if job is not None:
+            job.cancel()
+        return success({"cancelled": True})
+
+    def _invalidate_catalog_cache(self) -> None:
+        """目录增量写入成功后清理目录缓存并刷新当前课程摘要。"""
+        with self._state_lock:
+            self._catalog_ids = None
+            course = self._course
+            payload = dict(self._course_payload)
+        if course is None or not payload:
+            return
+        test_count = len(
+            {
+                int(task.test_id)
+                for task in course.tasks
+                if task.test_id and task.kind in _QUIZ_KINDS
+            }
+        )
+        payload["catalog"] = self._catalog_status(
+            course.term_id,
+            probe=False,
+            test_count=test_count,
+        )
+        with self._state_lock:
+            self._course_payload = payload
+
+    @staticmethod
+    def _idle_catalog_refresh() -> dict[str, Any]:
+        """返回空闲目录刷新快照。"""
+        return {
+            "running": False,
+            "done": False,
+            "cancelled": False,
+            "page": 0,
+            "total_pages": 0,
+            "fetched": 0,
+            "message": "",
+            "error": "",
+            "started_at": 0.0,
+            "finished_at": 0.0,
+        }
 
     # ------------------------------------------------------------------ 完成任务
     def _action_start_completion_job(self, params: dict[str, Any]) -> ApiResult:

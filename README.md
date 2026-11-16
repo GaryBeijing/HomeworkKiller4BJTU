@@ -6,7 +6,7 @@
 
 ![Python](https://img.shields.io/badge/Python-3.15.2-3776AB?logo=python&logoColor=white)
 ![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-0078D4?logo=windows&logoColor=white)
-![Version](https://img.shields.io/badge/Version-4.6.6-5B4BFF)
+![Version](https://img.shields.io/badge/Version-4.6.7-5B4BFF)
 ![GUI](https://img.shields.io/badge/GUI-pywebview%20%2B%20WebView2-2F3AB2)
 
 [功能特性](#-功能特性) · [界面预览](#-界面预览) · [快速开始](#-快速开始) · [使用指南](#-使用指南) · [构建与分发](#-构建与分发) · [插件开发](#-插件开发) · [常见问题](#-常见问题)
@@ -74,7 +74,13 @@ HomeworkKiller4BJTU（简称 HWKLR）是一个基于 **pywebview + 本地 HTTP �
 - **进度展示**：运行中的任务胶囊变为浅绿色进度条并显示百分比（最多每 3 秒刷新），等待任务显示橙色“等待队列”，完成后自动刷新课程状态。
 - **任务状态**：测验自动提交后显示分数（满分绿色、非满分红色），未自动提交显示黄色“已填写”并在标签内提示截图路径；讨论自动发布显示绿色“已发布”，否则同样为“已填写”。任务默认不勾选。
 - **终止任务**：任务运行时底部“开始完成”变为红框红字白底“终止任务”，同时放大总任务进度条。
-- **题库**：内置 `hwklr/db/icourse_sources.json` 课程目录（发布快照，422 门），从 GinsMooc 下载的课程/测验/题目缓存到程序同级的 `db/icourse<termId>.json`，默认 TTL 24 小时。目录未命中时会实时请求课程详情复核，不再仅凭快照判定“未收录”；本地题库缺失或部分题目未匹配时，按页面 option id/题干调用 `select_questions` 实时兜底。作业/主观题只展示参考答案，不自动填写。
+- **题库**：内置 `hwklr/db/icourse_sources.json` 课程目录（发布快照，422 门），通过 GinsMooc 公开接口获取的课程/测验/题目缓存到程序同级的 `db/icourse<termId>.json`，默认 TTL 24 小时。目录未命中时会实时请求课程详情复核，不再仅凭快照判定“未收录”；本地题库缺失或部分题目未匹配时，按页面 option id/题干调用 `select_questions` 实时兜底。作业/主观题只展示参考答案，不自动填写。
+- **答案浏览与搜索**：新增“题库”弹窗，按课程/测验查看已缓存题目；选择题高亮正确选项，填空题展示每个空的答案，作业/主观题展示参考答案，支持题干、选项与答案关键字搜索。
+- **上游公告**：启动时读取 GinsMooc 公告并显示在标签内通知区；关闭或“不再提醒”后记录公告 id，同一公告不再提示。
+- **课程目录刷新**：课程侧栏新增“更新目录”，后台分页拉取 GinsMooc 完整课程目录并写入 `db/icourse_catalog.json`；刷新失败或取消时保留旧目录。
+- **同名课程诊断**：课程未收录时按课程名+学校搜索同名课程，只提示候选 id，不自动替换 termId。
+- **成绩读取重试**：提交后结果页提示“并发限制，请稍后再试”时自动退避重载，最多重试 3 次；仍失败保留“已提交但无分数”，不影响提交状态。
+- **考试入口**：新版考试没有 `/assessments/exam/<id>` 详情页，改从 `/exams` 列表点击任务名并进入考试。
 - **留存数据**：设置中可关闭自动截图留存；关闭后讨论、测验等任务不再写入 `artifacts/icourse/`，已有截图不会被删除。
 - **登录容错**：窗口登录会清理失效的旧调试窗口并在必要时使用独立临时配置目录；Win11 Edge 的启动器进程拉起真实浏览器后立即退出时，继续轮询 CDP 而不是误报配置目录被占用；本机 Cookie 导入会跳过不可用的浏览器配置继续尝试其他来源。
 
@@ -83,7 +89,7 @@ HomeworkKiller4BJTU（简称 HWKLR）是一个基于 **pywebview + 本地 HTTP �
 - 源码环境支持“构建程序 / 构建插件”切换；开发构建产物只保留插件构建。
 - 支持程序名称、图标、四段导出默认版本号（`x.y.z + 时间戳 % 9973`）。
 - 发布构建使用 PyInstaller `--onedir --windowed --optimize 2` 并裁剪开发功能；开发构建保留源码归档与开发资料。
-- 所有产物根目录附带 `README.md`、`LICENSE`、`usr_agreement.txt` 与 `updates_info.txt`；开发构建的源码归档同样包含这些文件与 `Reference/`。
+- 所有产物根目录附带 `README.md`、`LICENSE`、`NOTICE`、`usr_agreement.txt` 与 `updates_info.txt`；开发构建的源码归档同样包含这些文件与 `Reference/`。
 - 开发产物可一键搭建 `HwklrVenv`，按新布局解压源码、安装依赖并生成启动/调试脚本。
 - 插件工程支持从模板新建、选择已有工程、临时测试、构建发布 zip。
 
@@ -308,9 +314,9 @@ __all__ = ["MyPluginFeature"]
 
 - 支持 `executable` 与 `zip` 两种格式。
 - `zip` 格式使用阿里云镜像下载的 64 位 python-embed 作为运行时。
-- 产物根目录附带 `README.md` 与 `LICENSE`；源码归档包含 `legacy/ Reference/ hwklr/ main.py requirements.txt README.md LICENSE`，同时附开发资料。
+- 产物根目录附带 `README.md`、`LICENSE` 与 `NOTICE`；源码归档包含 `legacy/ Reference/ hwklr/ main.py requirements.txt README.md LICENSE NOTICE`，同时附开发资料。
 - 首次运行开发产物时，构建页会提示搭建 `HwklrVenv`：
-  - `legacy/`、`Reference/`、`main.py`、`requirements.txt`、`README.md`、`LICENSE` 解压到虚拟环境根目录；
+  - `legacy/`、`Reference/`、`main.py`、`requirements.txt`、`README.md`、`LICENSE`、`NOTICE` 解压到虚拟环境根目录；
   - `hwklr/` 解压到 `HwklrVenv/Lib/`；
   - 使用虚拟环境 pip 从清华源安装依赖；
   - 生成 `启动程序.bat`（pythonw）与 `调试程序.bat`（python）。
@@ -338,6 +344,7 @@ HomeworkKiller4BJTU/
 ├── main.py                     # 唯一入口：WindowView().run()
 ├── run.bat                     # 本地启动脚本（可选，未纳入版本控制时需手动保留）
 ├── requirements.txt            # 第三方依赖
+├── NOTICE                      # 第三方参考与版权归属说明
 ├── config.json                 # 本机配置（不提交、不打包）
 ├── docs/assets/                # README 截图
 ├── hwklr/                      # 主包
@@ -380,6 +387,7 @@ HomeworkKiller4BJTU/
 - 密码与 API Key 为明文存储；请不要提交、截图或分享 `config.json`。
 - 构建产物不会包含 `config.json`；首次运行导出包时需要重新配置。
 - 高铁/CITEL 请求直接发往对应平台；AI 请求直接发往你配置的 AI 服务商。
+- 慕课题库查询会向 GinsMooc 公开接口发送课程 id、测验 id、题干与选项 id；不会发送账号、密码或登录 Cookie。
 - 导入第三方扩展等同于执行第三方代码，请只加载可信来源的扩展。
 
 ---
@@ -408,6 +416,8 @@ HomeworkKiller4BJTU/
 <summary><b>中国大学慕课测验显示“已跳过”</b></summary>
 
 测验自动作答依赖 GinsMooc 题库收录该课程。若课程未收录（或测验单元缺少 `testId`），任务会在结束后弹出「部分测验未能自动完成」，列出具体任务与原因；可手动完成测验，或等待题库更新后重新运行。文档、讨论不受影响。
+
+反馈题库收录或答案问题时，请附带课程 id、课程链接与测验截止时间，便于在上游题库更新前定位。
 
 </details>
 
@@ -477,7 +487,8 @@ HomeworkKiller4BJTU/
 
 | 版本 | 主要内容 |
 |---|---|
-| **4.6.6** | 严格整卷校验：任意一题未命中答案时不填答、不提交，整卷标记为“已跳过”并记录未命中题号与原因。 |
+| **4.6.7** | 第二轮次：慕课答案浏览/搜索、GinsMooc 公告、课程目录后台刷新、同名课程诊断、并发限制成绩重读、新版考试入口修复；补充 GinsMooc 参考实现归属说明。 |
+| 4.6.6 | 严格整卷校验：任意一题未命中答案时不填答、不提交，整卷标记为“已跳过”并记录未命中题号与原因。 |
 | 4.6.5 | 批次一一致性修复：作业/考试路由、强制刷新题库、目录缓存一致性、按测验准入、新版 icourse `/mooc/learn/.../assessments/quiz/` path 路由与开始答题兼容；课程目录增加 source/reason/test_count 诊断。 |
 | 4.6.4 | 修复静态课程目录过期导致已收录课程提示“题库未收录”：课程收录改为静态目录 + 实时 `course_detail` 解析；本地题库缺失时支持实时 `select_questions` 答案兜底与主观题参考答案展示。 |
 | 4.6.3 | 修复自定义程序名更新后无法启动：启动入口改为读取新版本 `BUILD_INFO.json` 的 `entry`，Windows/macOS 安装器与 launcher 不再硬编码默认 exe/.app；新版本启动失败时回滚 `current.json`。 |
@@ -504,14 +515,25 @@ HomeworkKiller4BJTU/
 
 - **高铁纵横**：原版逻辑来自 [PhiloK](https://github.com/) 的 `B1.0`，本项目为 Gary 的 Remaster 实现。
 - **C程序设计**：参考 `B_CHelper` 原型重制。
+- **中国大学慕课题库/答案**：参考并适配 [GinsMooc](https://github.com/ginnnnnncc/GinsMooc)（作者 gin，README 标注 ©2022-2024 by gin）的公开接口、数据模型与答案查询逻辑；相关源文件作者标记为 `Gary (Adapted from GinsMooc by gin)`。原项目未附独立 `LICENSE` 文件，本项目不对其代码重新授权。
 - 感谢 [pywebview](https://pywebview.flowrl.com/)、[requests](https://requests.readthedocs.io/)、[Beautiful Soup](https://www.crummy.com/software/BeautifulSoup/)、[Pillow](https://python-pillow.org/)、[OpenAI Python SDK](https://github.com/openai/openai-python)、[PyInstaller](https://pyinstaller.org/) 等开源项目。
 - 感谢所有提交 Issue、反馈问题与帮助测试的同学。
 
 ---
 
+## 📎 第三方参考与许可说明
+
+- **GinsMooc / gin**：中国大学慕课功能的题库 HTTP 接口、题目数据模型、答案归一化、`select_questions` 实时查询与测验/弹题填答逻辑，参考并适配自 [GinsMooc](https://github.com/ginnnnnncc/GinsMooc)。原项目 README 标注 `©2022-2024 by gin`，仓库未附独立 `LICENSE` 文件，因此不存在可被本项目的 Apache 2.0 许可证替代的明确上游许可条款。
+- 本项目的 `Apache-2.0` 许可仅覆盖本项目作者享有著作权的部分，不改变 GinsMooc 原有版权归属，也不构成对 GinsMooc 代码的再许可。相关适配文件的作者标记为 `Gary (Adapted from GinsMooc by gin)`，慕课功能插件作者标记为 `Gary (Ref GinsMooc by gin)`。
+- GinsMooc 源码仅作为本地参考保存在 `legacy/`；发布构建不包含该目录，开发构建会按既有开发资料规则在源码归档中保留 `legacy/`。程序运行时只包含独立编写的 Python 适配实现。
+- 如 GinsMooc 原作者提供明确许可条款、提出署名调整或要求移除相关实现，请通过项目 Issue 联系维护者，以原作者要求为准。
+- 完整归属说明同时见仓库根目录的 [`NOTICE`](NOTICE)。
+
+---
+
 ## 📄 许可证
 
-本项目以 **Apache License 2.0** 开源，完整条款见仓库根目录的 [`LICENSE`](LICENSE)。
+本项目以 **Apache License 2.0** 开源，完整条款见仓库根目录的 [`LICENSE`](LICENSE)。该许可证不改变第三方参考实现（尤其是 GinsMooc）原有的版权归属；第三方内容见 [`NOTICE`](NOTICE)。
 
 ---
 

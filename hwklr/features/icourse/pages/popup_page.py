@@ -1,14 +1,19 @@
 # -*- coding: utf-8 -*-
-# 作者: Gary
+# 作者: Gary (Adapted from GinsMooc by gin)
 # 编写日期: 2026-11-10 13:00
+# 最后更新: 2026-11-16 20:30
 # 文件名: popup_page.py
 # 主要用途: 视频弹题 Page Object：弹题选择器、检测、填空与继续按钮脚本。
-# 文件版本: 4.4.0
-"""视频弹题页面常量。"""
+# 文件版本: 4.6.7
+"""视频弹题页面常量。
+
+弹题检测与填答选择器参考 GinsMooc 扩展（©2022-2024 gin），
+归属说明见项目根目录 NOTICE。
+"""
 from __future__ import annotations
 
-__version__ = "4.4.0"
-__author__ = "Gary"
+__version__ = "4.6.7"
+__author__ = "Gary (Adapted from GinsMooc by gin)"
 __all__ = ["CONTINUE_JS", "DETECT_JS", "FILL_TEXT_JS", "POPUP_SELECTORS"]
 
 

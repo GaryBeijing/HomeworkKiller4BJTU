@@ -1,10 +1,10 @@
 <!--
   作者: Gary
   编写日期: 2026-11-08 14:30
-  最后更新: 2026-11-16 17:20
+  最后更新: 2026-11-16 20:30
   文件名: index.html
-  主要用途: “中国大学慕课”标签页结构：紧凑顶栏、内部滚动课程/任务区、自动登录提示、完成任务操作栏与任务结果弹窗。
-  文件版本: 4.6.5
+  主要用途: “中国大学慕课”标签页结构：紧凑顶栏、内部滚动课程/任务区、答案浏览、目录刷新、自动登录提示、完成任务操作栏与任务结果弹窗。
+  文件版本: 4.6.7
 -->
 <section class="tag-page tag-icourse" id="icourse-page">
   <header class="ic-topbar">
@@ -14,6 +14,8 @@
     </div>
     <div class="ic-top-actions">
       <span id="i-account-badge" class="pill info">未登录</span>
+      <button id="i-answer-bank" class="btn small ic-top-btn" type="button"
+              title="查看已缓存课程的题目与答案">题库</button>
       <button id="i-relogin" class="btn small ic-top-btn" type="button">重新登录</button>
       <button id="i-open-settings" class="btn small ic-top-btn" type="button">设置</button>
     </div>
@@ -25,7 +27,11 @@
     <aside class="ic-side card">
       <div class="card-head ic-card-head">
         <h2>课程</h2>
-        <button id="i-refresh-courses" class="btn ghost small" type="button">刷新</button>
+        <span class="ic-card-actions">
+          <button id="i-refresh-catalog" class="btn ghost small" type="button"
+                  title="从 GinsMooc 后台刷新完整课程目录，不重新发版也能看到新课程">更新目录</button>
+          <button id="i-refresh-courses" class="btn ghost small" type="button">刷新</button>
+        </span>
       </div>
       <div id="i-course-list" class="ic-course-list">
         <p class="muted">正在准备登录…</p>
@@ -127,6 +133,27 @@
       <div class="row end">
         <button id="i-result-close" class="btn primary" type="button">知道了</button>
       </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="i-bank-modal" role="dialog"
+       aria-modal="true" aria-labelledby="i-bank-title">
+    <div class="modal ic-bank-modal">
+      <div class="ic-bank-head">
+        <h3 id="i-bank-title">题库浏览</h3>
+        <button id="i-bank-close" class="ic-bank-close" type="button"
+                aria-label="关闭题库浏览">×</button>
+      </div>
+      <div class="ic-bank-controls">
+        <input id="i-bank-search" class="input" type="search"
+               placeholder="搜索题干、选项或答案" autocomplete="off">
+        <select id="i-bank-test" class="input" aria-label="测验筛选">
+          <option value="0">全部测验</option>
+        </select>
+        <button id="i-bank-reload" class="btn small" type="button">搜索</button>
+      </div>
+      <p id="i-bank-status" class="hint"></p>
+      <div id="i-bank-list" class="ic-bank-list"></div>
     </div>
   </div>
 </section>

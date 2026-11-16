@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-10 10:00
+# 最后更新: 2026-11-16 20:30
 # 文件名: contracts.py
 # 主要用途: 跨功能共享的类型化契约：任务状态/类型、Job 阶段、错误码与 Action 参数规格。
-# 文件版本: 4.4.0
+# 文件版本: 4.6.7
 """跨功能共享的类型化契约。
 
 本模块只依赖标准库，不能导入 :mod:`hwklr.features` 或 :mod:`hwklr.config`，
@@ -127,6 +128,7 @@ class JobKind(str, enum.Enum):
     COMPLETION = "completion"
     LOGIN = "login"
     ANSWER_SYNC = "answer_sync"
+    CATALOG_REFRESH = "catalog_refresh"
     SOLUTION = "solution"
     BUILD = "build"
     PLUGIN_BUILD = "plugin_build"

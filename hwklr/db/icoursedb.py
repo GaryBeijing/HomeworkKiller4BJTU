@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
-# 作者: Gary
+# 作者: Gary (Adapted from GinsMooc by gin)
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-16 17:20
+# 最后更新: 2026-11-16 20:30
 # 文件名: icoursedb.py
-# 主要用途: 中国大学慕课题库的 DbProvider：静态目录 + 实时课程解析、按 term_id 缓存的课程/测验/题目。
-# 文件版本: 4.6.5
+# 主要用途: 中国大学慕课题库的 DbProvider：静态目录 + 可写目录增量 + 实时课程解析、按 term_id 缓存的课程/测验/题目。
+# 文件版本: 4.6.7
 """中国大学慕课题库提供者。
 
 - ``id=0``：``hwklr/db/icourse_sources.json`` 的课程目录快照。
@@ -36,13 +36,14 @@ from .provider import (
     DbStorageError,
 )
 
-__version__ = "4.6.5"
-__author__ = "Gary"
+__version__ = "4.6.7"
+__author__ = "Gary (Adapted from GinsMooc by gin)"
 __all__ = ["CATALOG_ID", "IcourseDb", "course_questions", "record_answer_index"]
 
 CATALOG_ID: Final[int] = 0
 DEFAULT_TTL_SECONDS: Final[int] = 24 * 60 * 60
 CATALOG_NAME: Final[str] = "icourse_sources.json"
+CATALOG_OVERLAY_NAME: Final[str] = "icourse_catalog.json"
 
 
 def _int_or_none(value: Any) -> int | None:
@@ -129,19 +130,52 @@ class IcourseDb(DbProvider):
             self._client = GinsMoocClient()
         return self._client
 
+    def _catalog_overlay_path(self) -> Path:
+        """返回用户可写课程目录增量路径。
+
+        Returns:
+            ``db/icourse_catalog.json``。
+        """
+        return self.db_root / CATALOG_OVERLAY_NAME
+
+    def _read_catalog_overlay(self) -> list[dict[str, Any]]:
+        """读取后台刷新生成的课程目录增量；损坏时忽略。
+
+        Returns:
+            课程条目列表。
+        """
+        path: Path = self._catalog_overlay_path()
+        if not path.is_file():
+            return []
+        try:
+            with path.open(encoding="utf-8-sig") as handle:
+                data: Any = json.load(handle)
+        except (OSError, json.JSONDecodeError):
+            return []
+        items: Any = data.get("courses") if isinstance(data, dict) else None
+        if not isinstance(items, list):
+            return []
+        return [dict(item) for item in items if isinstance(item, dict)]
+
     def _catalog(self) -> dict[str, Any]:
-        """读取并校验内置课程目录。
+        """读取并校验课程目录，并合并可写增量。
+
+        内置目录是发布快照；``db/icourse_catalog.json`` 是用户在后台刷新
+        得到的增量，按 id 覆盖内置条目并补充新课程。
 
         Returns:
             目录 JSON 对象。
 
         Raises:
-            DbSourceNotFoundError: 目录文件不存在。
+            DbSourceNotFoundError: 内置目录不存在且没有可写增量。
             DbFormatError: 目录结构不合法。
         """
         path: Path = self.source_root / CATALOG_NAME
+        overlay: list[dict[str, Any]] = self._read_catalog_overlay()
         if not path.is_file():
-            raise DbSourceNotFoundError("未找到慕课课程目录: %s" % path)
+            if not overlay:
+                raise DbSourceNotFoundError("未找到慕课课程目录: %s" % path)
+            return {"schema": 1, "courses": overlay}
         try:
             with path.open(encoding="utf-8-sig") as handle:
                 data: Any = json.load(handle)
@@ -149,6 +183,16 @@ class IcourseDb(DbProvider):
             raise DbFormatError("读取慕课课程目录失败: %s" % exc) from exc
         if not isinstance(data, dict) or not isinstance(data.get("courses"), list):
             raise DbFormatError("慕课课程目录缺少 courses 数组")
+        merged: dict[int, dict[str, Any]] = {}
+        for item in list(data.get("courses") or []) + overlay:
+            if not isinstance(item, dict):
+                continue
+            course_id: int | None = _int_or_none(item.get("id"))
+            if course_id is None:
+                continue
+            merged[course_id] = dict(item)
+        data = dict(data)
+        data["courses"] = list(merged.values())
         return data
 
     def catalog_courses(self) -> list[dict[str, Any]]:
@@ -159,6 +203,68 @@ class IcourseDb(DbProvider):
         """
         courses = self._catalog().get("courses") or []
         return [dict(item) for item in courses if isinstance(item, dict)]
+
+    def refresh_catalog(
+        self,
+        *,
+        progress: Any | None = None,
+        cancelled: Any | None = None,
+    ) -> dict[str, Any]:
+        """从 GinsMooc 拉取完整课程目录并写入可写增量。
+
+        只有全部页面成功后才原子替换增量文件；任一步失败/取消都保留旧目录。
+
+        Args:
+            progress: 可选 ``(page, total_pages, count)`` 回调。
+            cancelled: 可选无参回调；返回 ``True`` 时停止且不落盘。
+
+        Returns:
+            含 ``count``、``pages``、``cancelled`` 的结果字典。
+        """
+        courses: dict[int, dict[str, Any]] = {}
+        page: int = 0
+        total_pages: int = 0
+        cancelled_flag: bool = False
+        while True:
+            if callable(cancelled) and cancelled():
+                cancelled_flag = True
+                break
+            batch, pages = self.client.course_page(page)
+            if page == 0:
+                total_pages = int(pages or 0)
+            for course in batch:
+                courses[int(course.id)] = course.to_dict()
+            page += 1
+            if callable(progress):
+                progress(page, total_pages or page, len(courses))
+            if not batch:
+                break
+            if total_pages and page >= total_pages:
+                break
+        if cancelled_flag:
+            return {
+                "count": len(courses),
+                "pages": page,
+                "cancelled": True,
+            }
+        payload: dict[str, Any] = {
+            "schema": 1,
+            "generated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "count": len(courses),
+            "courses": list(courses.values()),
+        }
+        path: Path = self._catalog_overlay_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temp_path: Path = path.with_suffix(".json.tmp")
+        with temp_path.open("w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=2)
+            handle.write("\n")
+        temp_path.replace(path)
+        return {
+            "count": len(courses),
+            "pages": page,
+            "cancelled": False,
+        }
 
     def has_course_fast(self, term_id: int) -> bool:
         """不发起网络请求的收录判断。

@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-01 12:40
-# 最后更新: 2026-11-12 13:00
+# 最后更新: 2026-11-16 20:30
 # 文件名: packager.py
 # 主要用途: 构建功能的打包实现：图标/名称/四段版本资源、源码裁剪、V3 源码归档、说明文件与欢迎页资源分发、数据库 provider 打包、插件模板分发、PyInstaller 与 python-embed zip、平台安装器收集/剔除。
-# 文件版本: 4.6.1
+# 文件版本: 4.6.7
 """构建打包实现。
 
 构建过程不依赖 UI，可独立调用 :func:`build_package`：
@@ -15,7 +15,7 @@
   site-packages，生成双击即可运行的 zip 分发包。
 
 所有输出默认位于项目根目录 ``build/``，不会包含用户 ``config.json``。
-产物根目录统一附带 ``README.md``、``LICENSE``、``usr_agreement.txt`` 与
+产物根目录统一附带 ``README.md``、``LICENSE``、``NOTICE``、``usr_agreement.txt`` 与
 ``updates_info.txt``；开发构建的源码归档同样包含这些文件以及
 ``Reference/`` 参考文档。
 """
@@ -116,6 +116,7 @@ _SITE_PACKAGES: Final[Path] = Path(sysconfig.get_paths()["purelib"])
 _DISTRIBUTION_FILES: Final[tuple[str, ...]] = (
     "README.md",
     "LICENSE",
+    "NOTICE",
     "usr_agreement.txt",
     "updates_info.txt",
 )
@@ -528,7 +529,7 @@ def _build_executable(
     artifact: Path = output_root / slug
     _reset_artifact(artifact, output_root)
     shutil.copytree(built, artifact)
-    # #说明文件：README.md 与 LICENSE 放在可执行文件同级目录。
+    # #说明文件：README.md、LICENSE 与 NOTICE 放在可执行文件同级目录。
     _copy_distribution_files(artifact, log=log)
     if dev_build:
         _copy_dev_extras(artifact, log=log)
@@ -599,7 +600,7 @@ def _build_embedded_zip(
     if icon_path is not None:
         shutil.copy2(icon_path, app_dir / "icon.ico")
         shutil.copy2(icon_path, stage / "icon.ico")
-    # #说明文件：README.md 与 LICENSE 放在 zip 根目录。
+    # #说明文件：README.md、LICENSE 与 NOTICE 放在 zip 根目录。
     _copy_distribution_files(stage, log=log)
     _copy_dev_extras(stage, log=log)
     _archive_sources(stage, version, log=log)
@@ -963,7 +964,7 @@ def _archive_sources(dest: Path, version: str, *, log: LogFn) -> Path:
     """把开发源码归档到产物目录。
 
     V3 起归档包含 ``legacy/``、``Reference/``、``hwklr/``、``main.py`` 与
-    ``requirements.txt``；3.0.1 起追加 ``README.md`` 与 ``LICENSE``；4.6.1 起
+    ``requirements.txt``；3.0.1 起追加 ``README.md`` 与 ``LICENSE``；4.6.7 起追加 ``NOTICE``；4.6.1 起
     追加欢迎弹窗使用的用户协议与更新说明。插件工程
     模板随归档保留，python-embed 等下载缓存排除。
 
@@ -1179,7 +1180,7 @@ def _zip_directory(
 
 
 def _copy_distribution_files(dest: Path, *, log: LogFn) -> None:
-    """把 README、许可证、用户协议与更新说明复制到产物根目录。
+    """把 README、许可证、第三方归属、用户协议与更新说明复制到产物根目录。
 
     Args:
         dest: 产物根目录。
