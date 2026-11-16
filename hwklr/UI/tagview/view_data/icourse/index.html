@@ -1,10 +1,10 @@
 <!--
   作者: Gary
   编写日期: 2026-11-08 14:30
-  最后更新: 2026-11-09 20:40
+  最后更新: 2026-11-16 17:20
   文件名: index.html
   主要用途: “中国大学慕课”标签页结构：紧凑顶栏、内部滚动课程/任务区、自动登录提示、完成任务操作栏与任务结果弹窗。
-  文件版本: 4.3.2
+  文件版本: 4.6.5
 -->
 <section class="tag-page tag-icourse" id="icourse-page">
   <header class="ic-topbar">
@@ -34,6 +34,8 @@
         <div class="ic-sync-row">
           <span id="i-sync-message" class="hint">题库同步</span>
           <button id="i-sync-answers" class="btn ghost small" type="button">同步</button>
+          <button id="i-sync-force" class="btn ghost small" type="button"
+                  title="忽略缓存和失败冷却，重新下载全部测验题目">强制刷新</button>
         </div>
         <div class="progress-track ic-sync-track">
           <div id="i-sync-bar" class="progress-bar"></div>

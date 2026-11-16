@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-12 13:00
+# 最后更新: 2026-11-16 17:20
 # 文件名: __init__.py
-# 主要用途: 实现“中国大学慕课”功能：登录、课程状态、任务 handler 编排、批量完成与题库同步。
-# 文件版本: 4.6.1
+# 主要用途: 实现“中国大学慕课”功能：登录、课程状态、任务 handler 编排、批量完成、实时课程解析与题库同步。
+# 文件版本: 4.6.5
 """中国大学慕课功能。
 
 功能层只负责动作分发、状态缓存与 job 编排；浏览器自动化、课程解析与题库
@@ -47,7 +47,7 @@ from .models import (
     extract_term_id,
 )
 
-__version__ = "4.6.1"
+__version__ = "4.6.5"
 __author__ = "Gary"
 __all__ = ["IcourseFeature"]
 
@@ -510,11 +510,8 @@ class IcourseFeature(Feature):
         if self._catalog_ids is not None:
             return self._catalog_ids
         try:
-            # 目录通过统一的 Feature._load_db 读取，首次访问会缓存到外部 db/icourse0.json。
-            payload: dict[str, Any] = self._load_db(0) or {}
-            routes: Any = payload.get("items")
-            if not isinstance(routes, list):
-                routes = self._db_provider().catalog_courses()
+            # 直接读内置快照，避免 db/icourse0.json 永久缓存覆盖新版本目录。
+            routes: Any = self._db_provider().catalog_courses()
             ids: set[int] = set()
             for item in routes:
                 if not isinstance(item, dict):
@@ -528,6 +525,89 @@ class IcourseFeature(Feature):
             return ids
         except Exception:
             return set()
+
+    def _catalog_status(
+        self,
+        term_id: int,
+        *,
+        probe: bool = True,
+        test_count: int = 0,
+    ) -> dict[str, Any]:
+        """返回课程题库收录状态及诊断字段。
+
+        Args:
+            term_id: 课程 term id。
+            probe: 是否允许实时 HTTP 探测。
+            test_count: 课程测验数量（仅用于展示）。
+
+        Returns:
+            含 ``available/source/reason/test_count`` 的字典。
+        """
+        term_id = int(term_id)
+        if term_id <= 0:
+            return {
+                "available": False,
+                "source": "unavailable",
+                "reason": "课程 term id 无效",
+                "test_count": int(test_count),
+            }
+        static_ids: set[int] = self._catalog_set()
+        if term_id in static_ids:
+            return {
+                "available": True,
+                "source": "static",
+                "reason": "",
+                "test_count": int(test_count),
+            }
+        try:
+            provider: Any = self._db_provider()
+            available: bool = (
+                provider.has_course(term_id)
+                if probe
+                else provider.has_course_fast(term_id)
+            )
+        except Exception:
+            return {
+                "available": False,
+                "source": "error",
+                "reason": "题库服务暂时不可用，无法确认收录",
+                "test_count": int(test_count),
+            }
+        if available:
+            with self._state_lock:
+                self._catalog_ids = set(static_ids) | {term_id}
+            return {
+                "available": True,
+                "source": "live" if probe else "cache",
+                "reason": "",
+                "test_count": int(test_count),
+            }
+        return {
+            "available": False,
+            "source": "unavailable",
+            "reason": (
+                "题库未收录该课程（已实时校验）"
+                if probe
+                else "题库未收录该课程（本地目录/缓存未命中）"
+            ),
+            "test_count": int(test_count),
+        }
+
+    def _catalog_available(self, term_id: int, *, probe: bool = True) -> bool:
+        """判断课程是否可同步题库。
+
+        静态目录只是发布快照；未命中时实时探测上游课程详情，避免新课程被
+        误报为“题库未收录”。高频快照路径应传 ``probe=False``，只用本地
+        目录/缓存判定，避免课程列表产生网络请求瀑布。
+
+        Args:
+            term_id: 课程 term id。
+            probe: 是否允许实时 HTTP 探测。
+
+        Returns:
+            可同步返回 ``True``。
+        """
+        return bool(self._catalog_status(term_id, probe=probe)["available"])
 
     def _require_client(self) -> tuple[Any, dict[str, Any]]:
         """加载已登录客户端。
@@ -698,14 +778,19 @@ class IcourseFeature(Feature):
         term = fetch_term(client, learned, term_id)
         course = build_course(term, item)
         self._assign_keys(course)
-        catalog_available = term_id in self._catalog_set()
+        test_count = len(
+            {
+                int(task.test_id)
+                for task in course.tasks
+                if task.test_id and task.kind in _QUIZ_KINDS
+            }
+        )
+        catalog = self._catalog_status(term_id, test_count=test_count)
+        catalog_available = bool(catalog["available"])
         payload = {
             "course": course.to_dict(True),
             "types": self._type_counts(course),
-            "catalog": {
-                "available": catalog_available,
-                "reason": "" if catalog_available else "题库未收录该课程",
-            },
+            "catalog": catalog,
         }
         with self._state_lock:
             self._state.select(course, payload, member)
@@ -980,7 +1065,7 @@ class IcourseFeature(Feature):
         term_id = int(params.get("term_id") or (course.term_id if course else 0))
         if term_id <= 0:
             return failure("请先选择课程")
-        if not (term_id in self._catalog_set()):
+        if not self._catalog_available(term_id):
             return failure("题库未收录该课程")
         if course is None or course.term_id != term_id:
             return failure("请先重新选择课程")
@@ -1074,17 +1159,21 @@ class IcourseFeature(Feature):
             return failure("任务不存在")
         if updated is not None:
             self._assign_keys(updated)
+            test_count = len(
+                {
+                    int(task.test_id)
+                    for task in updated.tasks
+                    if task.test_id and task.kind in _QUIZ_KINDS
+                }
+            )
             payload = {
                 "course": updated.to_dict(True),
                 "types": self._type_counts(updated),
-                "catalog": {
-                    "available": updated.term_id in self._catalog_set(),
-                    "reason": (
-                        ""
-                        if updated.term_id in self._catalog_set()
-                        else "题库未收录该课程"
-                    ),
-                },
+                "catalog": self._catalog_status(
+                    updated.term_id,
+                    probe=False,
+                    test_count=test_count,
+                ),
             }
             with self._state_lock:
                 self._state.apply_completion(updated, payload)
@@ -1103,11 +1192,18 @@ class IcourseFeature(Feature):
     def _course_summary(self, course: Course) -> dict[str, Any]:
         """构造课程摘要（含题库可用性）。"""
         data = course.to_dict(False)
-        available = course.term_id in self._catalog_set()
-        data["catalog"] = {
-            "available": available,
-            "reason": "" if available else "题库未收录该课程",
-        }
+        test_count = len(
+            {
+                int(task.test_id)
+                for task in course.tasks
+                if task.test_id and task.kind in _QUIZ_KINDS
+            }
+        )
+        data["catalog"] = self._catalog_status(
+            course.term_id,
+            probe=False,
+            test_count=test_count,
+        )
         return data
 
     @staticmethod

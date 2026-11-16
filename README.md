@@ -6,7 +6,7 @@
 
 ![Python](https://img.shields.io/badge/Python-3.15.2-3776AB?logo=python&logoColor=white)
 ![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-0078D4?logo=windows&logoColor=white)
-![Version](https://img.shields.io/badge/Version-4.6.3-5B4BFF)
+![Version](https://img.shields.io/badge/Version-4.6.6-5B4BFF)
 ![GUI](https://img.shields.io/badge/GUI-pywebview%20%2B%20WebView2-2F3AB2)
 
 [功能特性](#-功能特性) · [界面预览](#-界面预览) · [快速开始](#-快速开始) · [使用指南](#-使用指南) · [构建与分发](#-构建与分发) · [插件开发](#-插件开发) · [常见问题](#-常见问题)
@@ -74,7 +74,7 @@ HomeworkKiller4BJTU（简称 HWKLR）是一个基于 **pywebview + 本地 HTTP �
 - **进度展示**：运行中的任务胶囊变为浅绿色进度条并显示百分比（最多每 3 秒刷新），等待任务显示橙色“等待队列”，完成后自动刷新课程状态。
 - **任务状态**：测验自动提交后显示分数（满分绿色、非满分红色），未自动提交显示黄色“已填写”并在标签内提示截图路径；讨论自动发布显示绿色“已发布”，否则同样为“已填写”。任务默认不勾选。
 - **终止任务**：任务运行时底部“开始完成”变为红框红字白底“终止任务”，同时放大总任务进度条。
-- **题库**：内置 `hwklr/db/icourse_sources.json` 课程目录（422 门），从 GinsMooc 下载的课程/测验/题目缓存到程序同级的 `db/icourse<termId>.json`；默认 TTL 24 小时。
+- **题库**：内置 `hwklr/db/icourse_sources.json` 课程目录（发布快照，422 门），从 GinsMooc 下载的课程/测验/题目缓存到程序同级的 `db/icourse<termId>.json`，默认 TTL 24 小时。目录未命中时会实时请求课程详情复核，不再仅凭快照判定“未收录”；本地题库缺失或部分题目未匹配时，按页面 option id/题干调用 `select_questions` 实时兜底。作业/主观题只展示参考答案，不自动填写。
 - **留存数据**：设置中可关闭自动截图留存；关闭后讨论、测验等任务不再写入 `artifacts/icourse/`，已有截图不会被删除。
 - **登录容错**：窗口登录会清理失效的旧调试窗口并在必要时使用独立临时配置目录；Win11 Edge 的启动器进程拉起真实浏览器后立即退出时，继续轮询 CDP 而不是误报配置目录被占用；本机 Cookie 导入会跳过不可用的浏览器配置继续尝试其他来源。
 
@@ -477,7 +477,10 @@ HomeworkKiller4BJTU/
 
 | 版本 | 主要内容 |
 |---|---|
-| **4.6.3** | 修复自定义程序名更新后无法启动：启动入口改为读取新版本 `BUILD_INFO.json` 的 `entry`，Windows/macOS 安装器与 launcher 不再硬编码默认 exe/.app；新版本启动失败时回滚 `current.json`。 |
+| **4.6.6** | 严格整卷校验：任意一题未命中答案时不填答、不提交，整卷标记为“已跳过”并记录未命中题号与原因。 |
+| 4.6.5 | 批次一一致性修复：作业/考试路由、强制刷新题库、目录缓存一致性、按测验准入、新版 icourse `/mooc/learn/.../assessments/quiz/` path 路由与开始答题兼容；课程目录增加 source/reason/test_count 诊断。 |
+| 4.6.4 | 修复静态课程目录过期导致已收录课程提示“题库未收录”：课程收录改为静态目录 + 实时 `course_detail` 解析；本地题库缺失时支持实时 `select_questions` 答案兜底与主观题参考答案展示。 |
+| 4.6.3 | 修复自定义程序名更新后无法启动：启动入口改为读取新版本 `BUILD_INFO.json` 的 `entry`，Windows/macOS 安装器与 launcher 不再硬编码默认 exe/.app；新版本启动失败时回滚 `current.json`。 |
 | 4.6.2 | 修复自动更新误报“更新包缺少 BUILD_INFO.json”：解压后自动识别并压平发布 ZIP 的产物根目录；首次启动协议改为“用户协议 + 开源许可证”顺序。 |
 | 4.6.1 | 默认线程数提升：C 程序设计最大并发数与慕课视频并行数默认 8（上限）；C 程序设计默认启用并进入题解模式；新增首次启动/版本升级欢迎弹窗，展示协议与当前版本更新说明。 |
 | 4.6.0 | 慕课刷课优化：视频直接跳到 99% 后等待播放完成；删除账号类型“自动识别”，改为显式选择爱课程/网易邮箱/网易手机号。 |

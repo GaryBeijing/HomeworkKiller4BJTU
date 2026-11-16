@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-10 12:00
+# 最后更新: 2026-11-16 17:20
 # 文件名: tasks.py
 # 主要用途: icourse 任务执行契约与 TaskHandler registry：把 Job 的 kind 分支收敛为可注入的 handler。
-# 文件版本: 4.4.0
+# 文件版本: 4.6.5
 """icourse 任务执行契约与 handler registry。
 
 Job 只负责阶段、快照、取消和状态落盘；具体任务类型由 TaskHandler 实现。
@@ -19,7 +20,7 @@ from .actions import DiscussionAction, DocumentAction, QuizAction
 from .answer_store import AnswerStore
 from .models import Course, Task
 
-__version__ = "4.4.0"
+__version__ = "4.6.5"
 __author__ = "Gary"
 __all__ = [
     "DocumentTaskHandler",
@@ -130,7 +131,16 @@ class QuizTaskHandler:
         if course.is_spoc:
             return TaskOutcome(TaskStatus.SKIPPED, message="刷题不支持 SPOC 课程")
         if not store.has_course(course.term_id):
-            return TaskOutcome(TaskStatus.SKIPPED, message="题库未收录该课程")
+            try:
+                test_available: bool = store.test_exists(task.test_id)
+            except Exception:
+                test_available = False
+            if not test_available:
+                return TaskOutcome(
+                    TaskStatus.SKIPPED,
+                    message="题库未收录该课程/测验",
+                )
+            ctx.info("课程目录未收录，但当前测验可用，继续尝试…")
         submit: bool = bool(job._settings.get("submit_quizzes", False))
         result = QuizAction(ctx).run(
             course,

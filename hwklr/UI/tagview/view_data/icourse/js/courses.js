@@ -1,10 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-11-08 14:30
-  最后更新: 2026-11-10 23:40
+  最后更新: 2026-11-16 17:20
   文件名: courses.js
   主要用途: “中国大学慕课”页面课程列表、任务类型、任务表格与勾选状态渲染。
-  文件版本: 4.4.1
+  文件版本: 4.6.5
 */
 (function (global) {
   'use strict';
@@ -251,11 +251,18 @@
     const course = state.course.course;
     els['i-course-title'].textContent = course.name || '任务';
     const catalog = state.course.catalog || {};
+    const catalogLabel = catalog.available
+      ? (catalog.source === 'live' ? '题库已收录（实时解析）' : '题库已收录')
+      : (catalog.source === 'error' ? '题库状态未知' : '题库未收录');
     els['i-course-meta'].textContent = [
       course.school || '',
       course.is_spoc ? 'SPOC' : 'MOOC',
-      catalog.available ? '题库已收录' : '题库未收录',
+      catalogLabel,
     ].filter(Boolean).join(' · ');
+    els['i-course-meta'].title = [
+      catalog.reason || '',
+      catalog.test_count ? `测验 ${catalog.test_count} 个` : '',
+    ].filter(Boolean).join('；');
   };
 
   IC.renderTypes = function () {

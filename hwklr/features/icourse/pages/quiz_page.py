@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-10 13:00
-# 最后更新: 2026-11-11 10:00
+# 最后更新: 2026-11-16 17:20
 # 文件名: quiz_page.py
-# 主要用途: 测验页 Page Object：页面状态、就绪等待、题目读取、填答、成绩与提交确认；截图受留存数据开关控制。
-# 文件版本: 4.4.3
+# 主要用途: 测验页 Page Object：页面状态、就绪等待、题目读取、填答、主观题参考答案、成绩与提交确认。
+# 文件版本: 4.6.5
 """测验页 Page Object。"""
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from ..models import Task
 from .base import PageObject
 from .icourse163 import close_modals, page_block_reason
 
-__version__ = "4.4.3"
+__version__ = "4.6.5"
 __author__ = "Gary"
 __all__ = ["QUIZ_SELECTORS", "QuizPage", "READ_QUESTIONS_JS"]
 
@@ -31,14 +31,17 @@ def _to_float(value: Any) -> float | None:
 
 
 QUIZ_SELECTORS = {
-    "question": ".u-questionItem",
-    "title": ".j-title .j-richTxt",
-    "category": ".qaCate",
-    "option_input": "input.u-tbi",
-    "option_text": ".u-tbl .optionCnt",
+    "question": ".u-questionItem, .learn-assessment-question",
+    "title": ".j-title .j-richTxt, .assessment-question-rich-text",
+    "category": ".qaCate, .learn-assessment-question-type",
+    "option_input": "input.u-tbi, .learn-assessment-option input",
+    "option_text": ".u-tbl .optionCnt, .learn-assessment-option",
     "start": "a.j-startBtn",
     "agree": "#agreeCheck",
-    "submit": "a.j-submitBtn",
+    "submit": (
+        "a.j-submitBtn, button.j-submitBtn, .learn-assessment-submit button, "
+        "button:has-text('提交答案')"
+    ),
 }
 
 QUIZ_READY_TIMEOUT_MS = 30_000
@@ -55,26 +58,103 @@ QUIZ_PAGE_STATE_JS = r"""
            style.display !== 'none' && style.visibility !== 'hidden';
   };
   const text = document.body?.innerText || '';
-  const submit = document.querySelector('a.j-submitBtn');
-  const start = document.querySelector('a.j-startBtn');
+  const questionSelectors = [
+    '.u-questionItem', '.learn-assessment-question',
+    '[class*="questionItem"]', '[class*="question-item"]'
+  ];
+  let questions = 0;
+  for (const selector of questionSelectors) {
+    const count = [...document.querySelectorAll(selector)].filter(visible).length;
+    if (count > 0) { questions = count; break; }
+  }
+  const clickable = [...document.querySelectorAll(
+    'a,button,[role=button],.ux-btn,.u-btn'
+  )].filter(visible).map(el => (el.innerText || '').trim())
+    .filter(item => item && item.length <= 60);
+  const startPattern = /(开始答题|开始测验|开始考试|继续答题|继续作答|继续考试)/;
+  const startText = clickable.find(item => startPattern.test(item)) || '';
+  const submit = document.querySelector('a.j-submitBtn') ||
+    [...document.querySelectorAll('a,button,[role=button],.ux-btn,.u-btn')]
+      .filter(visible).find(el => /提交答案|交卷|^提交$/.test((el.innerText || '').trim()));
+  const result = document.querySelector(
+    '.j-quizResult,.u-quizResult,[class*=quizResult],' +
+    '[class*=QuizResult],[class*=scoreResult]'
+  );
   return {
     url: location.href,
-    questions: document.querySelectorAll('.u-questionItem').length,
+    shell: !!document.querySelector('.learn-assessment-shell, main#learn-main-content'),
+    frames: document.querySelectorAll('iframe').length,
+    questions,
     loginWall: /登录\s*\|\s*注册/.test(text) || text.includes('请登录后操作'),
     joinButton: [...document.querySelectorAll('a,button')].some(
       el => visible(el) && /立即参加/.test((el.innerText || '').trim())
     ),
-    startVisible: visible(start),
+    startVisible: !!startText,
+    startText,
+    buttonTexts: clickable.slice(0, 12),
     submitVisible: visible(submit),
     successText: ['提交成功', '交卷成功', '已提交', '本次得分',
                   '你的得分', '测验已完成', '考试已完成'].some(
       hit => text.includes(hit)
     ),
-    resultNode: !!document.querySelector(
-      '.j-quizResult,.u-quizResult,[class*=quizResult],' +
-      '[class*=QuizResult],[class*=scoreResult]'
-    ),
+    resultNode: !!result && visible(result),
   };
+}
+"""
+
+START_QUIZ_JS = r"""
+() => {
+  const visible = (el) => {
+    if (!el) return false;
+    const rect = el.getBoundingClientRect();
+    const style = getComputedStyle(el);
+    return rect.width > 0 && rect.height > 0 &&
+           style.display !== 'none' && style.visibility !== 'hidden';
+  };
+  const pattern = /(开始答题|开始测验|开始考试|继续答题|继续作答|继续考试)/;
+  const nodes = [...document.querySelectorAll(
+    'a,button,[role=button],.ux-btn,.u-btn'
+  )].filter(visible);
+  const target = nodes.find(el => pattern.test((el.innerText || '').trim()));
+  if (!target) return '';
+  const scope = target.closest('form') || target.parentElement?.parentElement || target.parentElement;
+  const checks = scope ? [...scope.querySelectorAll('input[type=checkbox]')]
+    .filter(el => visible(el) && !el.checked) : [];
+  for (const checkbox of checks) {
+    try { checkbox.click(); } catch (ignored) { /* 忽略不可点击的复选框 */ }
+  }
+  target.click();
+  return (target.innerText || '').trim();
+}
+"""
+
+CONFIRM_START_JS = r"""
+() => {
+  const visible = (el) => {
+    if (!el) return false;
+    const rect = el.getBoundingClientRect();
+    const style = getComputedStyle(el);
+    return rect.width > 0 && rect.height > 0 &&
+           style.display !== 'none' && style.visibility !== 'hidden';
+  };
+  const labels = new Set([
+    '开始答题', '开始测验', '开始考试', '继续', '继续答题',
+    '同意', '同意并继续', '确定'
+  ]);
+  const roots = [...document.querySelectorAll(
+    '.ux-modal,.ant-modal,[class*=dialog],[class*=Dialog],' +
+    '[class*=confirm],[class*=Confirm]'
+  )].filter(visible);
+  for (const root of roots) {
+    const nodes = [...root.querySelectorAll('button,a,[role=button],.ux-btn,.u-btn')];
+    for (const node of nodes) {
+      if (visible(node) && labels.has((node.innerText || '').trim())) {
+        node.click();
+        return true;
+      }
+    }
+  }
+  return false;
 }
 """
 
@@ -110,23 +190,59 @@ SCORE_READ_JS = r"""
 """
 
 READ_QUESTIONS_JS = r"""
-() => [...document.querySelectorAll('.u-questionItem')].map((q, index) => {
-  const titleEl = q.querySelector('.j-title .j-richTxt');
-  const catEl = q.querySelector('.qaCate');
-  const inputs = [...q.querySelectorAll('input.u-tbi')].map(inp => ({
-    id: inp.id, type: inp.type, checked: inp.checked
-  }));
-  const texts = [...q.querySelectorAll('input[type=text], textarea')].map(el => ({
-    tag: el.tagName, id: el.id, value: el.value
-  }));
-  const optionTexts = [...q.querySelectorAll('.optionCnt')].map(el => (el.innerText || '').trim());
-  return {
-    index: index + 1,
-    title: (titleEl?.innerText || '').trim(),
-    category: (catEl?.innerText || '').trim(),
-    inputs, texts, optionTexts,
+() => {
+  const visible = (el) => {
+    if (!el) return false;
+    const rect = el.getBoundingClientRect();
+    const style = getComputedStyle(el);
+    return rect.width > 0 && rect.height > 0 &&
+           style.display !== 'none' && style.visibility !== 'hidden';
   };
-})
+  const selectors = [
+    '.u-questionItem', '.learn-assessment-question',
+    '[class*="questionItem"]', '[class*="question-item"]'
+  ];
+  let roots = [];
+  for (const selector of selectors) {
+    const nodes = [...document.querySelectorAll(selector)].filter(visible);
+    if (nodes.length > 0) { roots = nodes; break; }
+  }
+  return roots.map((q, index) => {
+    const titleEl = q.querySelector(
+      '.j-title .j-richTxt, .assessment-question-rich-text, .j-richTxt, ' +
+      '[class*="question-title"], [class*="questionTitle"]'
+    );
+    const catEl = q.querySelector(
+      '.qaCate, .learn-assessment-question-type, ' +
+      '[class*="question-type"], [class*="qType"]'
+    );
+    const inputs = [...new Set([
+      ...q.querySelectorAll(
+        'input.u-tbi, input[id^="op_"], .learn-assessment-option input, ' +
+        'input[type=radio], input[type=checkbox]'
+      )
+    ])].map(inp => ({
+      id: inp.id || inp.name || '', type: inp.type, checked: inp.checked
+    }));
+    const texts = [...q.querySelectorAll('input[type=text], textarea')].map(el => ({
+      tag: el.tagName, id: el.id, value: el.value
+    }));
+    const labels = [...q.querySelectorAll('label.learn-assessment-option')];
+    const optionTexts = (labels.length ? labels.map(label => {
+      const rich = label.querySelector('.assessment-question-rich-text');
+      return (rich?.innerText || label.innerText || '')
+        .replace(/^\s*[A-Za-z][.、]\s*/, '').trim();
+    }) : [...q.querySelectorAll(
+      '.optionCnt, [class*="option-content"], [class*="optionContent"]'
+    )].map(el => (el.innerText || '').trim()));
+    return {
+      index: index + 1,
+      title: (titleEl?.innerText || '').trim(),
+      category: (catEl?.innerText || '').trim(),
+      inputs, texts, optionTexts,
+    };
+  });
+}
 """
 
 
@@ -151,6 +267,8 @@ class QuizPage(PageObject):
         questions = int(state.get("questions") or 0)
         if "/course/" in url and "/learn/" not in url:
             return "测验页被重定向到课程介绍页（登录态失效或未选课）"
+        if "/announce" in url and not questions:
+            return "测验页被重定向到公告页（新版任务路由未生效）"
         if state.get("loginWall") and not questions:
             return "测验页要求登录（登录态已失效）"
         if (
@@ -162,10 +280,10 @@ class QuizPage(PageObject):
         return ""
 
     def _wait_ready(self, page, task: Task) -> None:
-        """最多等 30 秒；一旦发现重定向/登录墙立即给出明确错误。"""
+        """最多等 30 秒；兼容旧 `#/learn/quiz` 与新版 `/assessments/quiz/`。"""
         self.ctx.info("等待测验页加载（最多 30 秒）…")
         deadline = time.monotonic() + QUIZ_READY_TIMEOUT_MS / 1000
-        started = False
+        last_start_at = 0.0
         while time.monotonic() < deadline:
             self.ctx.check_cancel()
             blocked = page_block_reason(page)
@@ -179,43 +297,80 @@ class QuizPage(PageObject):
                 raise ActionUnavailable(
                     f"{reason}。当前 URL：{state.get('url') or page.url}"
                 )
-            if int(state.get("questions") or 0) > 0:
+            questions: int = int(state.get("questions") or 0)
+            if questions > 0:
                 return
-            if not started and state.get("startVisible"):
-                self.ctx.info("点击「开始测验」…")
-                self._start_if_needed(page)
-                started = True
+            if (
+                (state.get("successText") or state.get("resultNode"))
+                and not state.get("startVisible")
+                and not state.get("joinButton")
+            ):
+                self.screenshot(f".artifacts/quiz-submitted-{task.test_id}.png")
+                raise ActionUnavailable(
+                    "测验已提交或已完成，无需重复作答。"
+                    f"当前 URL：{state.get('url') or page.url}"
+                )
+            if (
+                state.get("startVisible")
+                and time.monotonic() - last_start_at >= 4.0
+            ):
+                self.ctx.info(
+                    "点击「%s」…" % (state.get("startText") or "开始答题")
+                )
+                if self._start_if_needed(page):
+                    last_start_at = time.monotonic()
+                    page.wait_for_timeout(1200)
+                    continue
             page.wait_for_timeout(QUIZ_POLL_MS)
 
         self.screenshot(f".artifacts/quiz-noquestions-{task.test_id}.png")
         state = self._page_state(page)
+        buttons = "、".join(state.get("buttonTexts") or []) or "无"
         raise ActionUnavailable(
-            "测验页面 30 秒内没有加载出题目（可能需要手动处理验证码/协议）。"
-            f"当前 URL：{state.get('url') or page.url}"
+            "测验页面 30 秒内没有加载出题目。"
+            f"当前 URL：{state.get('url') or page.url}；"
+            f"新版界面：{'是' if state.get('shell') else '否'}；"
+            f"iframe：{int(state.get('frames') or 0)}；"
+            f"可见按钮：{buttons}"
         )
 
     # ------------------------------------------------------------------ 开始
-    def _start_if_needed(self, page) -> None:
-        if page.locator(QUIZ_SELECTORS["question"]).count() > 0:
-            return
-        start = page.locator(QUIZ_SELECTORS["start"])
-        if start.count() == 0 or not start.first.is_visible():
-            return
-        agree = page.locator(QUIZ_SELECTORS["agree"])
-        if agree.count():
-            try:
-                agree.check()
-            except Exception:
-                agree.click()
-        start.first.click()
-        page.wait_for_timeout(1500)
-        close_modals(page)
+    def _start_if_needed(self, page) -> bool:
+        """点击新版/旧版开始或继续答题入口。
+
+        Returns:
+            实际点中入口返回 ``True``。
+        """
+        state = self._page_state(page)
+        if int(state.get("questions") or 0) > 0:
+            return False
+        try:
+            clicked = page.evaluate(START_QUIZ_JS)
+        except Exception:
+            clicked = ""
+        if not clicked:
+            return False
+        page.wait_for_timeout(600)
+        try:
+            page.evaluate(CONFIRM_START_JS)
+        except Exception:
+            pass
+        page.wait_for_timeout(900)
+        # 开始确认框可能被 Escape 取消，这里不再按 Escape。
+        close_modals(page, press_escape=False)
+        return True
 
     # ------------------------------------------------------------------ 填答
     def _apply(self, page, result: Any) -> None:
         fill_js = r"""
         ({qIndex, values}) => {
-          const root = document.querySelectorAll('.u-questionItem')[qIndex];
+          const standard = [...document.querySelectorAll(
+            '.u-questionItem, .learn-assessment-question'
+          )];
+          const roots = standard.length ? standard : [...document.querySelectorAll(
+            '[class*="questionItem"],[class*="question-item"]'
+          )];
+          const root = roots[qIndex];
           if (!root) return 0;
           const fields = [...root.querySelectorAll('input[type=text], textarea')];
           let count = 0;
@@ -232,40 +387,128 @@ class QuizPage(PageObject):
           return count;
         }
         """
+        page.wait_for_timeout(600)
         for plan in result.questions:
             if not plan.matched:
                 continue
             if plan.question_type in ("SINGLE_CHOICE", "MULTIPLE_CHOICE", "JUDGEMENT"):
-                # 页面 input 的完整 id 需要从 DOM 找：用选项前缀匹配
-                clicked = page.evaluate(
-                    r"""
-                    (wanted) => {
-                      let count = 0;
-                      const inputs = [...document.querySelectorAll('.u-questionItem input.u-tbi')];
-                      for (const inp of inputs) {
-                        const raw = (inp.id || '').split('_').slice(2).join('_');
-                        for (const oid of wanted) {
-                          if (raw.startsWith(String(oid)) && raw.slice(String(oid).length).match(/^\d+$/)) {
-                            if (!inp.checked) { inp.click(); }
-                            count++;
-                            break;
+                if plan.selected_indexes:
+                    # 新版 React 页面必须用真实指针事件，JS 的 input.click()
+                    # 只会改变 DOM checked，不会更新组件状态，提交时 optIds 为空。
+                    roots = page.locator(".learn-assessment-question")
+                    handled = False
+                    if roots.count() >= plan.index:
+                        root = roots.nth(plan.index - 1)
+                        labels = root.locator("label.learn-assessment-option")
+                        clicked = 0
+                        for index in plan.selected_indexes:
+                            if index >= labels.count():
+                                continue
+                            label = labels.nth(index)
+                            try:
+                                # 新版选项是受控组件，点击 label 才会触发 React 状态。
+                                label.click(timeout=3000)
+                                page.wait_for_timeout(150)
+                            except Exception:
+                                continue
+                            clicked += 1
+                        self.ctx.log(f"  已勾选 {clicked} 项")
+                        handled = True
+                    if handled:
+                        continue
+                if plan.selected_option_ids:
+                    # 旧版页面：input id 中包含 GinsMooc option id。
+                    clicked = page.evaluate(
+                        r"""
+                        (wanted) => {
+                          let count = 0;
+                          const standard = [...document.querySelectorAll(
+                            '.u-questionItem, .learn-assessment-question'
+                          )];
+                          const roots = standard.length ? standard : [...document.querySelectorAll(
+                            '[class*="questionItem"],[class*="question-item"]'
+                          )];
+                          const inputs = roots.flatMap(root => [...root.querySelectorAll(
+                            'input.u-tbi, input[id^="op_"]'
+                          )]);
+                          for (const inp of inputs) {
+                            const raw = (inp.id || '').split('_').slice(2).join('_');
+                            for (const oid of wanted) {
+                              if (raw.startsWith(String(oid)) && raw.slice(String(oid).length).match(/^\d+$/)) {
+                                if (!inp.checked) { inp.click(); }
+                                count++;
+                                break;
+                              }
+                            }
                           }
+                          return count;
                         }
-                      }
-                      return count;
-                    }
-                    """,
-                    list(plan.selected_option_ids),
-                )
+                        """,
+                        list(plan.selected_option_ids),
+                    )
+                else:
+                    # 新版页面没有 option id，只能按题目内选项顺序点击。
+                    clicked = page.evaluate(
+                        r"""
+                        ({qIndex, indexes}) => {
+                          const standard = [...document.querySelectorAll(
+                            '.u-questionItem, .learn-assessment-question'
+                          )];
+                          const roots = standard.length ? standard : [...document.querySelectorAll(
+                            '[class*="questionItem"],[class*="question-item"]'
+                          )];
+                          const root = roots[qIndex];
+                          if (!root) return 0;
+                          const labels = [...root.querySelectorAll(
+                            'label.learn-assessment-option'
+                          )];
+                          const inputs = labels.length
+                            ? labels.map(label => label.querySelector('input'))
+                            : [...root.querySelectorAll(
+                                'input[type=radio], input[type=checkbox], input.u-tbi'
+                              )];
+                          let count = 0;
+                          for (const index of indexes) {
+                            const input = inputs[index];
+                            if (!input) continue;
+                            if (!input.checked) { input.click(); }
+                            count++;
+                          }
+                          return count;
+                        }
+                        """,
+                        {
+                            "qIndex": plan.index - 1,
+                            "indexes": list(plan.selected_indexes),
+                        },
+                    )
                 self.ctx.log(f"  已勾选 {clicked} 项")
             elif plan.question_type == "COMPLETION":
                 values = [blank[0] if blank else "" for blank in plan.blank_answers]
-                filled = page.evaluate(
-                    fill_js, {"qIndex": plan.index - 1, "values": values}
-                )
+                roots = page.locator(".learn-assessment-question")
+                filled = 0
+                if roots.count() >= plan.index:
+                    fields = roots.nth(plan.index - 1).locator(
+                        "input[type=text], textarea"
+                    )
+                    for field_index, value in enumerate(values):
+                        if field_index >= fields.count():
+                            break
+                        try:
+                            fields.nth(field_index).fill(str(value))
+                            filled += 1
+                        except Exception:
+                            pass
+                if filled == 0:
+                    filled = page.evaluate(
+                        fill_js, {"qIndex": plan.index - 1, "values": values}
+                    )
                 self.ctx.log(f"  已填写 {filled} 个空")
             elif plan.question_type in ("HOMEWORK", "ONLINE_JUDGE"):
                 self.ctx.log("  主观题已跳过（需人工作答）")
+                reference = str(getattr(plan, "reference_answer", "") or "")
+                if reference:
+                    self.ctx.log("  参考答案：%s" % reference)
 
     # ------------------------------------------------------------------ 成绩
     def _read_score(self, page, task: Task, result: Any) -> None:
@@ -336,6 +579,23 @@ class QuizPage(PageObject):
                           }
                         }
                       }
+                      // 新版确认框没有 dialog class，使用按钮祖先文本识别。
+                      const all = [...document.querySelectorAll(
+                        'button, a, [role=button], .ux-btn, .u-btn'
+                      )].filter(visible);
+                      for (const node of all) {
+                        const text = (node.innerText || '').trim();
+                        if (!labels.has(text)) continue;
+                        let parent = node.parentElement;
+                        for (let depth = 0; parent && depth < 7; depth++) {
+                          const body = parent.innerText || '';
+                          if (body.includes('确认提交') || body.includes('提交后')) {
+                            node.click();
+                            return true;
+                          }
+                          parent = parent.parentElement;
+                        }
+                      }
                       return false;
                     }
                     """
@@ -356,10 +616,14 @@ class QuizPage(PageObject):
             return False
         if not state.get("submitVisible") and int(state.get("questions") or 0) == 0:
             return True
+        if "/assessments/" in url:
+            return "/result" in url
         return "/learn/quiz" not in url
 
     def _submit(self, page, task: Task | None = None) -> bool:
         """点击提交，并等待明确的成功/成绩状态，而不是点击后立即返回。"""
+        # 新版 React 页面需要一点时间把 JS 填答同步到组件状态。
+        page.wait_for_timeout(600)
         button = page.locator(QUIZ_SELECTORS["submit"])
         if button.count() == 0:
             raise ActionUnavailable("没有找到「提交答案」按钮")
@@ -369,9 +633,13 @@ class QuizPage(PageObject):
             close_modals(page)
             button.first.click(timeout=5000)
 
-        page.wait_for_timeout(800)
-        if self._confirm_dialog(page):
-            page.wait_for_timeout(800)
+        page.wait_for_timeout(500)
+        # 新版确认框可能稍晚出现，最多等待约 3 秒。
+        for _ in range(6):
+            if self._confirm_dialog(page):
+                page.wait_for_timeout(500)
+                break
+            page.wait_for_timeout(500)
 
         deadline = time.monotonic() + QUIZ_SUBMIT_TIMEOUT_MS / 1000
         while time.monotonic() < deadline:

@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
+# 最后更新: 2026-11-16 17:20
 # 文件名: models.py
-# 主要用途: 把 icourse163 接口 JSON 转换为课程/任务模型与完成状态（已移除 CLI 课程编号）。
-# 文件版本: 4.0.0
+# 主要用途: 把 icourse163 接口 JSON 转换为课程/任务模型与完成状态；任务保留 objective 以区分考试页面。
+# 文件版本: 4.6.5
 """把接口返回的 JSON 转换成课程 / 任务模型。"""
 
 from __future__ import annotations
@@ -56,6 +57,20 @@ def _int_or_none(value: Any) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _bool_or_none(value: Any) -> bool | None:
+    """把可选布尔字段归一化为 bool/None。"""
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in ("1", "true", "yes", "y"):
+        return True
+    if text in ("0", "false", "no", "n"):
+        return False
+    return None
 
 
 def _float_or_none(value: Any) -> float | None:
@@ -161,6 +176,7 @@ class Task:
     status: str
     score: float | None = None
     total_score: float | None = None
+    objective: bool | None = None
     deadline: datetime | None = None
     release: datetime | None = None
     content_id: int | None = None
@@ -187,6 +203,7 @@ class Task:
             "status_label": self.status_label,
             "score": self.score,
             "total_score": self.total_score,
+            "objective": self.objective,
             "deadline": self.deadline.isoformat(timespec="minutes") if self.deadline else None,
             "release": self.release.isoformat(timespec="minutes") if self.release else None,
             "content_id": self.content_id,
@@ -306,6 +323,7 @@ def _task_from_test(
         status=status,
         score=_float_or_none(info.get("userScore")),
         total_score=_float_or_none(info.get("totalScore")),
+        objective=_bool_or_none(info.get("objective")),
         deadline=_ms_to_dt(deadline),
         release=_ms_to_dt(release),
         content_id=_int_or_none(state.get("contentId") or info.get("id")),

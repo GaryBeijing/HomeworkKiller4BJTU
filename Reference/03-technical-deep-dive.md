@@ -828,7 +828,7 @@ QuizAction / PopupQuiz                 ← 按题干/选项文本匹配答案
 - `refresh_course` / `sync_test` 在网络请求完成后再短暂加锁合并落盘，避免 `DbProvider.load` 的 `RLock` 在长请求期间超过 `DB_TIMEOUT`。
 - 题目缓存默认 24h；`sync_test` 命中 TTL 不发请求；测试未收录时记录 `error` 与 6h `retry_after`。
 - 禁止调用 GinsMooc SSE `/api/mooc/course/refresh/{cid}`（有服务端副作用）。
-- 课程不在目录中或为 SPOC 时，测验在 UI/job 中被标记为不支持，视频/文档/讨论不受影响。
+- 课程不在目录中时，4.6.4 起会实时请求 `course_detail(term_id)` 复核；仍不可用才标记不支持。SPOC 仍直接标记为不支持，视频/文档/讨论不受影响。
 - 前端资源位于 `hwklr/UI/tagview/view_data/icourse/`，job 轮询 800ms，百分比文字节流 3000ms（对应原型 `STATUS_INTERVAL_SECONDS`）。
 - 4.0.0 起标签打开即自动登录：保存 Cookie → 本机 Cookie → 设置账号（无头）；失败时在标签内提示窗口登录，拒绝/失败后仅显示“重新登陆”。
 - 4.0.1：加载遮罩可取消；测验自动提交后读取结果页分数并按满分着色，未提交显示黄色“已填写”并在标签内提示截图路径；讨论发布显示“已发布”；任务默认不选。
@@ -847,6 +847,9 @@ QuizAction / PopupQuiz                 ← 按题干/选项文本匹配答案
 - 4.6.1：新增 `hwklr/welcome.py` 与 `/api/welcome`。首屏激活完成后前端读取协议与更新说明，以两页大弹窗展示；确认后通过 `BridgeApi.dismiss_welcome()` 写入 `config.ui.welcome_version`，版本升级后自动重新展示。协议文件优先在可执行文件目录及其上层查找，再回退到数据根目录、安装根目录与源码目录，兼容 exe 同级和 `versions/<v>` 版本化布局；打包时 `_DISTRIBUTION_FILES` 同步附带 `usr_agreement.txt` 与 `updates_info.txt`。C 程序设计 `max_concurrency` 与慕课 `workers` 默认值改为 8，并用 `ui.defaults_version` 做一次性 1→8 迁移，避免以后反复覆盖用户手动选择。
 - 4.6.2：更新器解压后调用 `PlatformInstaller.normalize_staging()`，通过 `app_root()` 定位 ZIP 内实际的 `BUILD_INFO.json` 所在目录并压平到 staging 根，兼容发布 ZIP 外层多一层产物目录；激活前再次归一化，保证 `versions/<v>` 根目录就是程序根。欢迎弹窗协议文本顺序改为先 `usr_agreement.txt`、后 `LICENSE`。
 - 4.6.3：`BUILD_INFO.json.entry` 成为启动入口的唯一事实来源：`resolve_entry()` 在版本目录内安全解析入口，Windows 安装器、Windows/macOS launcher 都不再硬编码默认 exe/.app；入口缺失才回退平台默认名，显式非法或不存在的入口直接报错。`install()` 在 `current.json` 已写入后捕获 `restart()` 异常并回滚指针，`bootstrap_current_version()` 也不再让坏版本导致主程序崩溃。
+- 4.6.4：静态课程目录不再被当作“是否收录”的唯一依据。`IcourseDb.has_course()` 在目录未命中时实时请求 `course_detail(term_id)` 并缓存结果；`fetch()`/`refresh_course()` 直接抓取课程详情，仅在 `GinsMoocNotFound` 时转成“未收录”。icourse 的 `_catalog_available()` 用于课程选择/同步/摘要，成功实时解析后加入运行期目录集合。题库匹配失败时 `QuizAction` 使用已在客户端实现的 `select_questions()` 做实时兜底，直接按页面 option id 与填空题标题取答案；主观题/作业返回参考答案但不自动填写。未移植 Legacy 的 Vue/扩展 UI、SSE 课程刷新和互评自动评分。
+- 4.6.5：批次一修复。`QuizAction` 按任务类型选择 quiz/hw/examObject/examSubjective 路由并通过 testlist 点击兜底；`Task.objective` 区分考试页面。UI 增加强制刷新按钮，`force=True` 绕过 TTL 与 6h `retry_after`。`_catalog_set()` 改为直接读取内置目录，旧 `db/icourse0.json` 不再覆盖新目录。`QuizTaskHandler` 在课程未收录时用 `test_exists()` 按测验准入。`QuizPage._wait_ready()` 增加新版 path 路由（实测 `/mooc/learn/NJTU-.../assessments/quiz/<id>?tid=`）、通用开始/继续按钮、协议确认、已提交结果页和 fallback 题目容器；打开流程先走新版 path，再回退旧 hash/testlist，避免落到 `/announce`。
+- 4.6.6：测验加入严格整卷完整性校验。`QuestionPlan.is_answer_ready()` 要求选择题有选项、填空题每个空有答案、主观题有参考答案；`ensure_plans_ready()` 在填答前检查全部题目，发现未命中即抛出 `ActionUnavailable`，跳过整卷且不提交，跳过消息记录未命中题号/题干。
 
 ---
 

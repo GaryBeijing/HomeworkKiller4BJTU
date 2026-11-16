@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-12 10:30
+# 最后更新: 2026-11-16 17:20
 # 文件名: icourse163.py
-# 主要用途: icourse163 页面 URL、选择器、SPA 导航、登录墙判定与视频状态脚本。
-# 文件版本: 4.6.0
+# 主要用途: icourse163 页面 URL、选择器、SPA 导航、登录墙判定、可选中止的弹窗关闭与视频状态脚本。
+# 文件版本: 4.6.5
 """icourse163 页面 URL 与选择器。
 
 结构基于 2026-11 的新版 React 学习页：
@@ -25,6 +25,7 @@ from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 BASE = "https://www.icourse163.org"
 LEARN_PATH = "/learn/{school}-{course_id}?tid={term_id}"
 SPOC_LEARN_PATH = "/spoc/learn/{school}-{course_id}?tid={term_id}"
+NEW_LEARN_PATH = "/mooc/learn/{school}-{course_id}"
 
 CONTENT_SELECTORS = {
     "tab": "li.ant-menu-item",
@@ -66,6 +67,41 @@ def learn_url(
     return BASE + template.format(
         school=school, course_id=int(course_id), term_id=int(term_id)
     )
+
+
+def new_learn_url(
+    school: str,
+    course_id: int | str,
+    term_id: int | str,
+) -> str:
+    """返回新版 path 路由的课程学习页。"""
+    path = NEW_LEARN_PATH.format(school=school, course_id=int(course_id))
+    return f"{BASE}{path}?tid={int(term_id)}"
+
+
+def new_assessment_url(
+    school: str,
+    course_id: int | str,
+    term_id: int | str,
+    kind: str,
+    test_id: int | str,
+    *,
+    objective: bool | None = None,
+) -> str:
+    """返回新版 `/mooc/learn/.../assessments/...` 路由。"""
+    segment = "hw" if kind == "作业" else ("exam" if kind == "考试" else "quiz")
+    path = NEW_LEARN_PATH.format(school=school, course_id=int(course_id))
+    return f"{BASE}{path}/assessments/{segment}/{int(test_id)}?tid={int(term_id)}"
+
+
+def new_testlist_url(
+    school: str,
+    course_id: int | str,
+    term_id: int | str,
+) -> str:
+    """返回新版课程评估列表页。"""
+    path = NEW_LEARN_PATH.format(school=school, course_id=int(course_id))
+    return f"{BASE}{path}/assessments?tid={int(term_id)}"
 
 
 def content_base(
@@ -152,6 +188,8 @@ def page_block_reason(page: Page) -> str:
                   // 避免隐藏的“登录 | 注册”文本导致误判登录墙。
                   const hasContent = !!document.querySelector(
                     'video, .u-questionItem, .j-reply-all, ' +
+                    '.learn-assessment-shell, main#learn-main-content, ' +
+                    '[class*="questionItem"], [class*="question-item"], ' +
                     '.m-learnChapterNormal, .m-learnChapterList, ' +
                     '.pdf-unit-renderer, .pdf-unit-reader, ' +
                     '.mooc-docs-reader__page-status, ' +
@@ -189,8 +227,20 @@ class CourseUrls:
 
 
 # --------------------------------------------------------------------- 页面操作
-def close_modals(page: Page, *, timeout: int = 1500) -> int:
-    """关闭「非法跨域请求 / 并发限制 / 知道了」等提示弹窗。"""
+def close_modals(
+    page: Page,
+    *,
+    timeout: int = 1500,
+    press_escape: bool = True,
+) -> int:
+    """关闭「非法跨域请求 / 并发限制 / 知道了」等提示弹窗。
+
+    Args:
+        page: Playwright Page。
+        timeout: 单次操作超时（保留参数兼容）。
+        press_escape: 是否在最后按 Escape；开始答题流程应传 ``False``，
+            避免取消新版页面的开始确认框。
+    """
     closed = 0
     for _ in range(12):
         try:
@@ -226,10 +276,11 @@ def close_modals(page: Page, *, timeout: int = 1500) -> int:
             break
         closed += 1
         page.wait_for_timeout(300)
-    try:
-        page.keyboard.press("Escape")
-    except Exception:
-        pass
+    if press_escape:
+        try:
+            page.keyboard.press("Escape")
+        except Exception:
+            pass
     return closed
 
 

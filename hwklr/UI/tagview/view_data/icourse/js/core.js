@@ -1,10 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-11-08 14:30
-  最后更新: 2026-11-10 23:40
+  最后更新: 2026-11-16 17:20
   文件名: core.js
   主要用途: “中国大学慕课”页面共享状态、DOM 缓存、事件绑定与加载/取消入口。
-  文件版本: 4.4.1
+  文件版本: 4.6.5
 */
 (function (global) {
   'use strict';
@@ -96,6 +96,7 @@
   const toggleSelectAll = (...args) => IC.toggleSelectAll(...args);
   const selectUnsolved = (...args) => IC.selectUnsolved(...args);
   const startAnswerSync = (...args) => IC.startAnswerSync(...args);
+  const forceAnswerSync = (...args) => IC.forceAnswerSync(...args);
   const scheduleSyncPoll = (...args) => IC.scheduleSyncPoll(...args);
   const pollSync = (...args) => IC.pollSync(...args);
   const updateSyncUI = (...args) => IC.updateSyncUI(...args);
@@ -146,7 +147,7 @@
     [
       'i-account-badge', 'i-relogin', 'i-open-settings', 'i-refresh-courses',
       'i-notice-stack',
-      'i-course-list', 'i-sync-message', 'i-sync-answers', 'i-sync-bar',
+      'i-course-list', 'i-sync-message', 'i-sync-answers', 'i-sync-force', 'i-sync-bar',
       'i-course-title', 'i-course-meta', 'i-log-toggle', 'i-type-rail',
       'i-task-body', 'i-select-all', 'i-select-unsolved', 'i-selection-hint',
       'i-start', 'i-job-inline', 'i-job-phase', 'i-job-message', 'i-job-bar',
@@ -170,6 +171,7 @@
       }
     });
     on(els['i-sync-answers'], 'click', startAnswerSync);
+    on(els['i-sync-force'], 'click', forceAnswerSync);
     on(els['i-log-toggle'], 'click', toggleLog);
     on(els['i-select-all'], 'change', toggleSelectAll);
     on(els['i-select-unsolved'], 'click', selectUnsolved);

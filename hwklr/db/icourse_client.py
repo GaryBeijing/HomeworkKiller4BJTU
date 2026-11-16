@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
+# 最后更新: 2026-11-16 17:20
 # 文件名: icourse_client.py
-# 主要用途: GinsMooc 题库 HTTP 客户端。
-# 文件版本: 4.0.0
+# 主要用途: GinsMooc 题库 HTTP 客户端（课程目录搜索、课程/测验/题目读取与实时答案查询）。
+# 文件版本: 4.6.5
 """GinsMooc HTTP 客户端。
 
 接口特点（详见 docs/ginsmooc-api.md）：
@@ -29,6 +30,8 @@ from .icourse_models import (
     question_from_json,
     test_from_json,
 )
+
+__version__ = "4.6.5"
 
 DEFAULT_BASE_URL = "https://ginnnnnn.top/api"
 DEFAULT_HEADERS = {
@@ -130,9 +133,26 @@ class GinsMoocClient:
         )
 
     # ------------------------------------------------------------------ 课程
-    def course_page(self, page: int = 0) -> tuple[list[DbCourse], int]:
-        """返回 (课程列表, totalPages)。"""
-        data = self._get("/mooc/course", {"page": max(0, int(page))}) or {}
+    def course_page(
+        self,
+        page: int = 0,
+        *,
+        search: str = "",
+        cid: int | str | None = None,
+    ) -> tuple[list[DbCourse], int]:
+        """返回 (课程列表, totalPages)。
+
+        Args:
+            page: 0 基页码。
+            search: 服务端课程名/学校搜索关键字。
+            cid: 只查询指定课程 id。
+        """
+        params: dict[str, Any] = {"page": max(0, int(page))}
+        if str(search or "").strip():
+            params["search"] = str(search).strip()
+        if cid is not None:
+            params["cid"] = int(cid)
+        data = self._get("/mooc/course", params) or {}
         courses = [
             course
             for course in (
@@ -222,11 +242,44 @@ class GinsMoocClient:
     def notice(self, version: str = "v1.0.0") -> dict[str, Any]:
         return self._get("/mooc/notice/website", {"version": version}) or {}
 
+    def search_courses(self, query: str, *, school: str = "") -> list[DbCourse]:
+        """通过服务端搜索课程。
+
+        Args:
+            query: 课程名关键字。
+            school: 可选学校过滤。
+
+        Returns:
+            匹配的课程列表；接口失败时返回空列表。
+        """
+        needle: str = str(query or "").strip().lower()
+        if not needle:
+            return []
+        try:
+            courses, _pages = self.course_page(0, search=str(query).strip())
+        except GinsMoocError:
+            return []
+        result: list[DbCourse] = []
+        for course in courses:
+            haystack: str = f"{course.name} {course.school}".lower()
+            if needle not in haystack:
+                continue
+            if school and str(school).strip().lower() not in course.school.lower():
+                continue
+            result.append(course)
+        return result
+
     def find_course(self, query: str) -> DbCourse | None:
-        """按课程名/学校本地过滤（服务端 search 不可靠）。"""
+        """按课程名/学校查找课程。
+
+        先使用服务端搜索；不可用时回退到原始分页本地过滤。
+        """
         needle = str(query or "").strip().lower()
         if not needle:
             return None
+        found: list[DbCourse] = self.search_courses(query)
+        if found:
+            return found[0]
         for course in self.iter_courses():
             haystack = f"{course.name} {course.school}".lower()
             if needle in haystack:

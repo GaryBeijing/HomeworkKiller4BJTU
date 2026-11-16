@@ -1,10 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-11-08 14:30
-  最后更新: 2026-11-10 23:40
+  最后更新: 2026-11-16 17:20
   文件名: sync.js
   主要用途: “中国大学慕课”页面题库同步进度。
-  文件版本: 4.4.1
+  文件版本: 4.6.5
 */
 (function (global) {
   'use strict';
@@ -68,6 +68,7 @@
   const toggleSelectAll = (...args) => IC.toggleSelectAll(...args);
   const selectUnsolved = (...args) => IC.selectUnsolved(...args);
   const startAnswerSync = (...args) => IC.startAnswerSync(...args);
+  const forceAnswerSync = (...args) => IC.forceAnswerSync(...args);
   const scheduleSyncPoll = (...args) => IC.scheduleSyncPoll(...args);
   const pollSync = (...args) => IC.pollSync(...args);
   const updateSyncUI = (...args) => IC.updateSyncUI(...args);
@@ -90,7 +91,7 @@
   const appendLog = (...args) => IC.appendLog(...args);
   const renderLogs = (...args) => IC.renderLogs(...args);
 
-  IC.startAnswerSync = async function () {
+  const runAnswerSync = async function (force) {
     const course = state.course && state.course.course;
     if (!course) {
       App.toast('请先选择课程', 'warn');
@@ -99,13 +100,21 @@
     try {
       const data = await App.callOk('start_answer_sync', {
         term_id: Number(course.term_id),
-        force: false,
+        force: Boolean(force),
       });
       updateSyncUI(data.sync || {});
       scheduleSyncPoll();
     } catch (error) {
       App.toast(error.message, 'error');
     }
+  };
+
+  IC.startAnswerSync = function () {
+    return runAnswerSync(false);
+  };
+
+  IC.forceAnswerSync = function () {
+    return runAnswerSync(true);
   };
 
   IC.scheduleSyncPoll = function () {
@@ -135,6 +144,14 @@
     }
     const message = els['i-sync-message'];
     const bar = els['i-sync-bar'];
+    const syncButton = els['i-sync-answers'];
+    const forceButton = els['i-sync-force'];
+    if (syncButton) {
+      syncButton.disabled = Boolean(sync.running);
+    }
+    if (forceButton) {
+      forceButton.disabled = Boolean(sync.running);
+    }
     if (message) {
       if (sync.running) {
         message.textContent = '题库同步 ' + (sync.current || 0) + '/' + (sync.total || 0);

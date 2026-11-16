@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-10 11:00
+# 最后更新: 2026-11-16 17:20
 # 文件名: icoursedb.py
-# 主要用途: 中国大学慕课题库的 DbProvider：课程目录（id=0）与按 term_id 缓存的课程/测验/题目。
-# 文件版本: 4.4.0
+# 主要用途: 中国大学慕课题库的 DbProvider：静态目录 + 实时课程解析、按 term_id 缓存的课程/测验/题目。
+# 文件版本: 4.6.5
 """中国大学慕课题库提供者。
 
 - ``id=0``：``hwklr/db/icourse_sources.json`` 的课程目录快照。
@@ -36,7 +36,7 @@ from .provider import (
     DbStorageError,
 )
 
-__version__ = "4.4.0"
+__version__ = "4.6.5"
 __author__ = "Gary"
 __all__ = ["CATALOG_ID", "IcourseDb", "course_questions", "record_answer_index"]
 
@@ -114,6 +114,8 @@ class IcourseDb(DbProvider):
         """
         super().__init__("icourse", db_root=db_root, source_root=source_root)
         self._client: GinsMoocClient | None = client
+        # 静态目录是发布时快照；这里缓存实时探测结果，避免反复请求。
+        self._resolved_courses: dict[int, bool] = {}
 
     # ------------------------------------------------------------------ 基础
     @property
@@ -158,8 +160,29 @@ class IcourseDb(DbProvider):
         courses = self._catalog().get("courses") or []
         return [dict(item) for item in courses if isinstance(item, dict)]
 
+    def has_course_fast(self, term_id: int) -> bool:
+        """不发起网络请求的收录判断。
+
+        静态目录、本地课程缓存或本次进程内已实时确认的课程返回 ``True``。
+        适合课程列表/高频快照等不能阻塞的路径。
+        """
+        term_id = int(term_id)
+        if self._resolved_courses.get(term_id):
+            return True
+        if self.exist(term_id):
+            self._resolved_courses[term_id] = True
+            return True
+        try:
+            courses = self.catalog_courses()
+        except (DbSourceNotFoundError, DbFormatError):
+            return False
+        return any(_int_or_none(item.get("id")) == term_id for item in courses)
+
     def has_course(self, term_id: int) -> bool:
-        """判断课程是否被题库目录收录。
+        """判断课程是否被题库收录。
+
+        判定顺序：静态目录 → 本地缓存记录 → 实时 ``course_detail``。
+        静态目录只是发布快照，不能单独决定课程不存在。
 
         Args:
             term_id: 课程 term id。
@@ -167,11 +190,23 @@ class IcourseDb(DbProvider):
         Returns:
             收录返回 ``True``。
         """
+        term_id = int(term_id)
+        if self.has_course_fast(term_id):
+            return True
+        cached: bool | None = self._resolved_courses.get(term_id)
+        if cached is not None:
+            return cached
         try:
-            courses = self.catalog_courses()
-        except (DbSourceNotFoundError, DbFormatError):
+            course, _tests = self.client.course_detail(term_id)
+        except GinsMoocNotFound:
+            self._resolved_courses[term_id] = False
             return False
-        return any(_int_or_none(item.get("id")) == term_id for item in courses)
+        except Exception:
+            # 网络/接口临时异常不缓存为“未收录”，下次仍可重试。
+            return False
+        available: bool = course is not None
+        self._resolved_courses[term_id] = available
+        return available
 
     # ------------------------------------------------------------------ fetch
     def fetch(self, id: int) -> dict[str, Any]:
@@ -203,11 +238,13 @@ class IcourseDb(DbProvider):
                 "items": courses,
             }
 
-        if not self.has_course(id):
-            raise DbSourceNotFoundError("题库未收录课程: %s" % id)
-        course, tests = self.client.course_detail(id)
+        try:
+            course, tests = self.client.course_detail(id)
+        except GinsMoocNotFound as exc:
+            raise DbSourceNotFoundError("题库未收录课程: %s" % id) from exc
         if course is None:
             raise DbFormatError("题库返回的课程数据不完整: %s" % id)
+        self._resolved_courses[int(id)] = True
         now: float = time.time()
         return {
             "schema": 1,
@@ -263,11 +300,13 @@ class IcourseDb(DbProvider):
             DbSourceNotFoundError: 课程未收录。
             DbFormatError: 接口结构异常。
         """
-        if not self.has_course(id):
-            raise DbSourceNotFoundError("题库未收录课程: %s" % id)
-        course, tests = self.client.course_detail(id)
+        try:
+            course, tests = self.client.course_detail(id)
+        except GinsMoocNotFound as exc:
+            raise DbSourceNotFoundError("题库未收录课程: %s" % id) from exc
         if course is None:
             raise DbFormatError("题库返回的课程数据不完整: %s" % id)
+        self._resolved_courses[int(id)] = True
         valid_ids: set[str] = {str(test.id) for test in tests}
 
         def merge(existing: dict[str, Any]) -> dict[str, Any]:

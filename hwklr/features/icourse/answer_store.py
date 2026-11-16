@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
+# 最后更新: 2026-11-16 17:20
 # 文件名: answer_store.py
-# 主要用途: 把 IcourseDb 的课程记录适配为动作层需要的答案索引与题库同步接口。
-# 文件版本: 4.0.0
+# 主要用途: 把 IcourseDb 的课程记录适配为动作层需要的答案索引、题库同步与实时答案兜底接口。
+# 文件版本: 4.6.5
 """答案题库适配层。"""
 from __future__ import annotations
 
@@ -17,7 +18,7 @@ from hwklr.db.icoursedb import (
     record_answer_index,
 )
 
-__version__ = "4.0.0"
+__version__ = "4.6.5"
 __author__ = "Gary"
 __all__ = ["AnswerStore"]
 
@@ -57,6 +58,17 @@ class AnswerStore:
             收录返回 ``True``。
         """
         return self._db.has_course(int(term_id))
+
+    def test_exists(self, test_id: int) -> bool:
+        """判断单个测验是否被上游题库收录。
+
+        Args:
+            test_id: 测验 id。
+
+        Returns:
+            收录返回 ``True``。
+        """
+        return bool(self._db.client.test_exists(int(test_id)))
 
     def course_record(self, term_id: int, *, refresh: bool = False) -> dict[str, Any]:
         """读取课程题库记录；缺失时抓取元信息。
@@ -107,6 +119,26 @@ class AnswerStore:
             term_id, test_id, refresh=refresh
         )
         return AnswerIndex.from_questions(course_questions(record, int(test_id)))
+
+    def live_quiz_answers(
+        self,
+        test_id: int,
+        option_ids: list[int],
+        titles: list[str],
+    ) -> dict[str, Any]:
+        """直接向 GinsMooc 查询当前页面的答案，不依赖本地课程缓存。
+
+        Args:
+            test_id: 测验 id。
+            option_ids: 页面上的 option id。
+            titles: 填空题/主观题题干。
+
+        Returns:
+            含 ``choiceAns`` / ``completionAns`` / ``homeworkAns`` 的字典。
+        """
+        return self._db.client.select_questions(
+            int(test_id), list(option_ids), list(titles)
+        )
 
     def all_questions_index(self, term_id: int) -> AnswerIndex:
         """基于已缓存的全部题目构建索引（用于视频弹题）。
