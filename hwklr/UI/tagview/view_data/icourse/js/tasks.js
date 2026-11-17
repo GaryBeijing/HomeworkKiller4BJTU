@@ -122,6 +122,14 @@
     body.appendChild(row);
   };
 
+  function selectableTask(task) {
+    if (task.status !== 'done') {
+      return true;
+    }
+    return task.type === '作业'
+      && Boolean((state.settings || {}).auto_peer_review);
+  }
+
   IC.renderTasks = function () {
     const body = els['i-task-body'];
     if (!body) {
@@ -147,7 +155,7 @@
       const checkbox = document.createElement('input');
       checkbox.type = 'checkbox';
       checkbox.checked = checked.has(task.key);
-      checkbox.disabled = task.status === 'done' || jobRunning();
+      checkbox.disabled = !selectableTask(task) || jobRunning();
       checkbox.addEventListener('change', () => {
         if (checkbox.checked) {
           checked.add(task.key);
@@ -188,11 +196,81 @@
     return pill;
   };
 
+  IC.statusIcon = function (type, options) {
+    const opts = options || {};
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '2');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+    svg.setAttribute('role', 'img');
+    svg.setAttribute('aria-label', opts.label || '');
+    svg.classList.add('ic-status-icon', 'ic-status-icon--' + type);
+
+    const add = (tag, attrs) => {
+      const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+      Object.keys(attrs || {}).forEach((key) => el.setAttribute(key, attrs[key]));
+      svg.appendChild(el);
+      return el;
+    };
+    if (type === 'timed') {
+      add('circle', { cx: '12', cy: '13', r: '7' });
+      add('path', { d: 'M12 13V9' });
+      add('path', { d: 'M12 13L15 15' });
+      add('path', { d: 'M9 3H15' });
+      add('path', { d: 'M12 3V6' });
+    } else if (type === 'attempts') {
+      add('circle', { cx: '12', cy: '12', r: '8.5' });
+      add('text', {
+        x: '12', y: '12.5', 'text-anchor': 'middle',
+        'dominant-baseline': 'middle', 'font-size': '10',
+        'font-weight': '600', stroke: 'none', fill: 'currentColor',
+      }).textContent = String(opts.count == null ? '' : opts.count);
+    } else {
+      add('circle', { cx: '12', cy: '12', r: '8.5' });
+      add('path', { d: 'M8.5 8.5L15.5 15.5' });
+      add('path', { d: 'M15.5 8.5L8.5 15.5' });
+    }
+    const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+    title.textContent = opts.label || '';
+    svg.appendChild(title);
+    return svg;
+  };
+
+  function taskIcons(task) {
+    const icons = [];
+    if (task.attempts_exhausted) {
+      icons.push(IC.statusIcon('exhausted', { label: '测验次数已用完' }));
+    } else if (task.attempts_remaining !== null
+        && task.attempts_remaining !== undefined) {
+      const total = task.attempt_limit != null
+        ? '（共 ' + task.attempt_limit + ' 次）' : '';
+      icons.push(IC.statusIcon('attempts', {
+        count: task.attempts_remaining,
+        label: '剩余 ' + task.attempts_remaining + ' 次' + total,
+      }));
+    }
+    if (task.time_limited) {
+      icons.push(IC.statusIcon('timed', { label: '限时测验' }));
+    }
+    return icons;
+  }
+
   IC.renderTaskStatus = function (cell, task, jobTask) {
     cell.innerHTML = '';
+    const wrap = node('span', 'ic-status-wrap');
+    const finish = (pill) => {
+      taskIcons(task).forEach((icon) => wrap.appendChild(icon));
+      if (pill) {
+        wrap.appendChild(pill);
+      }
+      cell.appendChild(wrap);
+    };
     if (jobTask) {
       if (jobTask.status === '等待队列') {
-        cell.appendChild(statusPill('queued', '等待队列'));
+        finish(statusPill('queued', '等待队列'));
         return;
       }
       if (jobTask.status === '进行中') {
@@ -212,48 +290,54 @@
           fill.style.width = String(Math.max(0, Math.min(100, shown.percent))) + '%';
           text.textContent = Math.round(shown.percent) + '%';
         }
-        cell.appendChild(pill);
+        finish(pill);
         return;
       }
       if (jobTask.status === '完成') {
-        if (jobTask.score_text) {
-          const full = jobTask.full_score;
-          const kind = full === false ? 'failed-pill' : 'done-pill';
-          cell.appendChild(statusPill(kind, jobTask.score_text,
-            full === false ? '未得满分' : '得分'));
+        const full = jobTask.full_score;
+        if (full === false && !task.attempts_exhausted) {
+          finish(statusPill('todo-pill', '未完成',
+            (jobTask.score_text ? '本次得分 ' + jobTask.score_text + '，' : '')
+            + '未得满分'));
+        } else if (jobTask.score_text) {
+          const kind = 'done-pill';
+          const title = full === false
+            ? '次数已用完，本次得分 ' + jobTask.score_text
+            : '得分';
+          finish(statusPill(kind, jobTask.score_text, title));
         } else {
-          cell.appendChild(statusPill('done-pill', '完成'));
+          finish(statusPill('done-pill', '完成'));
         }
         return;
       }
       if (jobTask.status === '已发布') {
-        cell.appendChild(statusPill('published-pill', '已发布'));
+        finish(statusPill('published-pill', '已发布'));
         return;
       }
       if (jobTask.status === '已填写') {
-        cell.appendChild(statusPill('filled-pill', '已填写',
+        finish(statusPill('filled-pill', '已填写',
           jobTask.message || '已填写'));
         return;
       }
       if (jobTask.status === '失败') {
-        cell.appendChild(statusPill('failed-pill', '失败', jobTask.error || ''));
+        finish(statusPill('failed-pill', '失败', jobTask.error || ''));
         return;
       }
       if (jobTask.status === '已取消') {
-        cell.appendChild(statusPill(
+        finish(statusPill(
           'todo-pill', '已取消', jobTask.message || jobTask.error || '任务已取消'
         ));
         return;
       }
       if (jobTask.status === '已跳过') {
-        cell.appendChild(statusPill('todo-pill', '已跳过', jobTask.message || ''));
+        finish(statusPill('todo-pill', '已跳过', jobTask.message || ''));
         return;
       }
     }
     if (task.status === 'done') {
-      cell.appendChild(statusPill('done-pill', '完成'));
+      finish(statusPill('done-pill', '完成'));
     } else {
-      cell.appendChild(statusPill('todo-pill',
+      finish(statusPill('todo-pill',
         task.status === 'overdue' ? '未完成（已逾期）' : '未完成'));
     }
   };

@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
+# 最后更新: 2026-11-17 10:00
 # 文件名: client.py
 # 主要用途: icourse163 RPC 与登录 HTTP 客户端。
-# 文件版本: 4.6.0
+# 文件版本: 4.7.0
 """icourse163.org HTTP 客户端。
 
 登录使用站点「邮箱登录」表单对应的接口
@@ -673,7 +674,36 @@ class MoocClient:
 
 
 _LEARN_FIELDS = ("viewStatus", "completePercent", "learnTime", "testScore")
-_TEST_FIELDS = ("userScore", "usedTryCount", "submitTestCount", "submitCount")
+_TEST_FIELDS = (
+    "userScore",
+    "totalScore",
+    "usedTryCount",
+    "submitTestCount",
+    "submitCount",
+    "attemptLimit",
+    "tryLimit",
+    "submitLimit",
+    "maxAttempt",
+    "maxTryCount",
+    "attemptTimes",
+    "tryCount",
+    "attemptCount",
+    "remainTryCount",
+    "remainAttempt",
+    "remainingAttempts",
+    "leftTryCount",
+    "timeLimit",
+    "limitTime",
+    "timeLimitSecond",
+    "timeLimitSeconds",
+    "limitSeconds",
+    "answerTime",
+    "answerDuration",
+    "duration",
+    "isTimeLimit",
+    "timed",
+    "hasTimeLimit",
+)
 
 
 def merge_learn_status(term: dict[str, Any], learned: dict[str, Any]) -> None:

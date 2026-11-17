@@ -22,6 +22,8 @@ Adapted areas in this project (author tag:
   - hwklr/features/icourse/actions/popup.py
   - hwklr/features/icourse/pages/quiz_page.py
   - hwklr/features/icourse/pages/popup_page.py
+  - hwklr/features/icourse/actions/review.py
+  - hwklr/features/icourse/pages/review_page.py
 
 The icourse feature plugin author is marked as
 "Gary (Ref GinsMooc by gin)".

@@ -108,7 +108,8 @@
       els['i-warning-detail'].textContent =
         '将处理 ' + keys.length + ' 个任务；最大并行数 '
         + (settings.workers || 8) + '；自动提交测验：'
-        + (settings.submit_quizzes ? '开' : '关') + '；自动发布讨论：'
+        + (settings.submit_quizzes ? '开' : '关') + '；自动互评：'
+        + (settings.auto_peer_review ? '开' : '关') + '；自动发布讨论：'
         + (settings.publish_discussions ? '开' : '关') + '。';
     }
     if (els['i-warning-modal']) {

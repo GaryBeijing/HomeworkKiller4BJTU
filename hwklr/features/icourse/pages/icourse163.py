@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-16 20:30
+# 最后更新: 2026-11-17 10:00
 # 文件名: icourse163.py
 # 主要用途: icourse163 页面 URL（含新版考试列表）、选择器、SPA 导航、登录墙判定、可选中止的弹窗关闭与视频状态脚本。
-# 文件版本: 4.6.7
+# 文件版本: 4.7.0
 """icourse163 页面 URL 与选择器。
 
 结构基于 2026-11 的新版 React 学习页：
@@ -211,7 +211,10 @@ def page_block_reason(page: Page) -> str:
                     '.mooc-docs-reader__page-status, ' +
                     '.ux-h5pdfreader_container_footer_pages_total, ' +
                     'a.j-downpdf, a.j-downtxt, ' +
-                    'article.soft-shell, #forum-reply-form'
+                    'article.soft-shell, #forum-reply-form, ' +
+                    '.u-homework-evaAction, .u-analysisQuestion.analysisMode, ' +
+                    '[class*="peerReview"], [class*="PeerReview"], ' +
+                    '[class*="evaAction"]'
                   );
                   const isSpoc = /\/spoc\//.test(url);
                   if (!isSpoc && !hasContent &&

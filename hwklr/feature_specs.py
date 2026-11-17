@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-10 10:30
-# 最后更新: 2026-11-16 20:30
+# 最后更新: 2026-11-17 10:00
 # 文件名: feature_specs.py
 # 主要用途: 官方功能的单一元数据来源：显示名/稳定 id、配置默认值、关于信息、资源、数据库与打包声明。
-# 文件版本: 4.6.7
+# 文件版本: 4.7.0
 """官方功能元数据 registry。
 
 本模块只依赖标准库，放在 ``hwklr`` 根包而不是 ``hwklr.features`` 下，
@@ -182,7 +182,7 @@ OFFICIAL_FEATURES: Final[tuple[FeatureSpec, ...]] = (
         module="hwklr.features.icourse",
         class_name="IcourseFeature",
         view_dir="icourse",
-        description="参考 GinsMooc 题库接口，登录中国大学慕课，批量完成课程视频、文档、测验与讨论任务。",
+        description="参考 GinsMooc 题库接口，登录中国大学慕课，批量完成课程视频、文档、测验与讨论任务，并支持限时/次数状态与实验性自动互评。",
         id="icourse",
         order=30,
         config=FeatureConfigSpec(
@@ -194,6 +194,7 @@ OFFICIAL_FEATURES: Final[tuple[FeatureSpec, ...]] = (
                 ("workers", 8),
                 ("video_rate", 2.0),
                 ("submit_quizzes", False),
+                ("auto_peer_review", True),
                 ("publish_discussions", False),
                 ("answer_ttl_hours", 24),
                 ("auto_sync_answers", True),
@@ -206,8 +207,8 @@ OFFICIAL_FEATURES: Final[tuple[FeatureSpec, ...]] = (
         meta=FeatureMetaSpec(
             package="ICourse",
             author="Gary (Ref GinsMooc by gin)",
-            update_date="2026-11-16",
-            description="参考 GinsMooc 题库接口，登录中国大学慕课并批量完成视频、文档、测验与讨论任务，提供答案浏览与课程目录刷新。",
+            update_date="2026-11-17",
+            description="参考 GinsMooc 题库接口，登录中国大学慕课并批量完成视频、文档、测验与讨论任务，提供限时/次数状态、答案浏览、课程目录刷新与实验性自动互评。",
         ),
         assets=FeatureAssetSpec(
             html="icourse/index.html",
@@ -229,6 +230,9 @@ OFFICIAL_FEATURES: Final[tuple[FeatureSpec, ...]] = (
             provider_module="hwklr.db.icoursedb",
             provider_class="IcourseDb",
             source_files=("hwklr/db/icourse_sources.json",),
+            runtime_asset_prefixes=(
+                "hwklr/runtime_data/icourse_comments_bank_",
+            ),
             provider_modules=(
                 "hwklr.db.icoursedb",
                 "hwklr.db.icourse_models",

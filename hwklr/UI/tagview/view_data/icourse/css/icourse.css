@@ -1,10 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-11-08 14:30
-  最后更新: 2026-11-16 20:30
+  最后更新: 2026-11-17 10:00
   文件名: icourse.css
   主要用途: “中国大学慕课”标签页样式：固定视口高度、课程列表与任务区内部滚动、紧凑顶栏、答案浏览弹窗、标签内登录提示与任务结果弹窗。
-  文件版本: 4.6.7
+  文件版本: 4.7.0
 */
 
 /* 慕课页永远不滚动整个页面；滚动只发生在课程列表、任务表和日志内部。 */
@@ -308,7 +308,8 @@
 }
 
 .tag-icourse .ic-task-table .ic-status-col {
-  width: 92px;
+  width: 136px;
+  min-width: 136px;
 }
 
 .tag-icourse .ic-task-table td {
@@ -844,4 +845,29 @@
 .tag-icourse .ic-bank-controls input[type="search"]:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(91, 75, 255, 0.14);
+}
+
+/* ---------------------------------------------------------------- 任务状态图标 */
+.tag-icourse .ic-status-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.tag-icourse .ic-status-icon {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  background: transparent;
+}
+
+.tag-icourse .ic-status-icon--timed {
+  color: #ea580c;
+}
+
+.tag-icourse .ic-status-icon--attempts,
+.tag-icourse .ic-status-icon--exhausted {
+  color: #dc2626;
 }

@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary (Ref GinsMooc by gin)
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-16 20:30
+# 最后更新: 2026-11-17 10:00
 # 文件名: __init__.py
-# 主要用途: 实现“中国大学慕课”功能：登录、课程状态、任务 handler 编排、批量完成、实时课程解析、题库同步、答案浏览与目录刷新。
-# 文件版本: 4.6.7
+# 主要用途: 实现“中国大学慕课”功能：登录、课程状态、任务 handler 编排、批量完成、实时课程解析、题库同步、答案浏览、目录刷新、限时/次数状态与实验性自动互评。
+# 文件版本: 4.7.0
 """中国大学慕课功能。
 
 功能层只负责动作分发、状态缓存与 job 编排；浏览器自动化、课程解析与题库
@@ -47,7 +47,7 @@ from .models import (
     extract_term_id,
 )
 
-__version__ = "4.6.7"
+__version__ = "4.7.0"
 __author__ = "Gary (Ref GinsMooc by gin)"
 __all__ = ["IcourseFeature"]
 
@@ -171,6 +171,7 @@ _DEFAULT_SETTINGS: Final[dict[str, Any]] = {
     "workers": 8,
     "video_rate": 2.0,
     "submit_quizzes": False,
+    "auto_peer_review": True,
     "publish_discussions": False,
     "answer_ttl_hours": 24,
     "auto_sync_answers": True,
@@ -397,6 +398,18 @@ class IcourseFeature(Feature):
                 is_necessary=False,
             ),
             SettingsFieldSpec(
+                key="auto_peer_review",
+                label="自动互评（实验性）",
+                kind="switch",
+                alert=True,
+                help="实验性功能：互评阶段自动给满分并随机填入一条中文评语。",
+                tooltip=(
+                    "实验性功能：进入作业互评阶段后自动选择最高分选项、"
+                    "随机填写评语并提交；默认开启。"
+                ),
+                is_necessary=False,
+            ),
+            SettingsFieldSpec(
                 key="publish_discussions",
                 label="自动发布讨论",
                 kind="switch",
@@ -501,6 +514,7 @@ class IcourseFeature(Feature):
             values["answer_ttl_hours"] = 24
         for key in (
             "submit_quizzes",
+            "auto_peer_review",
             "publish_discussions",
             "auto_sync_answers",
             "download_documents",
@@ -1327,6 +1341,7 @@ class IcourseFeature(Feature):
         if course is None or course.term_id != term_id:
             return failure("课程已变更，请重新选择课程")
         by_key = {task.key: task for task in course.tasks}
+        auto_peer_review = bool(self._read_settings().get("auto_peer_review", True))
         selected: list[Task] = []
         seen: set[str] = set()
         for key in keys:
@@ -1334,7 +1349,9 @@ class IcourseFeature(Feature):
             if task is None or task.key in seen:
                 continue
             seen.add(task.key)
-            if task.status == DONE:
+            if task.status == DONE and not (
+                auto_peer_review and task.kind == "作业"
+            ):
                 continue
             selected.append(task)
         if not selected:
@@ -1533,6 +1550,7 @@ class IcourseFeature(Feature):
             "course_name": "",
             "workers": 8,
             "submit_quizzes": False,
+            "auto_peer_review": True,
             "publish_discussions": False,
             "tasks": [],
             "events": [],

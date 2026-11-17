@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-10 12:00
-# 最后更新: 2026-11-16 17:20
+# 最后更新: 2026-11-17 10:00
 # 文件名: tasks.py
 # 主要用途: icourse 任务执行契约与 TaskHandler registry：把 Job 的 kind 分支收敛为可注入的 handler。
-# 文件版本: 4.6.5
+# 文件版本: 4.7.0
 """icourse 任务执行契约与 handler registry。
 
 Job 只负责阶段、快照、取消和状态落盘；具体任务类型由 TaskHandler 实现。
@@ -16,15 +16,17 @@ from typing import Any, Protocol
 
 from hwklr.contracts import QUIZ_KINDS, TaskKind, TaskStatus
 
-from .actions import DiscussionAction, DocumentAction, QuizAction
+from .actions import DiscussionAction, DocumentAction, PeerReviewAction, QuizAction
+from .actions.base import ActionCancelled, ActionUnavailable
 from .answer_store import AnswerStore
-from .models import Course, Task
+from .models import DONE, Course, Task
 
 __version__ = "4.6.5"
 __author__ = "Gary"
 __all__ = [
     "DocumentTaskHandler",
     "DiscussionTaskHandler",
+    "HomeworkTaskHandler",
     "QuizTaskHandler",
     "TaskHandler",
     "TaskHandlerRegistry",
@@ -198,6 +200,83 @@ class QuizTaskHandler:
         raise NotImplementedError("测验任务不支持批量执行")
 
 
+class HomeworkTaskHandler:
+    """作业任务：先走原作业流程，再尝试实验性自动互评。"""
+
+    kinds = frozenset({TaskKind.HOMEWORK.value})
+    phase = "quiz"
+    batched = False
+
+    def run(
+        self, job: Any, ctx: Any, course: Course, task: Task, store: AnswerStore
+    ) -> TaskOutcome:
+        auto_review = bool(job._settings.get("auto_peer_review", True))
+        quiz_outcome: TaskOutcome | None = None
+        quiz_error: ActionUnavailable | None = None
+        if task.status != DONE:
+            try:
+                quiz_outcome = QuizTaskHandler().run(job, ctx, course, task, store)
+            except ActionCancelled:
+                raise
+            except ActionUnavailable as exc:
+                quiz_error = exc
+        if not auto_review or course.is_spoc:
+            if quiz_error is not None:
+                raise quiz_error
+            if quiz_outcome is not None:
+                return quiz_outcome
+            return TaskOutcome(TaskStatus.SKIPPED, message="作业已完成")
+
+        review = PeerReviewAction(ctx).run(course, task)
+        review_payload = {
+            "available": review.available,
+            "attempted": review.attempted,
+            "reviewed": review.reviewed,
+            "comments": list(review.comments),
+            "message": review.message,
+        }
+        if review.reviewed:
+            message = "已互评 %d 份" % review.reviewed
+            if quiz_outcome is not None and quiz_outcome.message:
+                message = quiz_outcome.message + "；" + message
+            result: dict[str, Any] = dict(quiz_outcome.result if quiz_outcome else {})
+            result["peer_review"] = review_payload
+            return TaskOutcome(
+                TaskStatus.COMPLETED,
+                message=message,
+                result=result,
+                screenshot=review.screenshot
+                or (quiz_outcome.screenshot if quiz_outcome else ""),
+                score=quiz_outcome.score if quiz_outcome else None,
+                total_score=quiz_outcome.total_score if quiz_outcome else None,
+                score_text=quiz_outcome.score_text if quiz_outcome else "",
+                full_score=quiz_outcome.full_score if quiz_outcome else None,
+            )
+        if quiz_error is not None:
+            raise quiz_error
+        if quiz_outcome is not None:
+            warning = review.message or "未检测到待互评作业"
+            if quiz_outcome.message:
+                quiz_outcome.message += "；" + warning
+            else:
+                quiz_outcome.message = warning
+            return quiz_outcome
+        return TaskOutcome(
+            TaskStatus.SKIPPED,
+            message=review.message or "未检测到待互评作业",
+        )
+
+    def run_batch(
+        self,
+        job: Any,
+        course: Course,
+        tasks: list[Task],
+        store: AnswerStore,
+        ttl_seconds: int,
+    ) -> None:
+        raise NotImplementedError("作业任务不支持批量执行")
+
+
 class DiscussionTaskHandler:
     """讨论任务。"""
 
@@ -301,6 +380,7 @@ def default_task_registry() -> TaskHandlerRegistry:
             VideoTaskHandler(),
             DocumentTaskHandler(),
             QuizTaskHandler(),
+            HomeworkTaskHandler(),
             DiscussionTaskHandler(),
         ]
     )

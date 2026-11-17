@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-12 13:00
+# 最后更新: 2026-11-17 10:00
 # 文件名: job.py
 # 主要用途: 编排“开始完成”后台任务：视频并发、文档/测验/讨论串行、进度快照与取消。
-# 文件版本: 4.6.1
+# 文件版本: 4.7.0
 """完成任务的 job 编排。"""
 from __future__ import annotations
 
@@ -116,6 +116,9 @@ class CompletionJob:
                 "course_name": course.name,
                 "workers": int(self._settings.get("workers", 8) or 8),
                 "submit_quizzes": bool(self._settings.get("submit_quizzes")),
+                "auto_peer_review": bool(
+                    self._settings.get("auto_peer_review", True)
+                ),
                 "publish_discussions": bool(
                     self._settings.get("publish_discussions")
                 ),

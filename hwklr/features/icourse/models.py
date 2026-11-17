@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-16 17:20
+# 最后更新: 2026-11-17 10:00
 # 文件名: models.py
-# 主要用途: 把 icourse163 接口 JSON 转换为课程/任务模型与完成状态；任务保留 objective 以区分考试页面。
-# 文件版本: 4.6.5
+# 主要用途: 把 icourse163 接口 JSON 转换为课程/任务模型与完成状态；任务保留 objective、限时与次数限制字段。
+# 文件版本: 4.7.0
 """把接口返回的 JSON 转换成课程 / 任务模型。"""
 
 from __future__ import annotations
@@ -41,6 +41,7 @@ QUIZ_KIND = "测验"
 HOMEWORK_KIND = "作业"
 EXAM_KIND = "考试"
 DOCUMENT_KIND = "文档"
+SCORED_KINDS = frozenset({"测验", "随堂测验", "作业", "考试"})
 
 
 def _num(value: Any) -> float:
@@ -98,6 +99,95 @@ def _pick(data: dict[str, Any], *keys: str, default: Any = None) -> Any:
         if value not in (None, "", []):
             return value
     return default
+
+
+_ATTEMPT_LIMIT_KEYS = (
+    "attemptLimit",
+    "tryLimit",
+    "submitLimit",
+    "maxAttempt",
+    "maxTryCount",
+    "attemptTimes",
+)
+_ATTEMPT_USED_KEYS = (
+    "usedTryCount",
+    "submitTestCount",
+    "submitCount",
+    "tryCount",
+    "attemptCount",
+)
+_ATTEMPT_REMAIN_KEYS = (
+    "remainTryCount",
+    "remainAttempt",
+    "remainingAttempts",
+    "leftTryCount",
+)
+_TIME_LIMIT_KEYS = (
+    "timeLimit",
+    "limitTime",
+    "timeLimitSecond",
+    "timeLimitSeconds",
+    "limitSeconds",
+    "answerTime",
+    "answerDuration",
+    "duration",
+)
+_TIME_FLAG_KEYS = ("isTimeLimit", "timed", "hasTimeLimit")
+
+
+def _first_number(
+    info: dict[str, Any], state: dict[str, Any], keys: tuple[str, ...]
+) -> float | None:
+    """从测验对象或状态对象中取第一个可解析数字。"""
+    for source in (info, state):
+        for key in keys:
+            if key not in source:
+                continue
+            number = _float_or_none(source.get(key))
+            if number is not None:
+                return number
+    return None
+
+
+def _task_signals(
+    info: dict[str, Any],
+    state: dict[str, Any],
+    score: float | None,
+) -> dict[str, Any]:
+    """解析限时/次数限制字段。"""
+    limit = _first_number(info, state, _ATTEMPT_LIMIT_KEYS)
+    used = _first_number(info, state, _ATTEMPT_USED_KEYS)
+    remaining = _first_number(info, state, _ATTEMPT_REMAIN_KEYS)
+    attempt_limit = int(limit) if limit is not None and limit > 0 else None
+    attempts_used = int(used) if used is not None and used >= 0 else None
+    attempts_remaining = (
+        int(remaining) if remaining is not None and remaining >= 0 else None
+    )
+    if attempts_remaining is None and attempt_limit is not None:
+        if attempts_used is not None:
+            attempts_remaining = max(0, attempt_limit - attempts_used)
+        elif score is None:
+            # 还没作答时，把上限视为尚未使用的次数。
+            attempts_remaining = attempt_limit
+    time_value = _first_number(info, state, _TIME_LIMIT_KEYS)
+    time_flag = False
+    for source in (info, state):
+        for key in _TIME_FLAG_KEYS:
+            if key not in source:
+                continue
+            parsed = _bool_or_none(source.get(key))
+            if parsed is not None:
+                time_flag = parsed
+                break
+        if time_flag:
+            break
+    return {
+        "time_limited": bool((time_value is not None and time_value > 0) or time_flag),
+        "attempt_limit": attempt_limit,
+        "attempts_used": attempts_used,
+        "attempts_remaining": attempts_remaining,
+        "attempts_exhausted": attempts_remaining == 0,
+    }
 
 
 def _now_ms() -> int:
@@ -177,6 +267,12 @@ class Task:
     score: float | None = None
     total_score: float | None = None
     objective: bool | None = None
+    time_limited: bool = False
+    attempt_limit: int | None = None
+    attempts_used: int | None = None
+    attempts_remaining: int | None = None
+    attempts_exhausted: bool = False
+    full_score: bool | None = None
     deadline: datetime | None = None
     release: datetime | None = None
     content_id: int | None = None
@@ -204,6 +300,12 @@ class Task:
             "score": self.score,
             "total_score": self.total_score,
             "objective": self.objective,
+            "time_limited": self.time_limited,
+            "attempt_limit": self.attempt_limit,
+            "attempts_used": self.attempts_used,
+            "attempts_remaining": self.attempts_remaining,
+            "attempts_exhausted": self.attempts_exhausted,
+            "full_score": self.full_score,
             "deadline": self.deadline.isoformat(timespec="minutes") if self.deadline else None,
             "release": self.release.isoformat(timespec="minutes") if self.release else None,
             "content_id": self.content_id,
@@ -311,7 +413,26 @@ def _task_from_test(
     term_id: int | None = None,
 ) -> Task:
     info = test or exam or state
-    done = _is_done(state, test=test, exam=exam)
+    score = _float_or_none(_pick(info, "userScore", default=state.get("userScore")))
+    total_score = _float_or_none(
+        _pick(info, "totalScore", default=state.get("totalScore"))
+    )
+    signals = _task_signals(info, state, score)
+    full_score = (
+        None
+        if score is None or total_score is None
+        else score >= total_score - 0.01
+    )
+    raw_done = _is_done(state, test=test, exam=exam)
+    if kind in SCORED_KINDS:
+        if signals["attempts_exhausted"]:
+            done = True
+        elif full_score is not None:
+            done = bool(full_score)
+        else:
+            done = raw_done
+    else:
+        done = raw_done
     release = _pick(info, "releaseTime", default=state.get("releaseTime"))
     deadline = _pick(info, "deadline", default=state.get("deadline"))
     status = _classify_status(done, release, deadline, _now_ms())
@@ -321,9 +442,11 @@ def _task_from_test(
         name=name,
         kind=kind,
         status=status,
-        score=_float_or_none(info.get("userScore")),
-        total_score=_float_or_none(info.get("totalScore")),
+        score=score,
+        total_score=total_score,
         objective=_bool_or_none(info.get("objective")),
+        full_score=full_score,
+        **signals,
         deadline=_ms_to_dt(deadline),
         release=_ms_to_dt(release),
         content_id=_int_or_none(state.get("contentId") or info.get("id")),
