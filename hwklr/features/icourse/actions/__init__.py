@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-17 10:00
+# 最后更新: 2026-11-17 12:00
 # 文件名: __init__.py
 # 主要用途: 慕课动作层出口：视频、文档、测验、互评、讨论与并发 worker。
-# 文件版本: 4.7.0
+# 文件版本: 4.7.1
 """动作层：视频、讨论、测验等具体操作。"""
 
 from .base import ActionCancelled, ActionContext, ActionUnavailable
@@ -24,7 +24,10 @@ from .workers import (
     WorkerBatch,
     WorkerDashboard,
     WorkerResult,
+    TaskBatch,
+    TaskScheduler,
     WorkerState,
+    run_task_workers,
     run_workers,
 )
 
@@ -44,11 +47,14 @@ __all__ = [
     "QuizResult",
     "VideoAction",
     "VideoProgress",
+    "TaskBatch",
+    "TaskScheduler",
     "VideoScheduler",
     "WorkerBatch",
     "WorkerDashboard",
     "WorkerResult",
     "WorkerState",
+    "run_task_workers",
     "run_workers",
     "build_document_progress_payload",
     "select_pending_documents",

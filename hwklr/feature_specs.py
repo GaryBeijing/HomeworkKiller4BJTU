@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-10 10:30
-# 最后更新: 2026-11-17 10:00
+# 最后更新: 2026-11-17 12:00
 # 文件名: feature_specs.py
 # 主要用途: 官方功能的单一元数据来源：显示名/稳定 id、配置默认值、关于信息、资源、数据库与打包声明。
-# 文件版本: 4.7.0
+# 文件版本: 4.7.1
 """官方功能元数据 registry。
 
 本模块只依赖标准库，放在 ``hwklr`` 根包而不是 ``hwklr.features`` 下，
@@ -208,7 +208,7 @@ OFFICIAL_FEATURES: Final[tuple[FeatureSpec, ...]] = (
             package="ICourse",
             author="Gary (Ref GinsMooc by gin)",
             update_date="2026-11-17",
-            description="参考 GinsMooc 题库接口，登录中国大学慕课并批量完成视频、文档、测验与讨论任务，提供限时/次数状态、答案浏览、课程目录刷新与实验性自动互评。",
+            description="参考 GinsMooc 题库接口，登录中国大学慕课并批量完成视频、文档、测验与讨论任务，提供限时/次数状态、全任务并行、答案浏览、课程目录刷新与实验性自动互评。",
         ),
         assets=FeatureAssetSpec(
             html="icourse/index.html",

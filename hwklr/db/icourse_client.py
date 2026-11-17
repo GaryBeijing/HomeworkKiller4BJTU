@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import time
 from typing import Any, Iterable, Iterator
 
@@ -71,6 +72,8 @@ class GinsMoocClient:
         self.retries = max(0, retries)
         self.min_interval = max(0.0, min_interval)
         self._last_call = 0.0
+        # requests.Session 与节流状态跨线程共享；串行化 HTTP 更安全。
+        self._request_lock = threading.Lock()
 
     # ------------------------------------------------------------------ HTTP
     def _throttle(self) -> None:
@@ -98,6 +101,10 @@ class GinsMoocClient:
 
     def _request(self, method: str, path: str, **kwargs: Any) -> Any:
         url = f"{self.base_url}{path}"
+        with self._request_lock:
+            return self._request_locked(method, url, **kwargs)
+
+    def _request_locked(self, method: str, url: str, **kwargs: Any) -> Any:
         last_error: Exception | None = None
         for attempt in range(self.retries + 1):
             self._throttle()
@@ -112,7 +119,7 @@ class GinsMoocClient:
                 time.sleep(0.8 * (attempt + 1))
                 continue
             if response.status_code == 404:
-                raise GinsMoocNotFound(f"接口不存在：{path}")
+                raise GinsMoocNotFound(f"接口不存在：{url}")
             try:
                 return self._decode(response)
             except GinsMoocNotFound:

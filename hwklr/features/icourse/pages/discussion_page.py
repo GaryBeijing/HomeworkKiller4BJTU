@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-10 13:00
+# 最后更新: 2026-11-17 12:00
 # 文件名: discussion_page.py
 # 主要用途: 讨论页 Page Object：详情/内容页回退、回复提取、编辑器、匿名与发表确认。
-# 文件版本: 4.4.0
+# 文件版本: 4.7.1
 """讨论页 Page Object。"""
 from __future__ import annotations
 
@@ -13,9 +14,14 @@ from typing import Any
 from ..actions.base import ActionCancelled, ActionUnavailable, safe_screenshot
 from ..models import Course, Task
 from .base import PageObject
-from .icourse163 import close_modals, open_route, page_block_reason
+from .icourse163 import (
+    close_modals,
+    new_forum_detail_url,
+    open_route,
+    page_block_reason,
+)
 
-__version__ = "4.4.0"
+__version__ = "4.7.1"
 __author__ = "Gary"
 __all__ = [
     "DEFAULT_REPLY_TEXT",
@@ -66,6 +72,20 @@ class DiscussionPage(PageObject):
         """
         page = self.ctx.acquire_page()
         hash_path: str = f"#/learn/forumdetail?pid={int(task.content_id)}"
+        try:
+            new_url = new_forum_detail_url(
+                course.school_short_name,
+                course.course_id,
+                course.term_id,
+                int(task.content_id),
+            )
+            page.goto(new_url, wait_until="domcontentloaded", timeout=90_000)
+            self._dismiss(page)
+            return page, self._wait_ready(page)
+        except ActionCancelled:
+            raise
+        except Exception as first_error:
+            self.ctx.warn(f"新版讨论详情页未加载：{first_error}")
         try:
             open_route(page, base, hash_path)
         except ActionCancelled:

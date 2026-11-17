@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-17 10:00
+# 最后更新: 2026-11-17 12:00
 # 文件名: job.py
-# 主要用途: 编排“开始完成”后台任务：视频并发、文档/测验/讨论串行、进度快照与取消。
-# 文件版本: 4.7.0
+# 主要用途: 编排“开始完成”后台任务：视频与通用任务并发、进度快照与取消。
+# 文件版本: 4.7.1
 """完成任务的 job 编排。"""
 from __future__ import annotations
 
+import threading
 import time
 import uuid
 from typing import Any, Callable, Final
@@ -21,6 +22,7 @@ from .actions import (
     ActionCancelled,
     ActionContext,
     ActionUnavailable,
+    run_task_workers,
     run_workers,
 )
 from .actions.base import safe_screenshot
@@ -32,7 +34,7 @@ from .courses import reload_course
 from .tasks import TaskHandlerRegistry, TaskOutcome, TaskStatus, default_task_registry
 from .models import DONE, Course, Task
 
-__version__ = "4.6.1"
+__version__ = "4.7.1"
 __author__ = "Gary"
 __all__ = ["CompletionJob"]
 
@@ -43,6 +45,20 @@ VIDEO_KIND = "视频"
 DOCUMENT_KIND = "文档"
 DISCUSSION_KIND = "讨论"
 QUIZ_KINDS: Final[frozenset[str]] = frozenset({"测验", "随堂测验", "作业", "考试"})
+
+
+def _ensure_task_keys(tasks: list[Task]) -> None:
+    """确保任务 key 唯一；外部未分配时补全，避免快照串行更新错任务。"""
+    used: dict[str, int] = {}
+    for task in tasks:
+        if task.key:
+            used[task.key] = used.get(task.key, 0) + 1
+            continue
+        identifier = task.test_id or task.unit_id or task.content_id or 0
+        base = "%s:%s" % (task.kind, identifier)
+        count = used.get(base, 0) + 1
+        used[base] = count
+        task.key = base if count == 1 else "%s#%d" % (base, count)
 
 
 class CompletionJob:
@@ -71,6 +87,7 @@ class CompletionJob:
         """
         self.course: Course = course
         self.tasks: list[Task] = list(tasks)
+        _ensure_task_keys(self.tasks)
         self._client: MoocClient = client
         self._db: IcourseDb = db
         self._settings: dict[str, Any] = dict(settings)
@@ -133,6 +150,7 @@ class CompletionJob:
             job_id_factory=lambda: self._job_id,
         )
         self._updated_course: Course | None = None
+        self._server_check_lock = threading.RLock()
 
     @property
     def job_id(self) -> str:
@@ -303,7 +321,11 @@ class CompletionJob:
                 handler.run_batch(self, self.course, tasks, store, ttl_seconds)
 
         if serial_tasks:
-            self._run_serial(serial_tasks, store)
+            workers = int(settings.get("workers", 8) or 8)
+            if workers > 1 and len(serial_tasks) > 1:
+                self._run_parallel_tasks(serial_tasks, store, workers)
+            else:
+                self._run_serial(serial_tasks, store)
 
         self._update(phase="verifying", message="正在刷新课程状态…")
         try:
@@ -483,8 +505,63 @@ class CompletionJob:
                 if state_info.get("status") in ("等待队列", "进行中"):
                     self._finish_task(task, "失败", error=str(exc))
 
+    def _run_parallel_tasks(
+        self, tasks: list[Task], store: AnswerStore, workers: int
+    ) -> None:
+        """并行执行测验/文档/讨论/作业等通用任务。
+
+        每个 worker 使用独立的无头浏览器会话和 Page；任务结果通过
+        ``_run_one_task`` 写入线程安全的 Job 快照。
+        """
+        try:
+            state = export_saved_storage_state(config.storage_state_file())
+        except Exception as exc:
+            for task in tasks:
+                self._finish_task(task, "失败", error="缺少登录态：%s" % exc)
+            return
+        self._update(
+            phase="parallel",
+            message="正在并行处理 %d 个任务（%d 线程）…"
+            % (len(tasks), max(1, min(int(workers), len(tasks)))),
+        )
+        try:
+            batch = run_task_workers(
+                tasks,
+                workers=workers,
+                storage_state=state,
+                retain_data=bool(self._settings.get("retain_data", True)),
+                repository=store,
+                log_callback=self._log_callback,
+                cancel_event=self._cancel,
+                run_task=lambda ctx, task, worker_id: self._run_one_task(
+                    ctx, task, store, worker_id
+                ),
+            )
+        except Exception as exc:
+            self._event("error", "并行任务阶段失败：%s" % exc)
+            for task in tasks:
+                info = self._task_states.get(task.key) or {}
+                if info.get("status") in ("等待队列", "进行中"):
+                    self._finish_task(task, "失败", error=str(exc))
+            return
+        for message in batch.errors:
+            self._event("warn", message)
+        for task in batch.unprocessed:
+            info = self._task_states.get(task.key) or {}
+            if info.get("status") not in ("等待队列", "进行中"):
+                continue
+            if self._cancel.is_set():
+                self._finish_task(task, "已取消", message="任务已取消")
+            else:
+                self._finish_task(task, "失败", error="任务未执行")
+
     def _run_one_serial(
         self, ctx: ActionContext, task: Task, store: AnswerStore
+    ) -> None:
+        self._run_one_task(ctx, task, store, 0)
+
+    def _run_one_task(
+        self, ctx: ActionContext, task: Task, store: AnswerStore, worker_id: int
     ) -> None:
         handler = self._handlers.for_kind(task.kind)
         if handler is None:
@@ -493,7 +570,7 @@ class CompletionJob:
         self._set_task(
             task,
             status="进行中",
-            worker=0,
+            worker=int(worker_id),
             started_at=time.time(),
             message="正在处理",
         )
@@ -557,6 +634,11 @@ class CompletionJob:
         )
 
     def _server_marked_done(self, task: Task) -> bool:
+        """动作异常后向服务端复核；加锁避免并行 worker 同时刷新课程。"""
+        with self._server_check_lock:
+            return self._server_marked_done_locked(task)
+
+    def _server_marked_done_locked(self, task: Task) -> bool:
         """动作异常后向服务端复核，避免把已完成的文档/讨论误报为失败。
 
         Args:

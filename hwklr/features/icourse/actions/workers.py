@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-11 10:00
+# 最后更新: 2026-11-17 12:00
 # 文件名: workers.py
-# 主要用途: 并发视频 worker 调度与状态记录；已移除 rich 控制台渲染，改为回调与取消事件。
-# 文件版本: 4.4.3
+# 主要用途: 并发视频与通用任务 worker 调度；支持测验/文档/讨论/作业等任务的最大 8 线程并行。
+# 文件版本: 4.7.1
 """并发视频 worker。
 
 调度规则：所有 worker 共享一个从上到下的扫描器，每次领取「已勾选且未完成」
@@ -410,3 +410,152 @@ def run_workers(
     for thread in threads:
         thread.join()
     return WorkerBatch(workers=worker_results, unprocessed=scheduler.remaining())
+
+
+class TaskScheduler:
+    """通用任务扫描器：按顺序领取任务，不按完成状态过滤。"""
+
+    def __init__(self, tasks: list[Task]) -> None:
+        """初始化扫描器。"""
+        self._tasks: list[Task] = list(tasks)
+        self._index: int = 0
+        self._lock: threading.Lock = threading.Lock()
+
+    def next(self) -> tuple[int, Task] | None:
+        """领取下一个任务。"""
+        with self._lock:
+            if self._index >= len(self._tasks):
+                return None
+            index = self._index
+            self._index += 1
+            return index, self._tasks[index]
+
+    def remaining(self) -> list[Task]:
+        """返回尚未领取的任务。"""
+        with self._lock:
+            return list(self._tasks[self._index:])
+
+
+@dataclass
+class TaskBatch:
+    """通用并行任务执行结果。"""
+
+    unprocessed: list[Task] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+
+
+def run_task_workers(
+    tasks: list[Task],
+    *,
+    workers: int = 4,
+    storage_state: Path | str,
+    retain_data: bool = True,
+    repository: Any | None = None,
+    log_callback: LogCallback | None = None,
+    cancel_event: threading.Event | None = None,
+    run_task: Callable[[ActionContext, Task, int], None],
+) -> TaskBatch:
+    """用独立浏览器会话并行执行通用任务。
+
+    每个 worker 在自己的线程中创建 ``BrowserSession``（Playwright sync API
+    不能跨线程共享），每个任务使用独立 Page；任务结果由 ``run_task`` 回调
+    写入 CompletionJob 的线程安全快照。
+
+    Args:
+        tasks: 待执行任务。
+        workers: 并发数（1–8）。
+        storage_state: 无头登录态文件。
+        retain_data: 是否保存任务截图。
+        repository: 任务共享的题库/答案仓储。
+        log_callback: 日志回调。
+        cancel_event: 协作取消事件。
+        run_task: ``(ctx, task, worker_id)`` 执行回调。
+
+    Returns:
+        :class:`TaskBatch`；``unprocessed`` 为未能执行的剩余任务。
+
+    Raises:
+        BrowserSessionError: 登录态文件缺失。
+    """
+    state = Path(storage_state)
+    if not state.is_file():
+        raise BrowserSessionError("登录态文件不存在：%s" % state)
+    total = len(tasks)
+    if total <= 0:
+        return TaskBatch()
+    workers = max(1, min(int(workers), MAX_WORKERS, total))
+    scheduler = TaskScheduler(tasks)
+    errors: list[str] = []
+    unprocessed: list[Task] = []
+    lock = threading.Lock()
+
+    def runner(worker_id: int) -> None:
+        try:
+            with BrowserSession(
+                headless=True, attach=False, storage_state=state
+            ) as session:
+                while True:
+                    if cancel_event is not None and cancel_event.is_set():
+                        break
+                    claimed = scheduler.next()
+                    if claimed is None:
+                        break
+                    _index, task = claimed
+                    page = None
+                    try:
+                        page = session.new_page()
+                        ctx = ActionContext(
+                            session=session,
+                            repository=repository,
+                            page=page,
+                            interactive=False,
+                            log_callback=log_callback,
+                            cancel_event=cancel_event,
+                            retain_data=bool(retain_data),
+                        )
+                        run_task(ctx, task, worker_id)
+                    except Exception as exc:
+                        with lock:
+                            errors.append(str(exc))
+                            unprocessed.append(task)
+                        if log_callback is not None:
+                            log_callback(
+                                "warn",
+                                "任务 worker %d 执行失败：%s" % (worker_id + 1, exc),
+                            )
+                    finally:
+                        if page is not None:
+                            try:
+                                page.close()
+                            except Exception:
+                                pass
+        except Exception as exc:
+            with lock:
+                errors.append(str(exc))
+            if log_callback is not None:
+                log_callback("error", "任务 worker %d 启动失败：%s" % (worker_id + 1, exc))
+
+    threads: list[threading.Thread] = [
+        threading.Thread(
+            target=runner,
+            args=(index,),
+            name="icourse-task-%d" % index,
+            daemon=True,
+        )
+        for index in range(workers)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    with lock:
+        unprocessed.extend(scheduler.remaining())
+        # 去重，保持任务顺序。
+        unique: list[Task] = []
+        seen: set[str] = set()
+        for task in unprocessed:
+            if task.key in seen:
+                continue
+            seen.add(task.key)
+            unique.append(task)
+        return TaskBatch(unprocessed=unique, errors=errors)

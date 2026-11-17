@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-17 10:00
+# 最后更新: 2026-11-17 12:00
 # 文件名: icourse163.py
-# 主要用途: icourse163 页面 URL（含新版考试列表）、选择器、SPA 导航、登录墙判定、可选中止的弹窗关闭与视频状态脚本。
-# 文件版本: 4.7.0
+# 主要用途: icourse163 页面 URL（含新版考试/讨论详情）、选择器、SPA 导航、登录墙判定、可选中止的弹窗关闭与视频状态脚本。
+# 文件版本: 4.7.1
 """icourse163 页面 URL 与选择器。
 
 结构基于 2026-11 的新版 React 学习页：
@@ -108,6 +108,17 @@ def new_exam_list_url(
     """返回新版课程考试列表页。"""
     path = NEW_LEARN_PATH.format(school=school, course_id=int(course_id))
     return f"{BASE}{path}/exams?tid={int(term_id)}"
+
+
+def new_forum_detail_url(
+    school: str,
+    course_id: int | str,
+    term_id: int | str,
+    pid: int | str,
+) -> str:
+    """返回新版讨论详情页。"""
+    path = NEW_LEARN_PATH.format(school=school, course_id=int(course_id))
+    return f"{BASE}{path}/forum/detail?tid={int(term_id)}&pid={int(pid)}"
 
 
 def new_testlist_url(
