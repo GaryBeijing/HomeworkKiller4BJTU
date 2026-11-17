@@ -1,10 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-11-08 14:30
-  最后更新: 2026-11-16 20:30
+  最后更新: 2026-11-17 15:00
   文件名: core.js
   主要用途: “中国大学慕课”页面共享状态、DOM 缓存、事件绑定与加载/取消入口。
-  文件版本: 4.6.7
+  文件版本: 4.7.2
 */
 (function (global) {
   'use strict';
@@ -14,7 +14,6 @@
   const POLL_MS = 800;
   const LOGIN_POLL_MS = 1000;
   const SYNC_POLL_MS = 1200;
-  const PERCENT_INTERVAL_MS = 3000;
 
   const state = {
     initialized: false,
@@ -33,7 +32,6 @@
     loginWaiter: null,
     loginTimer: null,
     syncTimer: null,
-    percentShown: new Map(),
     settings: {},
     loginBlocked: false,
     autoTried: false,
@@ -155,10 +153,10 @@
     [
       'i-account-badge', 'i-relogin', 'i-open-settings', 'i-refresh-courses',
       'i-notice-stack',
-      'i-course-list', 'i-sync-message', 'i-sync-answers', 'i-sync-force', 'i-sync-bar',
+      'i-course-list', 'i-sync-message', 'i-sync-answers', 'i-sync-force',
       'i-course-title', 'i-course-meta', 'i-log-toggle', 'i-type-rail',
       'i-task-body', 'i-select-all', 'i-select-unsolved', 'i-selection-hint',
-      'i-start', 'i-job-inline', 'i-job-phase', 'i-job-message', 'i-job-bar',
+      'i-start', 'i-job-inline', 'i-job-phase', 'i-job-message',
       'i-log-panel', 'i-log-lines', 'i-login-overlay',
       'i-login-overlay-text', 'i-login-decline', 'i-login-visible',
       'i-warning-modal', 'i-warning-detail', 'i-warning-cancel',
@@ -278,7 +276,6 @@
   IC.POLL_MS = POLL_MS;
   IC.LOGIN_POLL_MS = LOGIN_POLL_MS;
   IC.SYNC_POLL_MS = SYNC_POLL_MS;
-  IC.PERCENT_INTERVAL_MS = PERCENT_INTERVAL_MS;
   IC.state = state;
   IC.els = els;
 

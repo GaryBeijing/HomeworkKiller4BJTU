@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary (Adapted from GinsMooc by gin)
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-16 20:30
+# 最后更新: 2026-11-17 15:00
 # 文件名: icourse_models.py
 # 主要用途: GinsMooc 题库纯数据模型、题目归一化与答案索引。
-# 文件版本: 4.6.7
+# 文件版本: 4.7.2
 """GinsMooc 数据模型与答案归一化。
 
 数据字段与答案归一化规则参考 GinsMooc（©2022-2024 gin）；
@@ -318,20 +318,37 @@ class AnswerIndex:
     def find(self, title: str) -> DbQuestion | None:
         return self.by_title.get(normalize_title(title))
 
+    @staticmethod
+    def _option_key(value: Any) -> str:
+        """选项文本归一化；去掉页面常见的 A./A、 前缀。"""
+        text = normalize_title(str(value or ""))
+        return re.sub(r"^[a-z][.、:：]\s*", "", text).strip()
+
+    def _option_overlap(self, question: DbQuestion, wanted: set[str]) -> int:
+        """返回题目选项与页面选项的归一化重合数。"""
+        texts = {self._option_key(option.text) for option in question.options}
+        return len(wanted & texts)
+
+    @staticmethod
+    def _strong_overlap(overlap: int, total: int) -> bool:
+        """选项重合是否足以消除同标题歧义。"""
+        if total <= 0:
+            return True
+        return overlap == total or (overlap >= 2 and overlap / total >= 0.75)
+
     def find_by_options(self, option_texts: Iterable[str]) -> DbQuestion | None:
         """题干匹配失败时，用选项文本重合度兜底。"""
         wanted = {
-            normalize_title(text)
+            self._option_key(text)
             for text in option_texts
-            if normalize_title(text)
+            if self._option_key(text)
         }
         if not wanted:
             return None
         best: DbQuestion | None = None
         best_score = 0
         for question in self.questions:
-            texts = {normalize_title(option.text) for option in question.options}
-            score = len(wanted & texts)
+            score = self._option_overlap(question, wanted)
             if score > best_score:
                 best, best_score = question, score
         return best if best_score else None
@@ -339,7 +356,36 @@ class AnswerIndex:
     def find_question(
         self, title: str, option_texts: Iterable[str] = ()
     ) -> DbQuestion | None:
-        return self.find(title) or self.find_by_options(option_texts)
+        """按标题匹配，并用选项文本消解同标题歧义。
+
+        标题相同但选项不同的题目在题库中真实存在；标题命中后若选项
+        完全不重合，不能直接使用第一个同标题题目，否则会得到错误答案
+        或空答案，导致严格整卷校验跳过。
+        """
+        wanted = {
+            self._option_key(text)
+            for text in option_texts
+            if self._option_key(text)
+        }
+        question = self.find(title)
+        if question is not None:
+            if not wanted:
+                return question
+            overlap = self._option_overlap(question, wanted)
+            if self._strong_overlap(overlap, len(wanted)):
+                return question
+            alternative = self.find_by_options(option_texts)
+            if alternative is not None and alternative is not question:
+                alt_overlap = self._option_overlap(alternative, wanted)
+                if self._strong_overlap(alt_overlap, len(wanted)):
+                    return alternative
+            return None
+        alternative = self.find_by_options(option_texts)
+        if alternative is not None:
+            overlap = self._option_overlap(alternative, wanted)
+            if self._strong_overlap(overlap, len(wanted)):
+                return alternative
+        return None
 
     def option_text(self, option_id: int) -> str:
         found = self.by_option_id.get(int(option_id))

@@ -4,7 +4,7 @@
   最后更新: 2026-11-17 10:00
   文件名: icourse.css
   主要用途: “中国大学慕课”标签页样式：固定视口高度、课程列表与任务区内部滚动、紧凑顶栏、答案浏览弹窗、标签内登录提示与任务结果弹窗。
-  文件版本: 4.7.0
+  文件版本: 4.7.2
 */
 
 /* 慕课页永远不滚动整个页面；滚动只发生在课程列表、任务表和日志内部。 */
@@ -222,21 +222,6 @@
   white-space: nowrap;
 }
 
-.tag-icourse .ic-sync-track {
-  height: 4px;
-  margin: 6px 0 0;
-  border-radius: 999px;
-  background: #e7e8f2;
-  overflow: hidden;
-}
-
-.tag-icourse .ic-sync-track .progress-bar {
-  height: 100%;
-  width: 0;
-  background: var(--accent);
-  transition: width 0.3s ease;
-}
-
 /* ---------------------------------------------------------------- 任务区 */
 .tag-icourse .ic-main {
   position: relative;
@@ -370,23 +355,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.tag-icourse .ic-job-track {
-  flex: 0 0 clamp(120px, 18vw, 280px);
-  align-self: center;
-  height: 10px;
-  margin: 0 2px;
-  border-radius: 999px;
-  background: #e7e8f2;
-  overflow: hidden;
-}
-
-.tag-icourse .ic-job-track .progress-bar {
-  height: 100%;
-  width: 0;
-  background: linear-gradient(90deg, var(--accent) 0%, #8d7bff 100%);
-  transition: width 0.3s ease;
 }
 
 /* ---------------------------------------------------------------- 日志浮层 */
@@ -553,36 +521,6 @@
 .tag-icourse .pill.published-pill {
   background: #e7f7ed;
   color: var(--ok);
-}
-
-.tag-icourse .progress-pill {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 70px;
-  padding: 0;
-  overflow: hidden;
-  background: #eaf7ef;
-  color: var(--ok);
-  font-variant-numeric: tabular-nums;
-}
-
-.tag-icourse .pill-progress-fill {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 0;
-  background: var(--ok);
-  opacity: 0.18;
-  transition: width 0.3s ease;
-}
-
-.tag-icourse .pill-progress-text {
-  position: relative;
-  z-index: 1;
-  padding: 3px 10px;
-  font-size: 12px;
-  font-weight: 600;
 }
 
 .tag-icourse .warning-text {

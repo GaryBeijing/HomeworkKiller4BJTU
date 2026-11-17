@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary (Adapted from GinsMooc by gin)
 # 编写日期: 2026-11-08 14:30
-# 最后更新: 2026-11-16 20:30
+# 最后更新: 2026-11-17 15:00
 # 文件名: quiz.py
 # 主要用途: 测验/作业/考试任务：读取题目、本地题库匹配、实时答案兜底、填答与提交；截图受留存数据开关控制。
-# 文件版本: 4.6.7
+# 文件版本: 4.7.2
 """测验/作业：从 GinsMooc 取答案，填入页面并可选提交。
 
 答案匹配、option id 解析与填答策略参考 GinsMooc（©2022-2024 gin），
@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -313,6 +314,68 @@ TESTLIST_NAV_JS = r"""
 """
 
 
+TESTLIST_EXPAND_ASSESSMENT_JS = r"""
+([testId, name]) => {
+  const visible = (el) => {
+    if (!el) return false;
+    const rect = el.getBoundingClientRect();
+    const style = getComputedStyle(el);
+    return rect.width > 0 && rect.height > 0 &&
+           style.display !== 'none' && style.visibility !== 'hidden';
+  };
+  const id = String(testId || '');
+  let button = [...document.querySelectorAll(
+    '[data-assessment-toggle], .learn-assessment-head'
+  )].filter(visible).find((el) =>
+    id && (el.getAttribute('aria-controls') || '').includes(id)
+  );
+  if (!button) {
+    button = [...document.querySelectorAll('button, a, [role=button]')]
+      .filter(visible)
+      .find((el) => (el.innerText || '').includes(name));
+  }
+  if (!button) return {found: false, panel: ''};
+  const panel = button.getAttribute('aria-controls') || '';
+  if (button.getAttribute('aria-expanded') !== 'true') {
+    button.click();
+  }
+  return {found: true, panel};
+}
+"""
+
+TESTLIST_ASSESSMENT_LINK_JS = r"""
+([panel, testId]) => {
+  const visible = (el) => {
+    if (!el) return false;
+    const rect = el.getBoundingClientRect();
+    const style = getComputedStyle(el);
+    return rect.width > 0 && rect.height > 0 &&
+           style.display !== 'none' && style.visibility !== 'hidden';
+  };
+  const id = String(testId || '');
+  const root = panel ? document.getElementById(panel) : document;
+  const links = [...(root || document).querySelectorAll('a')]
+    .filter(visible);
+  const wanted = [
+    'quiz?id=' + id, 'hw?id=' + id,
+    'examObject?id=' + id, 'examSubjective?id=' + id,
+  ].filter((item) => !item.endsWith('='));
+  const link = links.find((el) => {
+    const href = el.getAttribute('href') || '';
+    return wanted.some((needle) => href.includes(needle));
+  }) || links.find((el) => el.classList.contains('learn-assessment-go'));
+  if (!link) return '';
+  const href = link.getAttribute('href') || '';
+  if (!href || href.startsWith('javascript:')) return '';
+  try {
+    return new URL(href, location.href).href;
+  } catch (error) {
+    return '';
+  }
+}
+"""
+
+
 class QuizAction:
     def __init__(self, ctx: ActionContext) -> None:
         self.ctx = ctx
@@ -357,12 +420,24 @@ class QuizAction:
             course.term_id,
         )
         self.ctx.info(f"打开任务页：{task.name}（{task.kind}，testId={task.test_id}）")
-        self._open_task_page(page, base, hash_path, task, new_url, new_list_url)
-
-        if is_spoc_url(page.url):
-            raise ActionUnavailable("测验自动化仅支持 MOOC，不支持 SPOC。")
-
-        self._wait_ready(page, task)
+        for attempt in range(2):
+            try:
+                self._open_task_page(page, base, hash_path, task, new_url, new_list_url)
+                if is_spoc_url(page.url):
+                    raise ActionUnavailable("测验自动化仅支持 MOOC，不支持 SPOC。")
+                self._wait_ready(page, task)
+                break
+            except ActionUnavailable as exc:
+                if attempt == 0 and "没有加载出题目" in str(exc):
+                    self.ctx.warn("测验页面加载超时，使用新页面重试一次…")
+                    try:
+                        page.close()
+                    except Exception:
+                        pass
+                    page = self.ctx.session.new_page()
+                    self.ctx.page = page
+                    continue
+                raise
         page_questions = QuizPage(self.ctx, page).read_questions()
         if not page_questions:
             safe_screenshot(
@@ -474,16 +549,13 @@ class QuizAction:
         new_url: str = "",
         new_list_url: str = "",
     ) -> None:
-        """打开任务页，兼容新版 path 路由与旧 hash 路由。"""
+        """打开任务页，兼容新版 path 路由、旧 hash 路由与评估卡片入口。"""
         if new_url:
             try:
                 page.goto(new_url, wait_until="domcontentloaded", timeout=90_000)
                 close_modals(page, press_escape=False)
-                for _ in range(6):
-                    page.wait_for_timeout(1000)
-                    state = QuizPage._page_state(page)
-                    if self._has_task_content(state):
-                        return
+                if self._wait_task_content(page, 30, break_on_list=True):
+                    return
             except Exception as exc:
                 self.ctx.warn(f"新版任务路由打开失败：{exc}")
             else:
@@ -495,23 +567,54 @@ class QuizAction:
 
         open_route(page, base, hash_path)
         close_modals(page)
-        for _ in range(4):
-            page.wait_for_timeout(1000)
-            state = QuizPage._page_state(page)
-            if self._has_task_content(state):
-                return
+        if self._wait_task_content(page, 15, break_on_list=True):
+            return
 
         self.ctx.info("任务路由未渲染，尝试从课程评估列表打开…")
         # 考试新版没有独立详情 path，必须从 /exams 列表点击任务名与“进入考试”。
         list_url = new_url if task.kind == "考试" else new_list_url
         if self._open_from_testlist(
-            page, base, task.name, list_url, task.kind
+            page,
+            base,
+            task.name,
+            list_url,
+            task.kind,
+            test_id=task.test_id,
         ):
             return
         raise ActionUnavailable(
             "无法打开%s页面（已尝试新版路由、旧版路由与课程评估列表）。"
             % task.kind
         )
+
+    @staticmethod
+    def _is_list_route(url: str) -> bool:
+        """判断 URL 是否只是评估/考试列表，而不是具体任务页。"""
+        text = str(url or "")
+        if "/assessments" in text and "/assessments/quiz/" not in text                 and "/assessments/hw/" not in text:
+            return True
+        if "/exams" in text and "/exams/" not in text:
+            return True
+        return False
+
+    def _wait_task_content(
+        self, page, timeout_seconds: int = 30, *, break_on_list: bool = False
+    ) -> bool:
+        """等待题目/开始入口/结果页出现。"""
+        deadline = time.monotonic() + max(1, int(timeout_seconds))
+        while time.monotonic() < deadline:
+            state = QuizPage._page_state(page)
+            url = str(state.get("url") or getattr(page, "url", "") or "")
+            # 列表页也可能出现“前往作答”文字，不能把它当成已进入测验。
+            if self._is_list_route(url):
+                return False
+            if self._has_task_content(state):
+                return True
+            try:
+                page.wait_for_timeout(1000)
+            except Exception:
+                return False
+        return False
 
     def _open_from_testlist(
         self,
@@ -520,8 +623,10 @@ class QuizAction:
         name: str,
         new_list_url: str = "",
         kind: str = "",
+        *,
+        test_id: int | None = None,
     ) -> bool:
-        """在新/旧评估列表中按任务名点击目标项。"""
+        """从评估列表展开卡片并打开真实“前往作答/进入考试”入口。"""
         new_learn = ""
         for marker in ("/assessments", "/exams"):
             if marker in new_list_url:
@@ -546,29 +651,24 @@ class QuizAction:
                     page.wait_for_timeout(1200)
                 except Exception:
                     pass
-            try:
-                clicked = page.evaluate(TESTLIST_CLICK_JS, str(name))
-            except Exception:
-                clicked = ""
-            if clicked:
-                page.wait_for_timeout(2200)
-                if kind == "考试":
-                    # 列表项先展开考试说明，再点“进入考试”才会渲染题目/开始按钮。
-                    entered = ""
-                    for _ in range(3):
-                        try:
-                            entered = page.evaluate(TESTLIST_CLICK_JS, "进入考试")
-                        except Exception:
-                            entered = ""
-                        if entered:
-                            break
-                        page.wait_for_timeout(900)
-                    if entered:
-                        page.wait_for_timeout(2500)
-                close_modals(page)
+            if kind == "考试":
+                if self._open_exam_entry(page, name):
+                    return True
+                continue
+            if self._open_assessment_entry(page, name, test_id):
                 return True
-        open_route(page, base, "#/learn/testlist")
-        page.wait_for_timeout(1500)
+        # 旧版评估列表最后兜底。
+        try:
+            open_route(page, base, "#/learn/testlist")
+            page.wait_for_timeout(1500)
+        except Exception:
+            return False
+        if kind == "考试":
+            return self._open_exam_entry(page, name)
+        return self._open_assessment_entry(page, name, test_id)
+
+    def _open_exam_entry(self, page, name: str) -> bool:
+        """考试列表：先展开任务，再点“进入考试”。"""
         try:
             clicked = page.evaluate(TESTLIST_CLICK_JS, str(name))
         except Exception:
@@ -576,8 +676,81 @@ class QuizAction:
         if not clicked:
             return False
         page.wait_for_timeout(2200)
+        entered = ""
+        for _ in range(3):
+            try:
+                entered = page.evaluate(TESTLIST_CLICK_JS, "进入考试")
+            except Exception:
+                entered = ""
+            if entered:
+                break
+            page.wait_for_timeout(900)
+        if entered:
+            page.wait_for_timeout(2500)
         close_modals(page)
-        return True
+        return self._wait_task_content(page, 20)
+
+    def _open_assessment_entry(
+        self, page, name: str, test_id: int | None
+    ) -> bool:
+        """测验/作业：展开卡片并通过 learn-assessment-go 链接进入。"""
+        panel = ""
+        if test_id:
+            try:
+                expanded = page.evaluate(
+                    TESTLIST_EXPAND_ASSESSMENT_JS, [int(test_id), str(name)]
+                ) or {}
+                panel = str(expanded.get("panel") or "")
+                page.wait_for_timeout(1200)
+            except Exception:
+                panel = ""
+        href = ""
+        if test_id:
+            try:
+                href = str(
+                    page.evaluate(
+                        TESTLIST_ASSESSMENT_LINK_JS, [panel, int(test_id)]
+                    )
+                    or ""
+                )
+            except Exception:
+                href = ""
+        if href:
+            try:
+                page.goto(href, wait_until="domcontentloaded", timeout=90_000)
+                close_modals(page)
+                if self._wait_task_content(page, 20):
+                    return True
+            except Exception as exc:
+                self.ctx.warn(f"评估列表入口打开失败：{exc}")
+        # 文本点击兜底：可能只是展开卡片，必须再用链接或内容确认。
+        try:
+            clicked = page.evaluate(TESTLIST_CLICK_JS, str(name))
+        except Exception:
+            clicked = ""
+        if clicked:
+            page.wait_for_timeout(1500)
+            if test_id:
+                try:
+                    href = str(
+                        page.evaluate(
+                            TESTLIST_ASSESSMENT_LINK_JS, [panel, int(test_id)]
+                        )
+                        or ""
+                    )
+                except Exception:
+                    href = ""
+            if href:
+                try:
+                    page.goto(href, wait_until="domcontentloaded", timeout=90_000)
+                    close_modals(page)
+                    if self._wait_task_content(page, 20):
+                        return True
+                except Exception:
+                    pass
+            if self._wait_task_content(page, 8):
+                return True
+        return False
 
     # ------------------------------------------------------------------ 匹配
     def _live_plans(

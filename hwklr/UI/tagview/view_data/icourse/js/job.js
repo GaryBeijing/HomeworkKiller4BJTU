@@ -4,7 +4,7 @@
   最后更新: 2026-11-12 13:00
   文件名: job.js
   主要用途: “中国大学慕课”页面完成任务启动、轮询、取消与结果弹窗。
-  文件版本: 4.6.1
+  文件版本: 4.7.2
 */
 (function (global) {
   'use strict';
@@ -14,7 +14,6 @@
   const POLL_MS = IC.POLL_MS;
   const LOGIN_POLL_MS = IC.LOGIN_POLL_MS;
   const SYNC_POLL_MS = IC.SYNC_POLL_MS;
-  const PERCENT_INTERVAL_MS = IC.PERCENT_INTERVAL_MS;
   const state = IC.state;
   const els = IC.els;
   const node = (...args) => IC.node(...args);
@@ -211,7 +210,6 @@
       });
       state.jobId = data.job_id;
       state.job = data;
-      state.percentShown = new Map();
       state.notifiedKeys = new Set();
       state.resultShownJobId = '';
       hideResult();
@@ -273,7 +271,6 @@
       state.course = data;
       state.types = data.types || [];
       state.checked = new Map();
-      state.percentShown = new Map();
       renderAll();
     } catch (error) {
       // 刷新失败保留当前视图。
@@ -307,7 +304,7 @@
       const labels = {
         idle: '准备中', starting: '准备中', login: '登录', db: '题库',
         video: '刷课', document: '刷文档', quiz: '刷题', discussion: '讨论',
-        serial: '处理中', verifying: '刷新状态', done: '完成',
+        serial: '处理中', parallel: '处理中', verifying: '刷新状态', done: '完成',
         error: '失败', cancelled: '已取消',
       };
       els['i-job-phase'].textContent = labels[job.phase] || job.phase || '处理中';
@@ -319,13 +316,6 @@
     if (els['i-job-message']) {
       els['i-job-message'].textContent = job.message || '';
       els['i-job-message'].title = job.error || job.message || '';
-    }
-    if (els['i-job-bar']) {
-      const total = Number(job.total || 0);
-      const current = Number(job.current || 0);
-      els['i-job-bar'].style.width = String(
-        total > 0 ? Math.min(100, current * 100 / total) : 0
-      ) + '%';
     }
     showFilledNotices(job);
   };

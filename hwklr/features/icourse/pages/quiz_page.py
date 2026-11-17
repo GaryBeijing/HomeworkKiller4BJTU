@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # 作者: Gary (Adapted from GinsMooc by gin)
 # 编写日期: 2026-11-10 13:00
-# 最后更新: 2026-11-16 20:30
+# 最后更新: 2026-11-17 15:00
 # 文件名: quiz_page.py
 # 主要用途: 测验页 Page Object：页面状态、就绪等待、题目读取、填答、主观题参考答案、成绩读取重试与提交确认。
-# 文件版本: 4.6.7
+# 文件版本: 4.7.2
 """测验页 Page Object。
 
 旧版/新版测验页的选择器与填答脚本参考 GinsMooc 扩展（©2022-2024 gin），
@@ -75,7 +75,7 @@ QUIZ_PAGE_STATE_JS = r"""
     'a,button,[role=button],.ux-btn,.u-btn'
   )].filter(visible).map(el => (el.innerText || '').trim())
     .filter(item => item && item.length <= 60);
-  const startPattern = /(开始答题|开始测验|开始考试|继续答题|继续作答|继续考试)/;
+  const startPattern = /(开始答题|开始测验|开始考试|继续答题|继续作答|继续考试|前往作答)/;
   const startText = clickable.find(item => startPattern.test(item)) || '';
   const submit = document.querySelector('a.j-submitBtn') ||
     [...document.querySelectorAll('a,button,[role=button],.ux-btn,.u-btn')]
@@ -303,7 +303,14 @@ class QuizPage(PageObject):
                 )
             questions: int = int(state.get("questions") or 0)
             if questions > 0:
-                return
+                # 新界面先挂载空容器，题干/选项可能稍后才 hydrate。
+                parsed = self.read_questions()
+                if any(
+                    str(item.get("title") or "").strip()
+                    or item.get("optionTexts")
+                    for item in parsed
+                ):
+                    return
             if (
                 (state.get("successText") or state.get("resultNode"))
                 and not state.get("startVisible")

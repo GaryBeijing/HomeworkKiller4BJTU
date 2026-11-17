@@ -1,10 +1,10 @@
 /*
   作者: Gary
   编写日期: 2026-11-08 14:30
-  最后更新: 2026-11-16 20:30
+  最后更新: 2026-11-17 15:00
   文件名: courses.js
   主要用途: “中国大学慕课”页面课程列表、同名课程诊断、任务类型、任务表格与勾选状态渲染。
-  文件版本: 4.6.7
+  文件版本: 4.7.2
 */
 (function (global) {
   'use strict';
@@ -14,7 +14,6 @@
   const POLL_MS = IC.POLL_MS;
   const LOGIN_POLL_MS = IC.LOGIN_POLL_MS;
   const SYNC_POLL_MS = IC.SYNC_POLL_MS;
-  const PERCENT_INTERVAL_MS = IC.PERCENT_INTERVAL_MS;
   const state = IC.state;
   const els = IC.els;
   const node = (...args) => IC.node(...args);
@@ -168,7 +167,6 @@
       state.checked = new Map();
       state.job = null;
       state.jobId = '';
-      state.percentShown = new Map();
       state.notifiedKeys = new Set();
       clearNotices();
       state.activeType = chooseDefaultType();

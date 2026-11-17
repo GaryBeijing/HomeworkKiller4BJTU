@@ -6,7 +6,7 @@
 
 ![Python](https://img.shields.io/badge/Python-3.15.2-3776AB?logo=python&logoColor=white)
 ![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-0078D4?logo=windows&logoColor=white)
-![Version](https://img.shields.io/badge/Version-4.7.1-5B4BFF)
+![Version](https://img.shields.io/badge/Version-4.7.2-5B4BFF)
 ![GUI](https://img.shields.io/badge/GUI-pywebview%20%2B%20WebView2-2F3AB2)
 
 [功能特性](#-功能特性) · [界面预览](#-界面预览) · [快速开始](#-快速开始) · [使用指南](#-使用指南) · [构建与分发](#-构建与分发) · [插件开发](#-插件开发) · [常见问题](#-常见问题)
@@ -489,7 +489,8 @@ HomeworkKiller4BJTU/
 
 | 版本 | 主要内容 |
 |---|---|
-| **4.7.1** | 慕课全任务并行：最大并行数（1–8）扩展到测验、文档、讨论、作业/考试；每个 worker 使用独立浏览器会话与 Page；真实账号 8 线程只读验证通过；讨论详情改用新版 `/forum/detail` 路由。 |
+| **4.7.2** | 修复并行加载时实验4/6误落评估列表/30 秒无题目；修复同标题不同选项导致的题目未命中；取消慕课百分比与进度条显示，进行中统一显示文字。 |
+| 4.7.1 | 慕课全任务并行：最大并行数（1–8）扩展到测验、文档、讨论、作业/考试；每个 worker 使用独立浏览器会话与 Page；真实账号 8 线程只读验证通过；讨论详情改用新版 `/forum/detail` 路由。 |
 | 4.7.0 | 慕课升级：限时/次数限制状态图标、未满分可重做、次数耗尽强制完成；实验性自动互评（满分 + 150 条随机评语，默认开启）。 |
 | 4.6.7 | 第二轮次：慕课答案浏览/搜索、GinsMooc 公告、课程目录后台刷新、同名课程诊断、并发限制成绩重读、新版考试入口修复；补充 GinsMooc 参考实现归属说明。 |
 | 4.6.6 | 严格整卷校验：任意一题未命中答案时不填答、不提交，整卷标记为“已跳过”并记录未命中题号与原因。 |

@@ -14,7 +14,6 @@
   const POLL_MS = IC.POLL_MS;
   const LOGIN_POLL_MS = IC.LOGIN_POLL_MS;
   const SYNC_POLL_MS = IC.SYNC_POLL_MS;
-  const PERCENT_INTERVAL_MS = IC.PERCENT_INTERVAL_MS;
   const state = IC.state;
   const els = IC.els;
   const node = (...args) => IC.node(...args);

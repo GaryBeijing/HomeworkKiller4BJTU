@@ -4,7 +4,7 @@
   最后更新: 2026-11-17 10:00
   文件名: index.html
   主要用途: “中国大学慕课”标签页结构：紧凑顶栏、内部滚动课程/任务区、答案浏览、目录刷新、自动登录提示、完成任务操作栏与任务结果弹窗。
-  文件版本: 4.7.0
+  文件版本: 4.7.2
 -->
 <section class="tag-page tag-icourse" id="icourse-page">
   <header class="ic-topbar">
@@ -42,9 +42,6 @@
           <button id="i-sync-answers" class="btn ghost small" type="button">同步</button>
           <button id="i-sync-force" class="btn ghost small" type="button"
                   title="忽略缓存和失败冷却，重新下载全部测验题目">强制刷新</button>
-        </div>
-        <div class="progress-track ic-sync-track">
-          <div id="i-sync-bar" class="progress-bar"></div>
         </div>
       </div>
     </aside>
@@ -84,9 +81,6 @@
         <span id="i-job-inline" class="ic-job-inline hidden">
           <span id="i-job-phase" class="pill info">准备中</span>
           <span id="i-job-message" class="hint ic-job-message"></span>
-          <div class="progress-track ic-job-track">
-            <div id="i-job-bar" class="progress-bar"></div>
-          </div>
         </span>
         <span class="spacer"></span>
         <button id="i-start" class="btn primary" type="button" disabled>开始完成</button>

@@ -4,7 +4,7 @@
   最后更新: 2026-11-16 17:20
   文件名: sync.js
   主要用途: “中国大学慕课”页面题库同步进度。
-  文件版本: 4.6.5
+  文件版本: 4.7.2
 */
 (function (global) {
   'use strict';
@@ -14,7 +14,6 @@
   const POLL_MS = IC.POLL_MS;
   const LOGIN_POLL_MS = IC.LOGIN_POLL_MS;
   const SYNC_POLL_MS = IC.SYNC_POLL_MS;
-  const PERCENT_INTERVAL_MS = IC.PERCENT_INTERVAL_MS;
   const state = IC.state;
   const els = IC.els;
   const node = (...args) => IC.node(...args);
@@ -143,7 +142,6 @@
       return;
     }
     const message = els['i-sync-message'];
-    const bar = els['i-sync-bar'];
     const syncButton = els['i-sync-answers'];
     const forceButton = els['i-sync-force'];
     if (syncButton) {
@@ -154,7 +152,7 @@
     }
     if (message) {
       if (sync.running) {
-        message.textContent = '题库同步 ' + (sync.current || 0) + '/' + (sync.total || 0);
+        message.textContent = '题库同步中';
       } else if (sync.error) {
         message.textContent = '同步失败';
         message.title = sync.error;
@@ -163,11 +161,6 @@
       } else {
         message.textContent = state.course ? '可同步当前课程题库' : '题库同步';
       }
-    }
-    if (bar) {
-      const total = Number(sync.total || 0);
-      const current = Number(sync.current || 0);
-      bar.style.width = String(total > 0 ? Math.min(100, current * 100 / total) : 0) + '%';
     }
   };
 

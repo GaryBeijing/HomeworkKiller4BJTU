@@ -14,7 +14,6 @@
   const POLL_MS = IC.POLL_MS;
   const LOGIN_POLL_MS = IC.LOGIN_POLL_MS;
   const SYNC_POLL_MS = IC.SYNC_POLL_MS;
-  const PERCENT_INTERVAL_MS = IC.PERCENT_INTERVAL_MS;
   const state = IC.state;
   const els = IC.els;
   const node = (...args) => IC.node(...args);
@@ -274,23 +273,7 @@
         return;
       }
       if (jobTask.status === '进行中') {
-        const pill = node('span', 'pill progress-pill');
-        const fill = node('span', 'pill-progress-fill');
-        const text = node('span', 'pill-progress-text', jobTask.percent_text || '0%');
-        pill.appendChild(fill);
-        pill.appendChild(text);
-        const shown = state.percentShown.get(task.key);
-        const now = Date.now();
-        const percent = Number(jobTask.percent || 0);
-        if (!shown || now - shown.at >= PERCENT_INTERVAL_MS || percent >= 100) {
-          state.percentShown.set(task.key, { at: now, percent: percent });
-          fill.style.width = String(Math.max(0, Math.min(100, percent))) + '%';
-          text.textContent = Math.round(percent) + '%';
-        } else {
-          fill.style.width = String(Math.max(0, Math.min(100, shown.percent))) + '%';
-          text.textContent = Math.round(shown.percent) + '%';
-        }
-        finish(pill);
+        finish(statusPill('info', '进行中'));
         return;
       }
       if (jobTask.status === '完成') {
